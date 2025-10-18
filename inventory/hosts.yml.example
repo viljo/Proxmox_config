@@ -1,0 +1,6 @@
+all:
+  hosts:
+    proxmox_admin:
+      ansible_host: 192.0.2.10
+      ansible_user: root
+      ansible_python_interpreter: /usr/bin/python3

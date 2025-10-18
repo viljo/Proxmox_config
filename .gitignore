@@ -1,0 +1,22 @@
+# Ansible runtime
+.ansible/
+*.retry
+
+# Local inventories and group vars often contain unencrypted credentials.
+# Keep example files under version control, ignore real copies.
+group_vars/**/*.yml
+!group_vars/**/secrets.yml
+!group_vars/**/*.example.yml
+!group_vars/all/vault.yml
+
+inventory/group_vars/**/*.yml
+!inventory/group_vars/**/*.example.yml
+
+inventory/*.yml
+!inventory/*.example.yml
+
+host_vars/**/*.yml
+!host_vars/**/*.example.yml
+
+# Vault password helper (if used)
+.vault_pass.txt
