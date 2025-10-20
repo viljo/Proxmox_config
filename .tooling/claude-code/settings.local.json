@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m \"Phase 3: Reorganize specs by status\n\n- Created specs subdirectories: completed/, active/, planned/\n- Moved demo-website to completed/ (fully implemented)\n- Moved 7 specs to planned/ (not yet implemented)\n- Created specs/README.md with status tracking\n- Defined spec lifecycle and moving procedures\n\")",
+      "Bash(git mv AGENTS.md .archive/)",
+      "Bash(git mv CLAUDE.md .archive/)",
+      "Bash(git mv CONSISTENCY_FIXES_SUMMARY.md .archive/)",
+      "Bash(git mv INCONSISTENCIES_ANALYSIS.md .archive/)",
+      "Bash(git mv REMEDIATION_SUMMARY.md .archive/)",
+      "Bash(git mv PROJECT_RESTRUCTURE_PROPOSAL.md .archive/)",
+      "Bash(git commit -m \"Phase 4: Archive temporary analysis files\n\n- Created .archive/ directory with README\n- Moved 6 completed analysis files to archive:\n  - AGENTS.md\n  - CLAUDE.md\n  - CONSISTENCY_FIXES_SUMMARY.md\n  - INCONSISTENCIES_ANALYSIS.md\n  - REMEDIATION_SUMMARY.md\n  - PROJECT_RESTRUCTURE_PROPOSAL.md\n- Preserved files for historical reference\n- Cleaned up root directory\n\")",
+      "Bash(git mv generate_role_readmes.sh scripts/)",
+      "Bash(git mv .ansible-lint .tooling/ansible-lint/)",
+      "Bash(git mv .yamllint .tooling/yaml-lint/)",
+      "Bash(git mv .claude .tooling/claude-code)",
+      "Bash(git mv .specify .tooling/specify)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
