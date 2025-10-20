@@ -1,0 +1,10 @@
+# Managed by Ansible
+{% for uri in gitlab_debian_mirror_uris %}
+deb {{ uri }} {{ gitlab_debian_suite }} {{ gitlab_debian_components | join(' ') }}
+{% endfor %}
+{% for uri in gitlab_debian_mirror_uris %}
+deb {{ uri }} {{ gitlab_debian_updates_suite }} {{ gitlab_debian_components | join(' ') }}
+{% endfor %}
+{% for uri in gitlab_debian_security_uris %}
+deb {{ uri }} {{ gitlab_debian_security_suite }} {{ gitlab_debian_components | join(' ') }}
+{% endfor %}

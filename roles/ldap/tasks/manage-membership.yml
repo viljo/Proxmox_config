@@ -1,0 +1,23 @@
+---
+- name: Render LDAP membership LDIF for {{ ldap_user.uid }} in {{ ldap_membership_group }}
+  ansible.builtin.template:
+    src: membership.ldif.j2
+    dest: "/tmp/ldap-membership-{{ ldap_user.uid }}-{{ ldap_membership_group }}.ldif"
+    owner: root
+    group: root
+    mode: "0600"
+  vars:
+    ldap_membership_group_name: "{{ ldap_membership_group }}"
+    ldap_user_dn: "uid={{ ldap_user.uid }},{{ ldap_people_base_dn }}"
+
+- name: Apply LDAP membership LDIF for {{ ldap_user.uid }} in {{ ldap_membership_group }}
+  ansible.builtin.command:
+    cmd: ldapmodify -Y EXTERNAL -H ldapi:/// -f /tmp/ldap-membership-{{ ldap_user.uid }}-{{ ldap_membership_group }}.ldif
+  register: ldap_membership_result
+  failed_when: ldap_membership_result.rc not in [0, 20]
+  changed_when: ldap_membership_result.rc == 0
+
+- name: Remove temporary LDAP membership LDIF for {{ ldap_user.uid }} in {{ ldap_membership_group }}
+  ansible.builtin.file:
+    path: "/tmp/ldap-membership-{{ ldap_user.uid }}-{{ ldap_membership_group }}.ldif"
+    state: absent

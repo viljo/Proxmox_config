@@ -1,0 +1,118 @@
+---
+- name: Collect current container status
+  ansible.builtin.command:
+    cmd: pct status {{ item.id }}
+  register: dmz_container_status
+  changed_when: false
+  failed_when: false
+  loop: "{{ dmz_containers }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.id }})"
+
+- name: Build list of existing containers
+  ansible.builtin.set_fact:
+    dmz_existing_containers: "{{ dmz_container_status.results | selectattr('rc', 'equalto', 0) | map(attribute='item') | list }}"
+
+- name: Note containers already absent
+  ansible.builtin.debug:
+    msg: "Container {{ item.item.name }} ({{ item.item.id }}) already absent"
+  loop: "{{ dmz_container_status.results }}"
+  loop_control:
+    label: "{{ item.item.name }} ({{ item.item.id }})"
+  when:
+    - item.rc != 0
+
+- name: Initiate shutdown for existing containers
+  ansible.builtin.command:
+    cmd: pct shutdown {{ item.id }} --timeout 60 --forceStop 1
+  register: dmz_shutdown
+  failed_when: dmz_shutdown.rc not in [0, 255]
+  changed_when: dmz_shutdown.rc == 0
+  loop: "{{ dmz_existing_containers }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.id }})"
+  when: dmz_rebuild_remove_existing
+
+- name: Gather post-shutdown status
+  ansible.builtin.command:
+    cmd: pct status {{ item.id }}
+  register: dmz_post_shutdown
+  changed_when: false
+  failed_when: false
+  loop: "{{ dmz_existing_containers }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.id }})"
+  when: dmz_rebuild_remove_existing
+
+- name: Determine containers still running
+  ansible.builtin.set_fact:
+    dmz_still_running: "{{ dmz_post_shutdown.results | selectattr('stdout', 'defined') | selectattr('stdout', 'search', 'status: running') | map(attribute='item.id') | list }}"
+  when: dmz_rebuild_remove_existing
+
+- name: Force kill stubborn containers
+  ansible.builtin.command:
+    cmd: pct exec {{ item }} -- bash -lc "kill -9 -1"
+  register: dmz_kill
+  changed_when: dmz_kill.rc == 0
+  failed_when: false
+  loop: "{{ dmz_still_running | default([]) }}"
+  loop_control:
+    label: "Container {{ item }}"
+  when:
+    - dmz_rebuild_remove_existing
+    - dmz_still_running | length > 0
+
+- name: Retry stop after kill attempts
+  ansible.builtin.command:
+    cmd: pct stop {{ item }} --timeout 20
+  register: dmz_retry_stop
+  failed_when: dmz_retry_stop.rc not in [0, 255]
+  changed_when: dmz_retry_stop.rc == 0
+  loop: "{{ dmz_still_running | default([]) }}"
+  loop_control:
+    label: "Container {{ item }}"
+  when:
+    - dmz_rebuild_remove_existing
+    - dmz_still_running | length > 0
+
+- name: Gather final container status
+  ansible.builtin.command:
+    cmd: pct status {{ item.id }}
+  register: dmz_final_status
+  changed_when: false
+  failed_when: false
+  loop: "{{ dmz_existing_containers }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.id }})"
+  when: dmz_rebuild_remove_existing
+
+- name: Determine containers still running after attempts
+  ansible.builtin.set_fact:
+    dmz_final_running: "{{ dmz_final_status.results | default([]) | selectattr('stdout', 'defined') | selectattr('stdout', 'search', 'status: running') | map(attribute='item.id') | list }}"
+  when: dmz_rebuild_remove_existing
+
+- name: Fail if any container is still running
+  ansible.builtin.fail:
+    msg: "Containers still running after cleanup: {{ dmz_final_running }}"
+  when:
+    - dmz_rebuild_remove_existing
+    - dmz_final_running | default([]) | length > 0
+
+- name: Destroy existing containers
+  ansible.builtin.command:
+    cmd: pct destroy {{ item.id }} --purge 1
+  register: dmz_destroy_result
+  failed_when: dmz_destroy_result.rc not in [0, 5]
+  changed_when: dmz_destroy_result.rc == 0
+  loop: "{{ dmz_existing_containers }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.id }})"
+  when: dmz_rebuild_remove_existing
+
+- name: Report destroyed containers
+  ansible.builtin.debug:
+    msg: "Container {{ item.item.name }} ({{ item.item.id }}) destroyed"
+  loop: "{{ dmz_destroy_result.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name }} ({{ item.item.id }})"
+  when: item.rc == 0

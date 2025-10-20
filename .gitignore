@@ -6,6 +6,7 @@
 # Keep example files under version control, ignore real copies.
 group_vars/**/*.yml
 !group_vars/**/secrets.yml
+group_vars/**/secrets.yml.*
 !group_vars/**/*.example.yml
 !group_vars/all/vault.yml
 

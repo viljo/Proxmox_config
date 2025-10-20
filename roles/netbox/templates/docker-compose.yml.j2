@@ -1,0 +1,73 @@
+{% set netbox_env_combined = netbox_env_defaults | combine(netbox_env_extra, recursive=True) %}
+version: '3.9'
+services:
+  postgres:
+    image: {{ netbox_postgres_image }}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ netbox_db_name | to_json }}
+      POSTGRES_USER: {{ netbox_db_user | to_json }}
+      POSTGRES_PASSWORD: {{ netbox_db_password | to_json }}
+    volumes:
+      - netbox_postgres:/var/lib/postgresql/data
+  redis:
+    image: {{ netbox_redis_image }}
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - {{ netbox_redis_password }}
+    volumes:
+      - netbox_redis:/data
+  netbox:
+    image: {{ netbox_image }}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    environment:
+{% for key, value in netbox_env_combined | dictsort %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    ports:
+      - "{{ netbox_http_port }}:8080"
+    volumes:
+      - netbox_media:/opt/netbox/netbox/media
+      - netbox_reports:/opt/netbox/netbox/reports
+      - netbox_scripts:/opt/netbox/netbox/scripts
+  netbox-worker:
+    image: {{ netbox_image }}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    command: /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py rqworker
+    environment:
+{% for key, value in netbox_env_combined | dictsort %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    volumes:
+      - netbox_media:/opt/netbox/netbox/media
+      - netbox_reports:/opt/netbox/netbox/reports
+      - netbox_scripts:/opt/netbox/netbox/scripts
+  netbox-housekeeping:
+    image: {{ netbox_image }}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+    command: /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py housekeeping
+    environment:
+{% for key, value in netbox_env_combined | dictsort %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    volumes:
+      - netbox_media:/opt/netbox/netbox/media
+      - netbox_reports:/opt/netbox/netbox/reports
+      - netbox_scripts:/opt/netbox/netbox/scripts
+volumes:
+  netbox_postgres:
+  netbox_redis:
+  netbox_media:
+  netbox_reports:
+  netbox_scripts:

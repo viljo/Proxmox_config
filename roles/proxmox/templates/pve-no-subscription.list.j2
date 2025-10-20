@@ -1,0 +1,4 @@
+# Managed by Ansible
+{% for repo_url in proxmox_no_subscription_repo_urls %}
+deb {{ repo_url }} {{ proxmox_suite }} {{ proxmox_no_subscription_repo_components | join(' ') }}
+{% endfor %}

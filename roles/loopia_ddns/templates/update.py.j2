@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+import xmlrpc.client
+
+CONTAINER_ID = {{ loopia_ddns_container_id }}
+INTERFACE = "{{ loopia_ddns_interface }}"
+STATE_DIR = Path("{{ loopia_ddns_state_dir }}")
+STATE_DIR.mkdir(parents=True, exist_ok=True)
+LAST_IP_FILE = STATE_DIR / "last_ip"
+RECORDS_FILE = STATE_DIR / "records.json"
+
+DOMAIN = "{{ loopia_dns_domain }}"
+USER = "{{ loopia_dns_effective_user }}"
+PASSWORD = "{{ loopia_dns_effective_password }}"
+
+if not USER or not PASSWORD:
+    sys.exit("Loopia credentials are missing")
+
+try:
+    ip_output = subprocess.check_output([
+        "pct", "exec", str(CONTAINER_ID), "--",
+        "ip", "-4", "-o", "addr", "show", "dev", INTERFACE, "scope", "global"
+    ], text=True).strip()
+except subprocess.CalledProcessError:
+    sys.exit(0)
+
+if not ip_output:
+    sys.exit(0)
+
+try:
+    current_ip = ip_output.split()[3].split('/')[0]
+except IndexError:
+    sys.exit(0)
+
+previous_ip = LAST_IP_FILE.read_text().strip() if LAST_IP_FILE.exists() else None
+
+if previous_ip == current_ip and RECORDS_FILE.exists():
+    records = json.loads(RECORDS_FILE.read_text())
+else:
+    records = {{ loopia_dns_records | to_json }}
+
+client = xmlrpc.client.ServerProxy("https://api.loopia.se/RPCSERV", allow_none=True)
+updated = False
+
+for record in records:
+    host = record.get("host")
+    record_type = record.get("type", "A")
+    ttl = int(record.get("ttl", {{ loopia_dns_default_ttl }}))
+    rdata = current_ip if record.get("rdata") is None else record.get("rdata")
+
+    if rdata != current_ip and record.get("rdata") is not None:
+        continue
+
+    try:
+        records_existing = client.getZoneRecords(USER, PASSWORD, DOMAIN, host)
+    except Exception:
+        continue
+
+    target = next((item for item in records_existing if item.get("type") == record_type), None)
+
+    if target and target.get("rdata") == current_ip and int(target.get("ttl", ttl)) == ttl:
+        continue
+
+    try:
+        if target:
+            client.removeZoneRecord(USER, PASSWORD, DOMAIN, host, target["record_id"])
+            priority = target.get("priority", 0)
+        else:
+            priority = 0
+        client.addZoneRecord(USER, PASSWORD, DOMAIN, host, {
+            "type": record_type,
+            "ttl": ttl,
+            "priority": priority,
+            "rdata": current_ip,
+        })
+        updated = True
+    except Exception:
+        continue
+
+if updated or previous_ip != current_ip:
+    LAST_IP_FILE.write_text(current_ip + "\n")
+    RECORDS_FILE.write_text(json.dumps(records))

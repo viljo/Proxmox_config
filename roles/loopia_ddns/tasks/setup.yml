@@ -1,0 +1,79 @@
+---
+- name: Set Loopia credentials facts
+  ansible.builtin.set_fact:
+    loopia_dns_effective_user: >-
+      {{ loopia_dns_api_user | default(loopia_api_user | default(loopia_api_user_open | default(''))) }}
+    loopia_dns_effective_password: >-
+      {{ loopia_dns_api_password | default(loopia_api_password | default(loopia_api_password_open | default(''))) }}
+
+- name: Fail when ddns credentials are missing
+  ansible.builtin.fail:
+    msg: "Loopia DDNS credentials are not defined"
+  when: loopia_dns_effective_user | length == 0 or loopia_dns_effective_password | length == 0
+
+- name: Ensure ddns state directory exists
+  ansible.builtin.file:
+    path: "{{ loopia_ddns_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Seed ddns records file
+  ansible.builtin.copy:
+    dest: "{{ loopia_ddns_state_dir }}/records.json"
+    content: "{{ loopia_dns_records | to_nice_json }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure ddns script directory exists
+  ansible.builtin.file:
+    path: "{{ loopia_ddns_script_path | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy ddns update script
+  ansible.builtin.template:
+    src: update.py.j2
+    dest: "{{ loopia_ddns_script_path }}"
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Deploy ddns command wrapper
+  ansible.builtin.template:
+    src: loopia-ddns.sh.j2
+    dest: "{{ loopia_ddns_command_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy ddns systemd service
+  ansible.builtin.template:
+    src: loopia-ddns.service.j2
+    dest: "/etc/systemd/system/{{ loopia_ddns_service_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy ddns systemd timer
+  ansible.builtin.template:
+    src: loopia-ddns.timer.j2
+    dest: "/etc/systemd/system/{{ loopia_ddns_timer_name }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Reload systemd daemon
+  ansible.builtin.command:
+    cmd: systemctl daemon-reload
+  changed_when: true
+
+- name: Enable and start ddns timer
+  ansible.builtin.systemd:
+    name: "{{ loopia_ddns_timer_name }}"
+    enabled: true
+    state: started

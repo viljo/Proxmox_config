@@ -1,0 +1,47 @@
+---
+- name: Deploy Demo Website
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify Proxmox host is accessible
+      ansible.builtin.ping:
+
+    - name: Check for required vault variables
+      ansible.builtin.assert:
+        that:
+          - vault_demo_site_root_password is defined
+          - vault_demo_site_root_password | length > 0
+        fail_msg: "vault_demo_site_root_password must be defined in group_vars/all/secrets.yml"
+        success_msg: "Required vault variables are present"
+
+  roles:
+    - demo_site
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          Demo Site Deployment Complete
+          ========================================
+
+          Container ID: {{ demo_site_container_id }}
+          Hostname: {{ demo_site_hostname }}.{{ demo_site_domain }}
+          IP Address: {{ demo_site_ip_address }}
+          Network: {{ demo_site_bridge }} (DMZ)
+
+          Internal URL: http://{{ demo_site_ip_address }}
+          Public URL (via Traefik): https://{{ demo_site_hostname }}.{{ demo_site_external_domain }}
+
+          Next Steps:
+          1. Configure Traefik routing for {{ demo_site_hostname }}.{{ demo_site_external_domain }}
+          2. Ensure DNS points to your Traefik/firewall WAN IP
+          3. Verify HTTPS certificate provisioning
+          4. Test access from external network
+
+          To verify deployment:
+            pct status {{ demo_site_container_id }}
+            pct exec {{ demo_site_container_id }} -- systemctl status nginx
+            curl http://{{ demo_site_ip_address }}

@@ -1,0 +1,310 @@
+# WireGuard Configuration File Schema
+# Purpose: Define the structure and validation rules for /etc/wireguard/wg0.conf
+# Version: 1.0.0
+# Date: 2025-10-20
+
+---
+# Configuration File Metadata
+
+file_path: /etc/wireguard/wg0.conf
+file_format: INI-style
+permissions: "0600"  # Owner read/write only
+owner: root
+group: root
+
+---
+# Interface Section (Required, Single)
+
+interface:
+  section_name: "[Interface]"
+  required: true
+  cardinality: exactly_one
+
+  fields:
+    Address:
+      description: "VPN gateway IP address with CIDR"
+      type: string
+      format: IPv4_CIDR
+      required: true
+      example: "10.8.0.1/24"
+      validation: "Must be RFC 1918 private address space"
+
+    ListenPort:
+      description: "UDP port for incoming connections"
+      type: integer
+      required: true
+      default: 51820
+      range: [1, 65535]
+      example: 51820
+
+    PrivateKey:
+      description: "Server's Curve25519 private key"
+      type: string
+      format: base64
+      required: true
+      length: 44
+      example: "{{ wireguard_private_key }}"
+      security: "MUST be stored in Ansible Vault"
+      validation: "Valid Curve25519 key (32 bytes, base64 encoded)"
+
+    SaveConfig:
+      description: "Persist runtime changes to config file"
+      type: boolean
+      required: false
+      default: true
+      example: true
+      note: "Allows 'wg set' commands to update config file"
+
+    MTU:
+      description: "Maximum transmission unit for interface"
+      type: integer
+      required: false
+      default: 1420  # Ethernet MTU 1500 - WireGuard overhead
+      range: [1280, 1500]
+      example: 1420
+
+    DNS:
+      description: "DNS servers for VPN clients (pushed to peers)"
+      type: string
+      required: false
+      example: "192.168.0.1, 192.168.0.2"
+      note: "Only applicable for client configs, ignored on server"
+
+    PostUp:
+      description: "Command to run after interface is brought up"
+      type: string
+      required: false
+      example: "iptables -A FORWARD -i wg0 -j ACCEPT"
+      note: "Used for firewall rules, NAT, routing"
+
+    PostDown:
+      description: "Command to run after interface is brought down"
+      type: string
+      required: false
+      example: "iptables -D FORWARD -i wg0 -j ACCEPT"
+      note: "Clean up rules added in PostUp"
+
+---
+# Peer Section (Optional, Multiple)
+
+peer:
+  section_name: "[Peer]"
+  required: false
+  cardinality: zero_or_more
+
+  fields:
+    PublicKey:
+      description: "Peer's Curve25519 public key"
+      type: string
+      format: base64
+      required: true
+      length: 44
+      example: "xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg="
+      validation: "Valid Curve25519 public key (32 bytes, base64)"
+
+    AllowedIPs:
+      description: "IP ranges this peer can send/receive"
+      type: string
+      format: comma_separated_cidrs
+      required: true
+      example: "10.8.0.2/32, 192.168.0.0/16"
+      validation: "Must not overlap with other peers, must be valid CIDR notation"
+      note: "Acts as both routing and access control"
+
+    Endpoint:
+      description: "Peer's public address for outbound connections"
+      type: string
+      format: host_port
+      required: false
+      example: "vpn.example.com:51820"
+      note: "Used for site-to-site; omit for road warrior clients"
+
+    PersistentKeepalive:
+      description: "Keepalive packet interval in seconds"
+      type: integer
+      required: false
+      default: 0  # Disabled
+      range: [0, 65535]
+      example: 25
+      note: "Recommended 25 for NAT traversal, 0 to disable"
+
+    PresharedKey:
+      description: "Optional additional symmetric key for quantum resistance"
+      type: string
+      format: base64
+      required: false
+      length: 44
+      example: "{{ wireguard_peer_preshared_key }}"
+      security: "MUST be stored in Ansible Vault if used"
+
+---
+# Validation Rules
+
+validation_rules:
+  - name: "Unique peer public keys"
+    rule: "No two [Peer] sections may have the same PublicKey"
+    severity: error
+
+  - name: "Non-overlapping allowed IPs"
+    rule: "AllowedIPs across all peers must not overlap (each IP/CIDR unique)"
+    severity: error
+
+  - name: "Private key secrecy"
+    rule: "PrivateKey must never appear in logs, version control (unencrypted), or transmitted"
+    severity: critical
+
+  - name: "File permissions"
+    rule: "Configuration file must be readable/writable by root only (0600)"
+    severity: error
+
+  - name: "Address subnet consistency"
+    rule: "Interface Address and peer AllowedIPs should be in same subnet for VPN peers"
+    severity: warning
+
+  - name: "ListenPort availability"
+    rule: "ListenPort must not be in use by another service"
+    severity: error
+
+---
+# Example Configuration
+
+example_config: |
+  [Interface]
+  Address = 10.8.0.1/24
+  ListenPort = 51820
+  PrivateKey = SERVER_PRIVATE_KEY_HERE
+  SaveConfig = true
+  PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+  PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+  [Peer]
+  # Alice's laptop
+  PublicKey = xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=
+  AllowedIPs = 10.8.0.2/32
+  PersistentKeepalive = 25
+
+  [Peer]
+  # Bob's phone
+  PublicKey = TrMvSoP4jYQlY6RIzBgbssL5LX5K7LAsvH/9Zq7fYg=
+  AllowedIPs = 10.8.0.3/32
+  PersistentKeepalive = 25
+
+---
+# Jinja2 Template Mapping
+
+template_file: roles/wireguard/templates/wg0.conf.j2
+
+template_variables:
+  - wireguard_interface: "wg0"
+  - wireguard_listen_port: 51820
+  - wireguard_private_key: "{{ vault_wireguard_private_key }}"
+  - wireguard_peer_configs:
+      type: list
+      schema:
+        - public_key: string (required)
+        - allowed_ips: string (required)
+        - endpoint: string (optional)
+        - persistent_keepalive: integer (optional)
+        - preshared_key: string (optional)
+
+template_structure: |
+  [Interface]
+  Address = 10.8.0.1/24
+  ListenPort = {{ wireguard_listen_port }}
+  {% if wireguard_private_key %}PrivateKey = {{ wireguard_private_key }}{% endif %}
+  SaveConfig = true
+
+  {% for peer in wireguard_peer_configs %}
+  [Peer]
+  PublicKey = {{ peer.public_key }}
+  AllowedIPs = {{ peer.allowed_ips }}
+  {% if peer.endpoint %}Endpoint = {{ peer.endpoint }}{% endif %}
+  {% if peer.persistent_keepalive %}PersistentKeepalive = {{ peer.persistent_keepalive }}{% endif %}
+  {% if peer.preshared_key %}PresharedKey = {{ peer.preshared_key }}{% endif %}
+
+  {% endfor %}
+
+---
+# Configuration Management
+
+deployment_method: Ansible template
+deployment_file: roles/wireguard/tasks/main.yml
+deployment_task: "Deploy WireGuard configuration"
+
+reload_method: systemd service restart
+reload_command: "systemctl restart wg-quick@wg0"
+
+validation_command: "wg-quick strip wg0"
+validation_description: "Parses config and outputs sanitized version (no comments)"
+
+status_command: "wg show wg0"
+status_description: "Displays runtime status: peers, handshakes, transfer stats"
+
+---
+# Security Considerations
+
+security_checklist:
+  - name: "Private key encryption"
+    requirement: "Server private key encrypted in Ansible Vault"
+    validation: "grep -r 'wireguard_private_key' group_vars/ should find no plaintext keys"
+
+  - name: "File permissions"
+    requirement: "Config file 0600 permissions (root only)"
+    validation: "stat -c '%a' /etc/wireguard/wg0.conf returns 600"
+
+  - name: "No public key reuse"
+    requirement: "Each peer has unique public key"
+    validation: "No duplicate PublicKey entries in config"
+
+  - name: "Allowed IPs validation"
+    requirement: "AllowedIPs don't grant excessive access"
+    validation: "Review each peer's AllowedIPs for least privilege"
+
+---
+# Troubleshooting
+
+common_errors:
+  - error: "Unable to access interface: Operation not permitted"
+    cause: "LXC container lacks network capabilities"
+    solution: "Enable nesting in container config: features: nesting=1"
+
+  - error: "Key is not the correct length or format"
+    cause: "Invalid base64 encoding or wrong key length"
+    solution: "Regenerate keys with 'wg genkey' and 'wg pubkey'"
+
+  - error: "Address already in use"
+    cause: "Another process using UDP port 51820"
+    solution: "Check 'ss -ulnp | grep 51820' and stop conflicting service"
+
+  - error: "RTNETLINK answers: File exists"
+    cause: "Interface already exists (duplicate bring-up attempt)"
+    solution: "Run 'wg-quick down wg0' before 'wg-quick up wg0'"
+
+---
+# Change Management
+
+config_changes:
+  - change: "Add new peer"
+    process: "Add peer entry to wireguard_peer_configs, re-run Ansible"
+    impact: "Minimal - existing connections unaffected"
+
+  - change: "Remove peer"
+    process: "Delete peer from wireguard_peer_configs, re-run Ansible"
+    impact: "Peer can no longer connect, active session terminates"
+
+  - change: "Modify peer allowed IPs"
+    process: "Update peer.allowed_ips, re-run Ansible"
+    impact: "Requires service restart, brief disconnection"
+
+  - change: "Rotate server keys"
+    process: "Generate new keys, update vault, redeploy, redistribute configs to all peers"
+    impact: "Major - all peers need new client configs"
+
+---
+# References
+
+- Official WireGuard documentation: https://www.wireguard.com/
+- wg-quick man page: man wg-quick(8)
+- wg command man page: man wg(8)
+- Curve25519 specification: https://cr.yp.to/ecdh.html
+- ChaCha20-Poly1305: RFC 7539

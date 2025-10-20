@@ -1,0 +1,12 @@
+dn: cn=config
+changetype: modify
+replace: olcTLSCertificateFile
+olcTLSCertificateFile: {{ ldap_tls_cert_path }}
+-
+replace: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: {{ ldap_tls_key_path }}
+{% if ldap_tls_ca_path %}
+-
+replace: olcTLSCACertificateFile
+olcTLSCACertificateFile: {{ ldap_tls_ca_path }}
+{% endif %}

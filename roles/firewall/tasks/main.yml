@@ -1,0 +1,150 @@
+---
+- name: Ensure firewall template cache directory exists
+  ansible.builtin.file:
+    path: "{{ firewall_template_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download template for firewall container
+  ansible.builtin.get_url:
+    url: "{{ firewall_template_url }}"
+    dest: "{{ firewall_template_file }}"
+    mode: "0644"
+    force: false
+  when: not ansible_check_mode
+
+- name: Compose firewall container network configuration
+  ansible.builtin.set_fact:
+    firewall_net0: >-
+      name={{ firewall_wan_interface }},bridge={{ firewall_bridge_wan }}{% if firewall_wan_ip_config == 'dhcp' %},ip=dhcp{% else %},ip={{ firewall_wan_ip_config }}{% endif %}
+    firewall_net1: >-
+      name={{ firewall_lan_interface }},bridge={{ firewall_bridge_lan }},ip={{ firewall_lan_ip_address }}/{{ firewall_lan_prefix }}
+
+- name: Ensure firewall container exists
+  ansible.builtin.shell: |
+    pct create {{ firewall_container_id }} {{ firewall_template_file }} \
+      --hostname {{ firewall_hostname }} \
+      --cores {{ firewall_cores }} \
+      --memory {{ firewall_memory }} \
+      --swap {{ firewall_swap }} \
+      --rootfs {{ firewall_rootfs_storage }}:{{ firewall_disk }} \
+      --net0 {{ firewall_net0 }} \
+      --net1 {{ firewall_net1 }} \
+      --features keyctl={{ firewall_features.keyctl | default(0) }},nesting={{ firewall_features.nesting | default(0) }} \
+      --unprivileged {{ 1 if firewall_unprivileged else 0 }}
+  args:
+    creates: "/etc/pve/lxc/{{ firewall_container_id }}.conf"
+  when: not ansible_check_mode
+
+- name: Stat firewall container configuration
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ firewall_container_id }}.conf"
+  register: firewall_container_conf
+
+- name: Ensure firewall container network configuration
+  ansible.builtin.command:
+    cmd: >
+      pct set {{ firewall_container_id }} --net0 {{ firewall_net0 }} --net1 {{ firewall_net1 }}
+  when:
+    - not ansible_check_mode
+    - firewall_container_conf.stat.exists
+
+- name: Ensure firewall container onboot flag is set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ firewall_container_id }}.conf"
+    regexp: '^onboot:'
+    line: "onboot: 1"
+    insertafter: EOF
+  when: firewall_container_conf.stat.exists
+
+- name: Ensure firewall container root password is set
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ firewall_container_id }} -- bash -lc "echo 'root:{{ firewall_root_password }}' | chpasswd"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - firewall_container_conf.stat.exists
+    - firewall_root_password | length > 0
+
+- name: Read firewall container status
+  ansible.builtin.command:
+    cmd: pct status {{ firewall_container_id }}
+  register: firewall_status
+  changed_when: false
+  failed_when: firewall_status.rc not in [0, 2]
+
+- name: Start firewall container
+  ansible.builtin.command:
+    cmd: pct start {{ firewall_container_id }}
+  when:
+    - not ansible_check_mode
+    - firewall_status.rc is defined
+    - (firewall_status.rc != 0 or ('stopped' in firewall_status.stdout | default('')))
+
+- name: Wait for firewall container to boot
+  ansible.builtin.command:
+    cmd: pct exec {{ firewall_container_id }} -- bash -lc "true"
+  register: firewall_boot_probe
+  failed_when: false
+  changed_when: false
+  retries: 20
+  delay: 3
+  until: firewall_boot_probe.rc == 0
+  when: not ansible_check_mode
+
+- name: Install firewall packages
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ firewall_container_id }} -- bash -lc "apt-get update && apt-get install -y {{ firewall_packages | join(' ') }}"
+  when: not ansible_check_mode
+
+- name: Reload network interfaces inside firewall
+  ansible.builtin.command:
+    cmd: pct exec {{ firewall_container_id }} -- sh -lc "ifup {{ firewall_wan_interface }} && ifup {{ firewall_lan_interface }}"
+  when: not ansible_check_mode
+
+- name: Ensure DHCP lease on WAN interface
+  ansible.builtin.command:
+    cmd: pct exec {{ firewall_container_id }} -- dhclient {{ firewall_wan_interface }}
+  when: not ansible_check_mode
+
+- name: Configure sysctl for forwarding
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ firewall_container_id }} -- bash -lc "printf 'net.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding={{ 1 if firewall_enable_ipv6 else 0 }}\n' > /etc/sysctl.d/99-firewall.conf"
+  when: not ansible_check_mode
+
+- name: Apply sysctl configuration
+  ansible.builtin.command:
+    cmd: pct exec {{ firewall_container_id }} -- sysctl -p /etc/sysctl.d/99-firewall.conf
+  when: not ansible_check_mode
+
+- name: Render nftables configuration locally
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: "/tmp/firewall-nftables-{{ firewall_container_id }}.conf"
+    mode: "0600"
+
+- name: Push nftables configuration into container
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ firewall_container_id }} /tmp/firewall-nftables-{{ firewall_container_id }}.conf /etc/nftables.conf
+  when: not ansible_check_mode
+
+- name: Remove temporary nftables configuration
+  ansible.builtin.file:
+    path: "/tmp/firewall-nftables-{{ firewall_container_id }}.conf"
+    state: absent
+
+- name: Enable nftables service
+  ansible.builtin.command:
+    cmd: pct exec {{ firewall_container_id }} -- systemctl enable nftables
+  when: not ansible_check_mode
+
+- name: Restart nftables to apply rules
+  ansible.builtin.command:
+    cmd: pct exec {{ firewall_container_id }} -- systemctl restart nftables
+  when: not ansible_check_mode

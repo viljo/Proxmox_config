@@ -1,0 +1,62 @@
+# Ansible Lint Configuration
+# Constitution Compliance: Code quality and best practices enforcement
+
+# Exclude paths
+exclude_paths:
+  - .git/
+  - .venv/
+  - .cache/
+  - .ansible/
+  - specs/  # Feature specifications
+  - docs/   # Documentation
+  - group_vars/all/secrets.yml  # Vault encrypted
+  - inventory/group_vars/all/secrets.yml  # Vault encrypted
+
+# Enable offline mode (don't check Galaxy)
+offline: false
+
+# Use default rules plus custom
+use_default_rules: true
+
+# Skip specific rules that are too strict for infrastructure code
+skip_list:
+  - command-instead-of-shell  # pct commands require shell
+  - no-changed-when  # Many read-only commands don't need changed_when
+  - risky-shell-pipe  # Acceptable in infrastructure contexts
+  - yaml[line-length]  # Handled by yamllint instead
+
+# Enable specific checks
+enable_list:
+  - yaml  # YAML syntax
+  - name  # Task naming
+  - var-naming  # Variable naming
+
+# Warn only (don't fail) for these rules
+warn_list:
+  - experimental  # Allow experimental features
+  - role-name  # Role naming convention
+  - meta-no-info  # meta/main.yml info section
+
+# Tags to skip
+skip_tags: []
+
+# Verbosity
+verbosity: 1
+
+# Profile (empty = default)
+profile: null
+
+# Kinds of tasks to lint
+kinds:
+  - playbook: "playbooks/*.{yml,yaml}"
+  - tasks: "roles/*/tasks/*.{yml,yaml}"
+  - handlers: "roles/*/handlers/*.{yml,yaml}"
+  - vars: "roles/*/defaults/*.{yml,yaml}"
+  - vars: "roles/*/vars/*.{yml,yaml}"
+
+# Mock modules and filters for offline lint
+mock_modules: []
+mock_filters: []
+
+# Custom rules directory (optional)
+# rulesdir: []

@@ -1,0 +1,4 @@
+---
+- name: restart cosmos stack
+  ansible.builtin.command:
+    cmd: pct exec {{ cosmos_container_id }} -- bash -lc "cd {{ cosmos_compose_path }} && docker compose up -d"

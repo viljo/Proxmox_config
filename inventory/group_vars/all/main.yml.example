@@ -1,10 +1,11 @@
 ---
 timezone: UTC
 public_domain: example.com
-loopia_api_user: "{{ vault_loopia_api_user | default('loopia-user@example.com') }}"
-loopia_api_password: "{{ vault_loopia_api_password | default('replace-me') }}"
+loopia_api_user: "{{ vault_loopia_api_user }}"
+loopia_api_password: "{{ vault_loopia_api_password }}"
 traefik_acme_email: "admin@{{ public_domain }}"
 traefik_dns_challenge_provider: loopia
+loopia_dns_interface: "{{ wan_bridge }}"
 loopia_dns_records:
   - host: "@"
     ttl: 600
@@ -74,4 +75,13 @@ traefik_services:
     container_id: "{{ zipline_container_id }}"
     port: 3000
 management_bridge: vmbr0
-public_bridge: vmbr1
+wan_bridge: vmbr2
+public_bridge: vmbr3
+dmz_subnet: 172.16.10.0/24
+dmz_prefix: 24
+dmz_gateway: 172.16.10.1
+dmz_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
+dmz_netmask: 255.255.255.0
+dmz_host_ip: 172.16.10.2

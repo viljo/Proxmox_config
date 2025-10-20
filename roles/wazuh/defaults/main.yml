@@ -1,0 +1,24 @@
+---
+wazuh_container_id: 2080
+wazuh_hostname: wazuh
+wazuh_domain: infra.local
+wazuh_memory: 8192
+wazuh_cores: 4
+wazuh_disk: 128
+wazuh_swap: 2048
+wazuh_bridge: "{{ public_bridge | default('vmbr0') }}"
+wazuh_ip_config: dhcp
+wazuh_vlan_tag: null
+wazuh_gateway: null
+wazuh_dns_servers: []
+wazuh_rootfs_storage: local-lvm
+wazuh_unprivileged: true
+wazuh_start_onboot: true
+wazuh_features:
+  nesting: 1
+wazuh_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+wazuh_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+wazuh_root_password: "{{ vault_wazuh_root_password | default('') }}"
+wazuh_rootfs_path: "/var/lib/lxc/{{ wazuh_container_id }}/rootfs"
+wazuh_compose_path: /opt/wazuh
+wazuh_version: 4.7.4

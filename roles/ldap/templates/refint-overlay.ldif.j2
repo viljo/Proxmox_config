@@ -1,0 +1,10 @@
+dn: olcOverlay=refint,{{ ldap_database_dn }}
+changetype: add
+objectClass: olcConfig
+objectClass: olcOverlayConfig
+objectClass: olcRefintConfig
+olcOverlay: refint
+olcRefintAttribute: member
+olcRefintAttribute: memberOf
+olcRefintAttribute: manager
+olcRefintAttribute: owner

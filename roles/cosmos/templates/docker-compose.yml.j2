@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  cosmos:
+    image: azukaar/cosmos-server:{{ cosmos_version }}
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - cosmos_data:/cosmos-server/data
+volumes:
+  cosmos_data:

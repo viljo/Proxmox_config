@@ -1,0 +1,4 @@
+---
+- name: restart home assistant
+  ansible.builtin.command:
+    cmd: pct exec {{ ha_container_id }} -- systemctl restart home-assistant

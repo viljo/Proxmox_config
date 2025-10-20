@@ -1,0 +1,6 @@
+dn: {{ ldap_module_dn }}
+changetype: modify
+add: olcModuleLoad
+{% for module in ldap_missing_modules %}
+olcModuleLoad: {{ module }}
+{% endfor %}

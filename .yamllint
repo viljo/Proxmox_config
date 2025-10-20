@@ -1,0 +1,56 @@
+---
+# yamllint configuration for Proxmox Infrastructure
+# Constitution Compliance: Code quality enforcement
+
+extends: default
+
+rules:
+  # Line length can be longer for Ansible due to module parameters
+  line-length:
+    max: 160
+    level: warning
+
+  # Allow inline comments
+  comments:
+    min-spaces-from-content: 1
+
+  # Indentation: 2 spaces
+  indentation:
+    spaces: 2
+    indent-sequences: true
+
+  # Allow truthy values (yes/no, true/false, on/off)
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+    check-keys: false
+
+  # Brackets can have spaces
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Braces can have spaces
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+
+  # Allow empty lines
+  empty-lines:
+    max: 2
+
+  # Document start not required for all files
+  document-start:
+    present: false
+
+  # Allow octal values (for file permissions)
+  octal-values:
+    forbid-implicit-octal: false
+    forbid-explicit-octal: false
+
+ignore: |
+  .git/
+  .venv/
+  .cache/
+  .ansible/
+  group_vars/all/secrets.yml
+  inventory/group_vars/all/secrets.yml

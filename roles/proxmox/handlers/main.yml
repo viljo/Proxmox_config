@@ -1,0 +1,5 @@
+---
+- name: refresh apt cache
+  ansible.builtin.apt:
+    update_cache: true
+  when: proxmox_update_cache_after_repo_change

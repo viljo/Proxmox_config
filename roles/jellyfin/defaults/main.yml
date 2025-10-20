@@ -1,0 +1,24 @@
+---
+jellyfin_container_id: 2010
+jellyfin_hostname: jellyfin
+jellyfin_domain: infra.local
+jellyfin_memory: 4096
+jellyfin_cores: 2
+jellyfin_disk: 64
+jellyfin_swap: 1024
+jellyfin_bridge: "{{ public_bridge | default('vmbr0') }}"
+jellyfin_ip_config: dhcp
+jellyfin_vlan_tag: null
+jellyfin_gateway: null
+jellyfin_dns_servers: []
+jellyfin_rootfs_storage: local-lvm
+jellyfin_unprivileged: true
+jellyfin_start_onboot: true
+jellyfin_features:
+  nesting: 1
+jellyfin_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+jellyfin_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+jellyfin_root_password: "{{ vault_jellyfin_root_password | default('') }}"
+jellyfin_repo_release: bookworm
+jellyfin_rootfs_path: "/var/lib/lxc/{{ jellyfin_container_id }}/rootfs"
+jellyfin_media_mounts: []

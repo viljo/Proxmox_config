@@ -1,0 +1,30 @@
+---
+ha_container_id: 2030
+ha_hostname: homeassistant
+ha_domain: infra.local
+ha_memory: 4096
+ha_cores: 2
+ha_disk: 16
+ha_swap: 1024
+ha_bridge: "{{ public_bridge | default('vmbr0') }}"
+ha_ip_config: dhcp
+ha_vlan_tag: null
+ha_gateway: null
+ha_dns_servers: []
+ha_rootfs_storage: local-lvm
+ha_unprivileged: true
+ha_start_onboot: true
+ha_features:
+  nesting: 1
+ha_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+ha_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+ha_root_password: "{{ vault_homeassistant_root_password | default('') }}"
+ha_user: homeassistant
+ha_group: homeassistant
+ha_install_dir: /srv/homeassistant
+ha_venv_python: python3
+ha_venv_path: /srv/homeassistant/venv
+ha_config_dir: /srv/homeassistant/config
+ha_service_port: 8123
+ha_extra_requirements: []
+ha_rootfs_path: "/var/lib/lxc/{{ ha_container_id }}/rootfs"

@@ -1,0 +1,207 @@
+---
+- name: Ensure Home Assistant template cache directory exists
+  ansible.builtin.file:
+    path: "{{ ha_template_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download template for Home Assistant container
+  ansible.builtin.get_url:
+    url: "{{ ha_template_url }}"
+    dest: "{{ ha_template_file }}"
+    mode: "0644"
+    force: false
+  when: not ansible_check_mode
+
+- name: Compose Home Assistant container network configuration
+  ansible.builtin.set_fact:
+    ha_net0: >-
+      name=eth0,bridge={{ ha_bridge }}{% if ha_vlan_tag %},tag={{ ha_vlan_tag }}{% endif %},ip={{ ha_ip_config }}{% if ha_gateway is defined and ha_gateway %},gw={{ ha_gateway }}{% endif %}
+
+- name: Ensure Home Assistant container exists
+  ansible.builtin.shell: |
+    pct create {{ ha_container_id }} {{ ha_template_file }} \
+      --hostname {{ ha_hostname }} \
+      --cores {{ ha_cores }} \
+      --memory {{ ha_memory }} \
+      --swap {{ ha_swap }} \
+      --rootfs {{ ha_rootfs_storage }}:{{ ha_disk }} \
+      --net0 {{ ha_net0 }} \
+      {% if ha_unprivileged %}--unprivileged 1{% endif %}
+  args:
+    creates: "/etc/pve/lxc/{{ ha_container_id }}.conf"
+  when: not ansible_check_mode
+
+- name: Stat Home Assistant container configuration
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ ha_container_id }}.conf"
+  register: ha_container_conf
+
+- name: Ensure Home Assistant container onboot flag is set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ ha_container_id }}.conf"
+    regexp: '^onboot:'
+    line: "onboot: {{ 1 if ha_start_onboot else 0 }}"
+    insertafter: EOF
+  when: ha_container_conf.stat.exists
+
+- name: Ensure Home Assistant container features list is present
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ ha_container_id }}.conf"
+    regexp: '^features:'
+    line: "features: {{ ha_features | dictsort | map('join', '=') | join(';') }}"
+    insertafter: EOF
+  when: ha_container_conf.stat.exists and ha_features | length > 0
+
+- name: Ensure Home Assistant container DNS servers are set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ ha_container_id }}.conf"
+    regexp: '^nameserver:'
+    line: "nameserver: {{ ha_dns_servers | join(' ') }}"
+    insertafter: EOF
+  when: ha_container_conf.stat.exists and ha_dns_servers is defined and ha_dns_servers | length > 0
+
+- name: Read Home Assistant container status
+  ansible.builtin.command:
+    cmd: pct status {{ ha_container_id }}
+  register: ha_status
+  changed_when: false
+  failed_when: ha_status.rc not in [0, 2]
+  when: ha_container_conf.stat.exists
+
+- name: Start Home Assistant container
+  ansible.builtin.command:
+    cmd: pct start {{ ha_container_id }}
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_status.rc is defined
+    - (ha_status.rc != 0 or ('stopped' in ha_status.stdout | default('')))
+
+- name: Wait for Home Assistant container to boot
+  ansible.builtin.command:
+    cmd: pct exec {{ ha_container_id }} -- bash -lc "true"
+  register: ha_boot_probe
+  failed_when: false
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: ha_boot_probe.rc == 0
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+
+- name: Ensure Home Assistant root password is set
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "echo 'root:{{ ha_root_password }}' | chpasswd"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_root_password is defined
+    - ha_root_password | length > 0
+
+- name: Check Home Assistant provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "test -f /etc/homeassistant/.provisioned"
+  register: ha_provision_marker
+  changed_when: false
+  failed_when: false
+  when: ha_container_conf.stat.exists
+
+- name: Install Home Assistant prerequisites
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "apt-get update && apt-get install -y python3 python3-venv python3-pip python3-dev libffi-dev libssl-dev libjpeg-dev zlib1g-dev tzdata curl"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_provision_marker.rc is defined
+    - ha_provision_marker.rc != 0
+
+- name: Ensure Home Assistant group exists
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- groupadd -f {{ ha_group }}
+  when: not ansible_check_mode and ha_container_conf.stat.exists
+
+- name: Ensure Home Assistant user exists
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "id {{ ha_user }} >/dev/null 2>&1 || useradd -r -m -d {{ ha_install_dir }} -g {{ ha_group }} -G dialout,video -s /usr/sbin/nologin {{ ha_user }}"
+  when: not ansible_check_mode and ha_container_conf.stat.exists
+
+- name: Ensure Home Assistant directories exist
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "mkdir -p {{ ha_install_dir }} {{ ha_config_dir }}"
+  when: not ansible_check_mode and ha_container_conf.stat.exists
+
+- name: Create Home Assistant virtual environment
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "test -d {{ ha_venv_path }} || {{ ha_venv_python }} -m venv {{ ha_venv_path }}"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_provision_marker.rc is defined
+    - ha_provision_marker.rc != 0
+
+- name: Install Home Assistant via pip
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "source {{ ha_venv_path }}/bin/activate && pip install --upgrade pip && pip install homeassistant {{ ha_extra_requirements | join(' ') }}"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_provision_marker.rc is defined
+    - ha_provision_marker.rc != 0
+
+- name: Set ownership on Home Assistant directories
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "chown -R {{ ha_user }}:{{ ha_group }} {{ ha_install_dir }} {{ ha_config_dir }}"
+  when: not ansible_check_mode and ha_container_conf.stat.exists
+
+- name: Render Home Assistant systemd service locally
+  ansible.builtin.template:
+    src: home-assistant.service.j2
+    dest: "/tmp/home-assistant.service.{{ ha_container_id }}"
+
+- name: Push Home Assistant systemd service into container
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ ha_container_id }} /tmp/home-assistant.service.{{ ha_container_id }} /etc/systemd/system/home-assistant.service
+  when: ha_container_conf.stat.exists
+  notify: restart home assistant
+
+- name: Remove temporary Home Assistant systemd service file
+  ansible.builtin.file:
+    path: "/tmp/home-assistant.service.{{ ha_container_id }}"
+    state: absent
+
+- name: Enable Home Assistant service
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- systemctl enable home-assistant
+  when: not ansible_check_mode and ha_container_conf.stat.exists
+
+- name: Ensure Home Assistant service is running
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- systemctl start home-assistant
+  when: not ansible_check_mode and ha_container_conf.stat.exists
+
+- name: Touch Home Assistant provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "mkdir -p /etc/homeassistant && touch /etc/homeassistant/.provisioned"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_provision_marker.rc is defined
+    - ha_provision_marker.rc != 0

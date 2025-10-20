@@ -1,0 +1,27 @@
+---
+wireguard_container_id: 2090
+wireguard_hostname: wireguard
+wireguard_domain: infra.local
+wireguard_memory: 1024
+wireguard_cores: 1
+wireguard_disk: 8
+wireguard_swap: 512
+wireguard_bridge: "{{ public_bridge | default('vmbr0') }}"
+wireguard_ip_config: dhcp
+wireguard_vlan_tag: null
+wireguard_gateway: null
+wireguard_dns_servers: []
+wireguard_rootfs_storage: local-lvm
+wireguard_unprivileged: true
+wireguard_start_onboot: true
+wireguard_features:
+  nesting: 1
+wireguard_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+wireguard_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+wireguard_root_password: "{{ vault_wireguard_root_password | default('') }}"
+wireguard_config_dir: /etc/wireguard
+wireguard_interface: wg0
+wireguard_listen_port: 51820
+wireguard_private_key: "{{ vault_wireguard_private_key | default('') }}"
+wireguard_peer_configs: []
+wireguard_rootfs_path: "/var/lib/lxc/{{ wireguard_container_id }}/rootfs"

@@ -1,0 +1,53 @@
+---
+- name: Gather Proxmox enterprise repo file stats
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ proxmox_enterprise_repo_files }}"
+  register: proxmox_repo_stats
+
+- name: Disable Proxmox enterprise repositories
+  ansible.builtin.replace:
+    path: "{{ item.stat.path }}"
+    regexp: '^(deb\\s+https://enterprise\\.proxmox\\.com/.*)$'
+    replace: '# \\1'
+  loop: "{{ proxmox_repo_stats.results }}"
+  when:
+    - proxmox_disable_enterprise_repo
+    - item.stat.exists
+  notify: refresh apt cache
+
+- name: Configure Proxmox no-subscription repository
+  ansible.builtin.template:
+    src: pve-no-subscription.list.j2
+    dest: "{{ proxmox_no_subscription_repo_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: proxmox_enable_no_subscription_repo
+  notify: refresh apt cache
+
+- name: Configure Debian repositories with mirror fallbacks
+  ansible.builtin.template:
+    src: debian.sources.j2
+    dest: /etc/apt/sources.list.d/debian.sources
+    owner: root
+    group: root
+    mode: "0644"
+  notify: refresh apt cache
+
+- name: Ensure root ssh directory exists
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  when: proxmox_root_authorized_keys | length > 0
+
+- name: Install Proxmox root authorized keys
+  ansible.builtin.authorized_key:
+    user: root
+    key: "{{ item }}"
+    manage_dir: false
+  loop: "{{ proxmox_root_authorized_keys }}"
+  when: proxmox_root_authorized_keys | length > 0

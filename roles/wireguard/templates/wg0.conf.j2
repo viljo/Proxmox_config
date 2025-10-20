@@ -1,0 +1,14 @@
+[Interface]
+Address = 10.8.0.1/24
+ListenPort = {{ wireguard_listen_port }}
+{% if wireguard_private_key %}PrivateKey = {{ wireguard_private_key }}{% endif %}
+SaveConfig = true
+
+{% for peer in wireguard_peer_configs %}
+[Peer]
+PublicKey = {{ peer.public_key }}
+AllowedIPs = {{ peer.allowed_ips }}
+{% if peer.endpoint %}Endpoint = {{ peer.endpoint }}{% endif %}
+{% if peer.persistent_keepalive %}PersistentKeepalive = {{ peer.persistent_keepalive }}{% endif %}
+
+{% endfor %}

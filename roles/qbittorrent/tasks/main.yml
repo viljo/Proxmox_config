@@ -1,0 +1,157 @@
+---
+- name: Ensure qBittorrent template cache directory exists
+  ansible.builtin.file:
+    path: "{{ qbittorrent_template_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download template for qBittorrent container
+  ansible.builtin.get_url:
+    url: "{{ qbittorrent_template_url }}"
+    dest: "{{ qbittorrent_template_file }}"
+    mode: "0644"
+    force: false
+  when: not ansible_check_mode
+
+- name: Compose qBittorrent container network configuration
+  ansible.builtin.set_fact:
+    qbittorrent_net0: >-
+      name=eth0,bridge={{ qbittorrent_bridge }}{% if qbittorrent_vlan_tag %},tag={{ qbittorrent_vlan_tag }}{% endif %},ip={{ qbittorrent_ip_config }}{% if qbittorrent_gateway is defined and qbittorrent_gateway %},gw={{ qbittorrent_gateway }}{% endif %}
+
+- name: Ensure qBittorrent container exists
+  ansible.builtin.shell: |
+    pct create {{ qbittorrent_container_id }} {{ qbittorrent_template_file }} \
+      --hostname {{ qbittorrent_hostname }} \
+      --cores {{ qbittorrent_cores }} \
+      --memory {{ qbittorrent_memory }} \
+      --swap {{ qbittorrent_swap }} \
+      --rootfs {{ qbittorrent_rootfs_storage }}:{{ qbittorrent_disk }} \
+      --net0 {{ qbittorrent_net0 }} \
+      {% if qbittorrent_unprivileged %}--unprivileged 1{% endif %}
+  args:
+    creates: "/etc/pve/lxc/{{ qbittorrent_container_id }}.conf"
+  when: not ansible_check_mode
+
+- name: Stat qBittorrent container configuration
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ qbittorrent_container_id }}.conf"
+  register: qbittorrent_container_conf
+
+- name: Ensure qBittorrent container onboot flag is set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ qbittorrent_container_id }}.conf"
+    regexp: '^onboot:'
+    line: "onboot: {{ 1 if qbittorrent_start_onboot else 0 }}"
+    insertafter: EOF
+  when: qbittorrent_container_conf.stat.exists
+
+- name: Read qBittorrent container status
+  ansible.builtin.command:
+    cmd: pct status {{ qbittorrent_container_id }}
+  register: qbittorrent_status
+  changed_when: false
+  failed_when: qbittorrent_status.rc not in [0, 2]
+  when: qbittorrent_container_conf.stat.exists
+
+- name: Start qBittorrent container
+  ansible.builtin.command:
+    cmd: pct start {{ qbittorrent_container_id }}
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+    - qbittorrent_status.rc is defined
+    - (qbittorrent_status.rc != 0 or ('stopped' in qbittorrent_status.stdout | default('')))
+
+- name: Wait for qBittorrent container to boot
+  ansible.builtin.command:
+    cmd: pct exec {{ qbittorrent_container_id }} -- bash -lc "true"
+  register: qbittorrent_boot_probe
+  failed_when: false
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: qbittorrent_boot_probe.rc == 0
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+
+- name: Ensure qBittorrent root password is set
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "echo 'root:{{ qbittorrent_root_password }}' | chpasswd"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+    - qbittorrent_root_password is defined
+    - qbittorrent_root_password | length > 0
+
+- name: Check qBittorrent provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "test -f /etc/qbittorrent/.provisioned"
+  register: qbittorrent_provision_marker
+  changed_when: false
+  failed_when: false
+  when: qbittorrent_container_conf.stat.exists
+
+- name: Install qBittorrent packages
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "apt-get update && apt-get install -y qbittorrent-nox"
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+    - qbittorrent_provision_marker.rc is defined
+    - qbittorrent_provision_marker.rc != 0
+
+- name: Ensure qBittorrent user exists
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "id qbittorrent 2>/dev/null || useradd -r -s /usr/sbin/nologin qbittorrent"
+  when: not ansible_check_mode and qbittorrent_container_conf.stat.exists
+
+- name: Ensure qBittorrent directories exist (host)
+  ansible.builtin.file:
+    path: "{{ qbittorrent_rootfs_path }}{{ item.path }}"
+    state: directory
+    owner: qbittorrent
+    group: qbittorrent
+    mode: "0755"
+  loop:
+    - { path: "{{ qbittorrent_download_dir }}" }
+    - { path: "{{ qbittorrent_config_dir }}" }
+
+- name: Deploy qBittorrent systemd service
+  ansible.builtin.template:
+    src: qbittorrent.service.j2
+    dest: "{{ qbittorrent_rootfs_path }}/etc/systemd/system/qbittorrent.service"
+    owner: root
+    group: root
+    mode: "0644"
+  when: qbittorrent_container_conf.stat.exists
+  notify: restart qbittorrent
+
+- name: Enable qBittorrent service
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- systemctl enable qbittorrent
+  when: not ansible_check_mode and qbittorrent_container_conf.stat.exists
+
+- name: Ensure qBittorrent service is running
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- systemctl start qbittorrent
+  when: not ansible_check_mode and qbittorrent_container_conf.stat.exists
+
+- name: Touch qBittorrent provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "mkdir -p /etc/qbittorrent && touch /etc/qbittorrent/.provisioned"
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+    - qbittorrent_provision_marker.rc is defined
+    - qbittorrent_provision_marker.rc != 0

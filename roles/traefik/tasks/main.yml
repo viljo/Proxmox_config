@@ -1,0 +1,240 @@
+---
+- name: Install Traefik prerequisites
+  ansible.builtin.package:
+    name:
+      - ca-certificates
+      - curl
+      - tar
+    state: present
+
+- name: Ensure Traefik group exists
+  ansible.builtin.group:
+    name: "{{ traefik_group }}"
+    system: true
+
+- name: Ensure Traefik user exists
+  ansible.builtin.user:
+    name: "{{ traefik_user }}"
+    system: true
+    group: "{{ traefik_group }}"
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create Traefik directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default(traefik_user) }}"
+    group: "{{ item.group | default(traefik_group) }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ traefik_config_dir }}"
+      owner: root
+      group: "{{ traefik_group }}"
+      mode: "0750"
+    - path: "{{ traefik_dynamic_dir }}"
+      mode: "0750"
+    - path: "{{ traefik_data_dir }}"
+      mode: "0750"
+    - path: "{{ traefik_log_dir }}"
+      mode: "0750"
+
+- name: Ensure Traefik staging directory exists
+  ansible.builtin.file:
+    path: "/usr/local/src/traefik-{{ traefik_version }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download Traefik release archive
+  ansible.builtin.get_url:
+    url: "{{ traefik_download_url }}"
+    dest: "/tmp/{{ traefik_download_url | basename }}"
+    mode: "0644"
+    checksum: "{{ traefik_binary_checksum | default(omit, true) }}"
+  when: not ansible_check_mode
+
+- name: Unpack Traefik release
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ traefik_download_url | basename }}"
+    dest: "/usr/local/src/traefik-{{ traefik_version }}"
+    remote_src: true
+    creates: "/usr/local/src/traefik-{{ traefik_version }}/traefik"
+  when: not ansible_check_mode
+
+- name: Install Traefik binary
+  ansible.builtin.copy:
+    src: "/usr/local/src/traefik-{{ traefik_version }}/traefik"
+    dest: "{{ traefik_install_dir }}/traefik"
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: true
+  notify: Restart Traefik
+  when: not ansible_check_mode
+
+- name: Create ACME storage file
+  ansible.builtin.copy:
+    dest: "{{ traefik_data_dir }}/acme.json"
+    content: "{}"
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
+    mode: "0600"
+    force: false
+
+- name: Determine Traefik bind address
+  ansible.builtin.set_fact:
+    traefik_bind_address: >-
+      {{ '0.0.0.0' if (traefik_bind_interface | default('')) | length == 0
+         else ansible_facts.get('ansible_' + traefik_bind_interface, {}).get('ipv4', {}).get('address', '0.0.0.0') }}
+
+- name: Compose entrypoints configuration
+  ansible.builtin.set_fact:
+    traefik_effective_entrypoints: "{{ (traefik_entrypoints | length > 0) | ternary(traefik_entrypoints, _traefik_default_entrypoints) }}"
+  vars:
+    _traefik_default_entrypoints:
+      web:
+        address: "{{ traefik_bind_address }}:80"
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+      websecure:
+        address: "{{ traefik_bind_address }}:443"
+
+- name: Reset Traefik rendered services list
+  ansible.builtin.set_fact:
+    traefik_services_render: []
+  when:
+    - traefik_services | default([]) | length > 0
+
+- name: Detect available Traefik service containers
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ item.container_id }}.conf"
+  register: traefik_service_configs
+  loop: "{{ traefik_services | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - traefik_services | default([]) | length > 0
+
+- name: Build list of existing Traefik services
+  ansible.builtin.set_fact:
+    traefik_services_existing: >-
+      {{ (traefik_services_existing | default([])) + [ item.0 ] }}
+  loop: "{{ (traefik_services | default([])) | zip(traefik_service_configs.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  when:
+    - traefik_services | default([]) | length > 0
+    - item.1.stat.exists
+
+- name: Warn about missing Traefik services
+  ansible.builtin.debug:
+    msg: "Skipping Traefik routing for {{ item.0.name }} because container {{ item.0.container_id }} is not present"
+  loop: "{{ (traefik_services | default([])) | zip(traefik_service_configs.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  when:
+    - traefik_services | default([]) | length > 0
+    - not item.1.stat.exists
+
+- name: Collect backend addresses for Traefik services
+  ansible.builtin.command:
+    cmd: pct exec {{ item.container_id }} -- hostname -I
+  register: traefik_service_backends
+  changed_when: false
+  loop: "{{ traefik_services_existing | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - traefik_services_existing | default([]) | length > 0
+
+- name: Build Traefik rendered services list
+  ansible.builtin.set_fact:
+    traefik_services_render: >-
+      {{ (traefik_services_render | default([])) + [ item.0 | combine({'backend_ip': (item.1.stdout.split()[0])}) ] }}
+  loop: "{{ (traefik_services_existing | default([])) | zip(traefik_service_backends.results | default([])) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+  when:
+    - traefik_services_existing | default([]) | length > 0
+
+- name: Render Traefik services routing manifest
+  ansible.builtin.template:
+    src: services.yml.j2
+    dest: "{{ traefik_dynamic_dir }}/services.yml"
+    owner: root
+    group: "{{ traefik_group }}"
+    mode: "0640"
+  notify: Restart Traefik
+  when:
+    - traefik_services_render is defined
+    - traefik_services_render | length > 0
+
+- name: Remove Traefik services routing manifest when disabled
+  ansible.builtin.file:
+    path: "{{ traefik_dynamic_dir }}/services.yml"
+    state: absent
+  when:
+    - traefik_services | default([]) | length == 0
+
+- name: Render Traefik environment file
+  ansible.builtin.template:
+    src: traefik.env.j2
+    dest: "{{ traefik_config_dir }}/traefik.env"
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
+    mode: "0600"
+  notify: Restart Traefik
+
+- name: Render Traefik static configuration
+  ansible.builtin.template:
+    src: traefik.yml.j2
+    dest: "{{ traefik_config_dir }}/traefik.yml"
+    owner: root
+    group: "{{ traefik_group }}"
+    mode: "0640"
+  notify: Restart Traefik
+
+- name: Deploy Traefik dynamic configuration (data blocks)
+  ansible.builtin.copy:
+    dest: "{{ traefik_dynamic_dir }}/{{ item.filename }}"
+    content: "{{ item.data | to_nice_yaml }}"
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
+    mode: "{{ item.mode | default('0640') }}"
+  loop: "{{ traefik_dynamic_configs | default([]) | selectattr('data', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.filename }}"
+  notify: Restart Traefik
+
+- name: Deploy Traefik dynamic configuration (inline content)
+  ansible.builtin.copy:
+    dest: "{{ traefik_dynamic_dir }}/{{ item.filename }}"
+    content: "{{ item.content }}"
+    owner: "{{ traefik_user }}"
+    group: "{{ traefik_group }}"
+    mode: "{{ item.mode | default('0640') }}"
+  loop: "{{ traefik_dynamic_configs | default([]) | selectattr('content', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.filename }}"
+  notify: Restart Traefik
+
+- name: Install Traefik systemd unit
+  ansible.builtin.template:
+    src: traefik.service.j2
+    dest: /etc/systemd/system/traefik.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Traefik
+
+- name: Ensure Traefik service is enabled and running
+  ansible.builtin.systemd:
+    name: traefik
+    enabled: true
+    state: started
+  when: not ansible_check_mode

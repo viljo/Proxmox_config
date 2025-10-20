@@ -1,0 +1,24 @@
+---
+cosmos_container_id: 2100
+cosmos_hostname: cosmos
+cosmos_domain: infra.local
+cosmos_memory: 4096
+cosmos_cores: 2
+cosmos_disk: 32
+cosmos_swap: 1024
+cosmos_bridge: "{{ public_bridge | default('vmbr0') }}"
+cosmos_ip_config: dhcp
+cosmos_vlan_tag: null
+cosmos_gateway: null
+cosmos_dns_servers: []
+cosmos_rootfs_storage: local-lvm
+cosmos_unprivileged: true
+cosmos_start_onboot: true
+cosmos_features:
+  nesting: 1
+cosmos_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+cosmos_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+cosmos_root_password: "{{ vault_cosmos_root_password | default('') }}"
+cosmos_rootfs_path: "/var/lib/lxc/{{ cosmos_container_id }}/rootfs"
+cosmos_compose_path: /opt/cosmos
+cosmos_version: latest

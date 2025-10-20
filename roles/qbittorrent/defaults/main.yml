@@ -1,0 +1,25 @@
+---
+qbittorrent_container_id: 2070
+qbittorrent_hostname: qbittorrent
+qbittorrent_domain: infra.local
+qbittorrent_memory: 2048
+qbittorrent_cores: 2
+qbittorrent_disk: 16
+qbittorrent_swap: 512
+qbittorrent_bridge: "{{ public_bridge | default('vmbr0') }}"
+qbittorrent_ip_config: dhcp
+qbittorrent_vlan_tag: null
+qbittorrent_gateway: null
+qbittorrent_dns_servers: []
+qbittorrent_rootfs_storage: local-lvm
+qbittorrent_unprivileged: true
+qbittorrent_start_onboot: true
+qbittorrent_features:
+  nesting: 1
+qbittorrent_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+qbittorrent_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+qbittorrent_root_password: "{{ vault_qbittorrent_root_password | default('') }}"
+qbittorrent_download_dir: /srv/downloads
+qbittorrent_config_dir: /etc/qbittorrent
+qbittorrent_web_port: 8080
+qbittorrent_rootfs_path: "/var/lib/lxc/{{ qbittorrent_container_id }}/rootfs"

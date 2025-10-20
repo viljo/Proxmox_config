@@ -1,0 +1,34 @@
+version: "3.9"
+services:
+  wazuh.manager:
+    image: wazuh/wazuh-manager:{{ wazuh_version }}
+    hostname: wazuh-manager
+    restart: unless-stopped
+    ports:
+      - "1514:1514"
+      - "1515:1515"
+      - "55000:55000"
+    volumes:
+      - wazuh_data:/var/ossec/data
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:{{ wazuh_version }}
+    hostname: wazuh-indexer
+    restart: unless-stopped
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+    ports:
+      - "9200:9200"
+    volumes:
+      - wazuh_indexer_data:/var/lib/opensearch
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:{{ wazuh_version }}
+    hostname: wazuh-dashboard
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    depends_on:
+      - wazuh.manager
+      - wazuh.indexer
+volumes:
+  wazuh_data:
+  wazuh_indexer_data:

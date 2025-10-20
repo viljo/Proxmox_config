@@ -1,0 +1,332 @@
+---
+- name: Ensure GitLab template cache directory exists
+  ansible.builtin.file:
+    path: "{{ gitlab_template_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Stat GitLab container configuration
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ gitlab_container_id }}.conf"
+  register: gitlab_container_conf
+
+- name: Capture GitLab container configuration presence
+  ansible.builtin.set_fact:
+    gitlab_container_conf_exists: "{{ gitlab_container_conf.stat.exists | default(false) }}"
+
+- name: Check for existing GitLab template
+  ansible.builtin.stat:
+    path: "{{ gitlab_template_file }}"
+  register: gitlab_template_stat
+  when: not gitlab_container_conf_exists
+
+- name: Download template for GitLab container
+  ansible.builtin.get_url:
+    url: "{{ gitlab_template_url }}"
+    dest: "{{ gitlab_template_file }}"
+    mode: "0644"
+    force: false
+  register: gitlab_template_download
+  when:
+    - not ansible_check_mode
+    - not gitlab_container_conf_exists
+    - not gitlab_template_stat.stat.exists
+  retries: 3
+  delay: 10
+  until: gitlab_template_download is succeeded
+
+- name: Compose GitLab container network configuration
+  ansible.builtin.set_fact:
+    gitlab_net0: >-
+      name=eth0,bridge={{ gitlab_bridge }}{% if gitlab_vlan_tag %},tag={{ gitlab_vlan_tag }}{% endif %},ip={{ gitlab_ip_config }}{% if gitlab_gateway is defined and gitlab_gateway %},gw={{ gitlab_gateway }}{% endif %}
+
+- name: Ensure GitLab container exists
+  ansible.builtin.shell: |
+    pct create {{ gitlab_container_id }} {{ gitlab_template_file }} \
+      --hostname {{ gitlab_hostname }} \
+      --cores {{ gitlab_cores }} \
+      --memory {{ gitlab_memory }} \
+      --swap {{ gitlab_swap }} \
+      --rootfs {{ gitlab_rootfs_storage }}:{{ gitlab_disk }} \
+      --net0 {{ gitlab_net0 }}
+  args:
+    creates: "/etc/pve/lxc/{{ gitlab_container_id }}.conf"
+  when: not ansible_check_mode
+
+- name: Refresh GitLab container configuration facts
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ gitlab_container_id }}.conf"
+  register: gitlab_container_conf_refresh
+  when: not gitlab_container_conf_exists
+
+- name: Update GitLab container configuration facts
+  ansible.builtin.set_fact:
+    gitlab_container_conf: "{{ gitlab_container_conf_refresh }}"
+  when:
+    - gitlab_container_conf_refresh is defined
+    - not gitlab_container_conf_refresh.get('skipped', False)
+
+- name: Refresh GitLab container configuration presence
+  ansible.builtin.set_fact:
+    gitlab_container_conf_exists: "{{ gitlab_container_conf.stat.exists | default(false) }}"
+  when: gitlab_container_conf is defined
+
+- name: Ensure GitLab container network configuration
+  ansible.builtin.command:
+    cmd: >
+      pct set {{ gitlab_container_id }} --net0 {{ gitlab_net0 }}
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+
+- name: Ensure GitLab container onboot flag is set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ gitlab_container_id }}.conf"
+    regexp: '^onboot:'
+    line: "onboot: {{ 1 if gitlab_start_onboot else 0 }}"
+    insertafter: EOF
+  when: gitlab_container_conf_exists
+
+- name: Ensure GitLab container DNS servers are set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ gitlab_container_id }}.conf"
+    regexp: '^nameserver:'
+    line: "nameserver: {{ gitlab_dns_servers | join(' ') }}"
+    insertafter: EOF
+  when: gitlab_container_conf_exists and gitlab_dns_servers is defined and gitlab_dns_servers | length > 0
+
+- name: Read GitLab container status
+  ansible.builtin.command:
+    cmd: pct status {{ gitlab_container_id }}
+  register: gitlab_status
+  changed_when: false
+  failed_when: gitlab_status.rc not in [0, 2]
+  when: gitlab_container_conf_exists
+
+- name: Start GitLab container
+  ansible.builtin.command:
+    cmd: pct start {{ gitlab_container_id }}
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_status.rc is defined
+    - (gitlab_status.rc != 0 or ('stopped' in gitlab_status.stdout | default('')))
+
+- name: Wait for GitLab container to boot
+  ansible.builtin.command:
+    cmd: pct exec {{ gitlab_container_id }} -- bash -lc "true"
+  register: gitlab_boot_probe
+  failed_when: false
+  changed_when: false
+  retries: 20
+  delay: 3
+  until: gitlab_boot_probe.rc == 0
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+
+- name: Ensure GitLab root password is set
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "echo 'root:{{ gitlab_root_password }}' | chpasswd"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_root_password is defined
+    - gitlab_root_password | length > 0
+
+- name: Check GitLab provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "test -f /etc/gitlab/.provisioned"
+  register: gitlab_provision_marker
+  changed_when: false
+  failed_when: false
+  when: gitlab_container_conf_exists
+
+- name: Render GitLab apt sources content
+  ansible.builtin.set_fact:
+    gitlab_apt_sources_content: "{{ lookup('template', 'apt-sources.list.j2') }}"
+  when: gitlab_container_conf_exists
+
+- name: Configure GitLab apt sources with mirror fallbacks
+  ansible.builtin.command:
+    cmd: pct exec {{ gitlab_container_id }} -- bash -lc "cat > /etc/apt/sources.list"
+    stdin: "{{ gitlab_apt_sources_content }}"
+  when: gitlab_container_conf_exists
+
+- name: Ensure GitLab apt config directory exists
+  ansible.builtin.command:
+    cmd: pct exec {{ gitlab_container_id }} -- mkdir -p /etc/apt/apt.conf.d
+  when: gitlab_container_conf_exists
+
+- name: Ensure GitLab apt retry configuration
+  ansible.builtin.command:
+    cmd: pct exec {{ gitlab_container_id }} -- bash -lc "cat > /etc/apt/apt.conf.d/99-retries"
+    stdin: |
+      Acquire::Retries "{{ gitlab_apt_retry_attempts }}";
+      Acquire::http::Timeout "30";
+      Acquire::https::Timeout "30";
+  when: gitlab_container_conf_exists
+
+- name: Wait for existing apt/dpkg processes to finish
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "while pgrep -x apt-get >/dev/null || pgrep -x dpkg >/dev/null; do sleep 5; done"
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+
+- name: Force apt to use IPv4
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "echo 'Acquire::ForceIPv4 \"true\";' > /etc/apt/apt.conf.d/99force-ipv4"
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+
+- name: Clear stale apt locks
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock-frontend"
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+
+- name: Install GitLab dependencies
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y curl ca-certificates tzdata perl gnupg"
+  register: gitlab_dependency_install
+  until: gitlab_dependency_install.rc == 0
+  retries: 6
+  delay: 20
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_provision_marker.rc is defined
+    - gitlab_provision_marker.rc != 0
+
+- name: Add GitLab repository
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash"
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_provision_marker.rc is defined
+    - gitlab_provision_marker.rc != 0
+
+- name: Install GitLab CE
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "DEBIAN_FRONTEND=noninteractive EXTERNAL_URL='{{ gitlab_external_url }}' apt-get install -y {{ gitlab_omnibus_package }}"
+  register: gitlab_package_install
+  until: gitlab_package_install.rc == 0
+  retries: 5
+  delay: 30
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_provision_marker.rc is defined
+    - gitlab_provision_marker.rc != 0
+
+- name: Build GitLab LDAP server configuration
+  ansible.builtin.set_fact:
+    gitlab_ldap_servers_render: "{{ {
+      'main': {
+        'label': gitlab_ldap_label,
+        'host': gitlab_ldap_host,
+        'port': (gitlab_ldap_port | int),
+        'uid': gitlab_ldap_uid,
+        'bind_dn': gitlab_ldap_bind_dn,
+        'password': gitlab_ldap_bind_password,
+        'encryption': gitlab_ldap_encryption,
+        'verify_certificates': (gitlab_ldap_verify_certificates | bool),
+        'smartcard_auth': False,
+        'active_directory': (gitlab_ldap_active_directory | bool),
+        'allow_username_or_email_login': (gitlab_ldap_allow_username_or_email_login | bool),
+        'lowercase_usernames': (gitlab_ldap_lowercase_usernames | bool),
+        'base': gitlab_ldap_base,
+        'group_base': gitlab_ldap_group_base,
+        'user_filter': gitlab_ldap_user_filter,
+        'attributes': {
+          'username': gitlab_ldap_attribute_username,
+          'email': gitlab_ldap_attribute_email,
+          'name': gitlab_ldap_attribute_name,
+          'first_name': gitlab_ldap_attribute_first_name,
+          'last_name': gitlab_ldap_attribute_last_name
+        }
+      }
+    } }}"
+  when:
+    - gitlab_ldap_enable
+    - gitlab_container_conf_exists
+  no_log: true
+
+- name: Check for GitLab Omnibus configuration
+  ansible.builtin.stat:
+    path: "{{ gitlab_rootfs_path }}/etc/gitlab/gitlab.rb"
+  register: gitlab_config_stat
+  when: gitlab_container_conf_exists
+
+- name: Configure GitLab LDAP settings
+  ansible.builtin.blockinfile:
+    path: "{{ gitlab_rootfs_path }}/etc/gitlab/gitlab.rb"
+    marker: "# {mark} ANSIBLE MANAGED LDAP"
+    block: |
+      gitlab_rails['ldap_enabled'] = true
+      gitlab_rails['ldap_servers'] = YAML.load <<-'EOS'
+      {{ gitlab_ldap_servers_render | to_nice_yaml(indent=2, sort_keys=False) | indent(2) }}
+      EOS
+  when:
+    - gitlab_ldap_enable
+    - gitlab_container_conf_exists
+    - gitlab_ldap_servers_render is defined
+    - gitlab_config_stat.stat.exists
+  no_log: true
+
+- name: Remove GitLab LDAP settings when disabled
+  ansible.builtin.blockinfile:
+    path: "{{ gitlab_rootfs_path }}/etc/gitlab/gitlab.rb"
+    marker: "# {mark} ANSIBLE MANAGED LDAP"
+    state: absent
+  when:
+    - not gitlab_ldap_enable
+    - gitlab_container_conf_exists
+    - gitlab_config_stat.stat.exists
+
+- name: Set initial root password
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "echo '{{ gitlab_initial_root_password }}' > /etc/gitlab/initial_root_password && chmod 600 /etc/gitlab/initial_root_password"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_provision_marker.rc is defined
+    - gitlab_provision_marker.rc != 0
+
+- name: Reconfigure GitLab
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- gitlab-ctl reconfigure
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_config_stat.stat.exists
+
+- name: Create provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ gitlab_container_id }} -- bash -lc "mkdir -p /etc/gitlab && touch /etc/gitlab/.provisioned"
+  when:
+    - not ansible_check_mode
+    - gitlab_container_conf_exists
+    - gitlab_provision_marker.rc is defined
+    - gitlab_provision_marker.rc != 0

@@ -1,0 +1,26 @@
+# This file is managed by Ansible. Manual edits will be lost.
+{% if item.comment is defined %}
+# {{ item.comment }}
+{% endif %}
+{% if item.auto | default(true) %}
+auto {{ item.name }}
+{% endif %}
+{% if item.allow_hotplug | default(true) %}
+allow-hotplug {{ item.name }}
+{% endif %}
+iface {{ item.name }} inet {{ item.method | default('dhcp') }}
+{% if item.address is defined %}
+    address {{ item.address }}
+{% endif %}
+{% if item.netmask is defined %}
+    netmask {{ item.netmask }}
+{% endif %}
+{% if item.gateway is defined %}
+    gateway {{ item.gateway }}
+{% endif %}
+{% if item.dns_nameservers is defined %}
+    dns-nameservers {{ item.dns_nameservers | join(' ') if item.dns_nameservers is iterable else item.dns_nameservers }}
+{% endif %}
+{% for line in item.options | default([]) %}
+    {{ line }}
+{% endfor %}

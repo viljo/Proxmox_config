@@ -1,0 +1,19 @@
+dn: {{ ldap_suffix }}
+objectClass: top
+objectClass: dcObject
+objectClass: organization
+dc: {{ ldap_domain.split('.')[0] }}
+o: {{ ldap_organization }}
+description: Base entry for {{ ldap_organization }}
+
+{% for ou in ldap_base_ous %}
+dn: ou={{ ou }},{{ ldap_suffix }}
+objectClass: top
+objectClass: organizationalUnit
+ou: {{ ou }}
+
+{% endfor %}
+{% for block in ldap_base_entries_extra %}
+{{ block | trim }}
+
+{% endfor %}

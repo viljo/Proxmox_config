@@ -1,0 +1,4 @@
+---
+- name: restart qbittorrent
+  ansible.builtin.command:
+    cmd: pct exec {{ qbittorrent_container_id }} -- systemctl restart qbittorrent

@@ -1,0 +1,30 @@
+---
+proxmox_disable_enterprise_repo: true
+proxmox_enterprise_repo_files:
+  - /etc/apt/sources.list.d/pve-enterprise.list
+  - /etc/apt/sources.list.d/ceph.list
+proxmox_enable_no_subscription_repo: true
+proxmox_no_subscription_repo_url: http://download.proxmox.com/debian/pve
+proxmox_no_subscription_repo_urls:
+  - "{{ proxmox_no_subscription_repo_url }}"
+proxmox_no_subscription_repo_file: /etc/apt/sources.list.d/pve-no-subscription.list
+proxmox_no_subscription_repo_components:
+  - pve-no-subscription
+proxmox_suite: "{{ ansible_distribution_release | default(ansible_lsb.codename) | default('trixie') }}"
+proxmox_update_cache_after_repo_change: true
+proxmox_debian_repository_uris:
+  - http://deb.debian.org/debian
+  - http://ftp.se.debian.org/debian
+  - http://ftp.de.debian.org/debian
+proxmox_debian_suites:
+  - trixie
+  - trixie-updates
+proxmox_debian_components:
+  - main
+  - contrib
+  - non-free-firmware
+proxmox_debian_security_uris:
+  - http://security.debian.org/debian-security
+proxmox_debian_security_suites:
+  - trixie-security
+proxmox_root_authorized_keys: []

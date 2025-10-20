@@ -1,0 +1,129 @@
+---
+nc_container_id: 2040
+nc_hostname: nextcloud
+nc_domain: infra.local
+nc_memory: 6144
+nc_cores: 4
+nc_disk: 64
+nc_swap: 2048
+nc_bridge: "{{ public_bridge | default('vmbr0') }}"
+nc_ip_config: dhcp
+nc_vlan_tag: null
+nc_gateway: null
+nc_dns_servers: []
+nc_rootfs_storage: local-lvm
+nc_unprivileged: true
+nc_start_onboot: true
+nc_features:
+  nesting: 1
+nc_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+nc_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+nc_root_password: "{{ vault_nextcloud_root_password | default('') }}"
+nc_web_user: www-data
+nc_web_group: www-data
+nc_install_dir: /var/www/nextcloud
+nc_data_dir: /var/lib/nextcloud-data
+nc_version: 29.0.2
+nc_archive_url: "https://download.nextcloud.com/server/releases/nextcloud-{{ nc_version }}.tar.bz2"
+nc_archive_checksum: null
+nc_php_memory_limit: "1024M"
+nc_php_upload_limit: "1G"
+nc_php_max_execution: 3600
+nc_php_modules:
+  - php8.2
+  - php8.2-fpm
+  - php8.2-cli
+  - php8.2-gd
+  - php8.2-curl
+  - php8.2-xml
+  - php8.2-zip
+  - php8.2-mbstring
+  - php8.2-bz2
+  - php8.2-intl
+  - php8.2-bcmath
+  - php8.2-gmp
+  - php8.2-imagick
+  - php8.2-pgsql
+  - php8.2-redis
+nc_extra_packages:
+  - nginx
+  - redis-server
+  - unzip
+  - curl
+  - tzdata
+  - acl
+  - cron
+  - ffmpeg
+  - libmagickcore-6.q16-6-extra
+  - smbclient
+  - libsmbclient
+nc_rootfs_path: "/var/lib/lxc/{{ nc_container_id }}/rootfs"
+nc_db_type: pgsql
+nc_db_host: postgres.infra.local
+nc_db_port: 5432
+nc_db_name: nextcloud
+nc_db_user: nextcloud
+nc_db_password: "{{ vault_nextcloud_db_password | default('') }}"
+nc_db_table_prefix: oc_
+nc_admin_user: admin
+nc_admin_password: "{{ vault_nextcloud_admin_password | default('') }}"
+nc_trusted_domains:
+  - "{{ nc_hostname }}.{{ nc_domain }}"
+nc_overwrite_protocol: https
+nc_redis_host: 127.0.0.1
+nc_redis_port: 6379
+nc_enable_ldap: true
+nc_ldap_config_id: s01
+nc_ldap_host: "{{ ldap_service_host }}"
+nc_ldap_port: "{{ ldap_service_port }}"
+nc_ldap_use_tls: false
+nc_ldap_tls_verify: false
+nc_ldap_base: "{{ ldap_suffix }}"
+nc_ldap_users_base: "{{ ldap_people_base_dn | default('ou=people,' ~ ldap_suffix) }}"
+nc_ldap_groups_base: "{{ ldap_groups_base_dn | default('ou=groups,' ~ ldap_suffix) }}"
+nc_ldap_bind_dn: "{{ ldap_admin_bind_dn }}"
+nc_ldap_bind_password: "{{ ldap_admin_password }}"
+nc_ldap_login_filter: "(&(|(uid=%uid)(mail=%uid))(objectClass=inetOrgPerson))"
+nc_ldap_user_filter: "(objectClass=inetOrgPerson)"
+nc_ldap_group_filter: "(objectClass=groupOfUniqueNames)"
+nc_ldap_user_filter_object_class: "inetOrgPerson"
+nc_ldap_display_name: cn
+nc_ldap_email_attr: mail
+nc_ldap_uuid_attr: uid
+nc_ldap_config:
+  - key: ldapHost
+    value: "{{ nc_ldap_host }}"
+  - key: ldapPort
+    value: "{{ nc_ldap_port }}"
+  - key: ldapBase
+    value: "{{ nc_ldap_base }}"
+  - key: ldapBaseUsers
+    value: "{{ nc_ldap_users_base }}"
+  - key: ldapBaseGroups
+    value: "{{ nc_ldap_groups_base }}"
+  - key: ldapAgentName
+    value: "{{ nc_ldap_bind_dn }}"
+  - key: ldapAgentPassword
+    value: "{{ nc_ldap_bind_password }}"
+  - key: ldapLoginFilter
+    value: "{{ nc_ldap_login_filter }}"
+  - key: ldapUserFilter
+    value: "{{ nc_ldap_user_filter }}"
+  - key: ldapGroupFilter
+    value: "{{ nc_ldap_group_filter }}"
+  - key: ldapEmailAttribute
+    value: "{{ nc_ldap_email_attr }}"
+  - key: ldapUserDisplayName
+    value: "{{ nc_ldap_display_name }}"
+  - key: ldapExpertUUIDAttr
+    value: "{{ nc_ldap_uuid_attr }}"
+  - key: ldapExpertUsernameAttr
+    value: "{{ nc_ldap_uuid_attr }}"
+  - key: ldapUserFilterObjectclass
+    value: "{{ nc_ldap_user_filter_object_class }}"
+  - key: ldapConfigurationActive
+    value: "1"
+  - key: turnOffCertCheck
+    value: "{{ '0' if nc_ldap_tls_verify else '1' }}"
+  - key: useTls
+    value: "{{ '1' if nc_ldap_use_tls else '0' }}"

@@ -1,0 +1,17 @@
+[Unit]
+Description=Home Assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ ha_user }}
+Group={{ ha_group }}
+WorkingDirectory={{ ha_install_dir }}
+Environment="PATH={{ ha_venv_path }}/bin"
+ExecStart={{ ha_venv_path }}/bin/hass --config {{ ha_config_dir }}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

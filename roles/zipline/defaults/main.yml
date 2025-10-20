@@ -1,0 +1,27 @@
+---
+zipline_container_id: 2060
+zipline_hostname: zipline
+zipline_domain: infra.local
+zipline_memory: 4096
+zipline_cores: 2
+zipline_disk: 32
+zipline_swap: 1024
+zipline_bridge: "{{ public_bridge | default('vmbr0') }}"
+zipline_ip_config: dhcp
+zipline_vlan_tag: null
+zipline_gateway: null
+zipline_dns_servers: []
+zipline_rootfs_storage: local-lvm
+zipline_unprivileged: true
+zipline_start_onboot: true
+zipline_features:
+  nesting: 1
+zipline_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+zipline_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+zipline_root_password: "{{ vault_zipline_root_password | default('') }}"
+zipline_rootfs_path: "/var/lib/lxc/{{ zipline_container_id }}/rootfs"
+zipline_compose_path: /opt/zipline
+zipline_env:
+  CORE_SECRET: "{{ vault_zipline_core_secret | default('') }}"
+  DATABASE_URL: "sqlite:///data/zipline.db"
+  CORE_PORT: "3000"

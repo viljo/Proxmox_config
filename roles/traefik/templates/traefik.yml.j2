@@ -1,0 +1,41 @@
+log:
+  level: "{{ traefik_log_level }}"
+  filePath: "{{ traefik_log_dir }}/traefik.log"
+accessLog:
+  filePath: "{{ traefik_log_dir }}/access.log"
+  bufferingSize: 100
+api:
+  dashboard: true
+  insecure: false
+
+entryPoints:
+{% for name, config in (traefik_effective_entrypoints | default({})).items() %}
+  {{ name }}:
+{{ config | to_nice_yaml(indent=4, sort_keys=False) | indent(4, true) }}
+{% endfor %}
+
+providers:
+  file:
+    directory: "{{ traefik_dynamic_dir }}"
+    watch: true
+
+certificatesResolvers:
+  dns:
+    acme:
+      email: "{{ traefik_acme_email }}"
+      storage: "{{ traefik_data_dir }}/acme.json"
+      dnsChallenge:
+        provider: "{{ traefik_dns_challenge_provider }}"
+{% if traefik_dns_challenge_delay is not none %}
+        delayBeforeCheck: {{ traefik_dns_challenge_delay }}
+{% endif %}
+{% if traefik_dns_challenge_resolvers %}
+        resolvers:
+{% for resolver in traefik_dns_challenge_resolvers %}
+          - "{{ resolver }}"
+{% endfor %}
+{% endif %}
+
+{% if traefik_static_config_extra %}
+{{ traefik_static_config_extra | to_nice_yaml(indent=2, sort_keys=False) }}
+{% endif %}

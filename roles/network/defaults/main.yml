@@ -1,0 +1,11 @@
+---
+network_packages:
+  - ifupdown2
+network_update_cache: false
+network_interfaces: []
+network_interfaces_path: /etc/network/interfaces.d
+network_handler_enable_reload: true
+network_manage_resolvconf: true
+network_resolvconf_path: /etc/resolv.conf
+network_resolvconf_nameservers: []
+network_resolvconf_search: []

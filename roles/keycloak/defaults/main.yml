@@ -1,0 +1,45 @@
+---
+keycloak_container_id: 2000
+keycloak_hostname: keycloak
+keycloak_domain: infra.local
+keycloak_memory: 4096
+keycloak_cores: 2
+keycloak_disk: 16
+keycloak_swap: 512
+keycloak_bridge: "{{ public_bridge | default('vmbr0') }}"
+keycloak_ip_config: dhcp
+keycloak_vlan_tag: null
+keycloak_gateway: null
+keycloak_dns_servers: []
+keycloak_rootfs_storage: local-lvm
+keycloak_unprivileged: true
+keycloak_start_onboot: true
+keycloak_features:
+  nesting: 1
+keycloak_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+keycloak_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+keycloak_root_password: "{{ vault_keycloak_root_password | default('') }}"
+keycloak_admin_user: admin
+keycloak_admin_password: "{{ vault_keycloak_admin_password | default('') }}"
+keycloak_service_port: 8443
+keycloak_http_port: 8080
+keycloak_version: 24.0.3
+keycloak_download_url: "https://github.com/keycloak/keycloak/releases/download/{{ keycloak_version }}/keycloak-{{ keycloak_version }}.tar.gz"
+keycloak_install_dir: /opt/keycloak
+keycloak_runtime_user: keycloak
+keycloak_runtime_group: keycloak
+keycloak_data_dir: /var/lib/keycloak
+keycloak_log_dir: /var/log/keycloak
+keycloak_max_heap: 2048
+keycloak_rootfs_path: "/var/lib/lxc/{{ keycloak_container_id }}/rootfs"
+keycloak_bind_address: 0.0.0.0
+keycloak_hostname_url: "keycloak.{{ keycloak_domain }}"
+keycloak_tls_enabled: false
+keycloak_tls_cert_file: "{{ keycloak_install_dir }}/conf/tls.crt"
+keycloak_tls_key_file: "{{ keycloak_install_dir }}/conf/tls.key"
+keycloak_extra_env: {}
+keycloak_db_host: "{{ postgres_hostname }}.{{ postgres_domain | default(keycloak_domain) }}"
+keycloak_db_port: 5432
+keycloak_db_database: keycloak
+keycloak_db_username: keycloak
+keycloak_db_password: "{{ vault_keycloak_db_password | default('') }}"

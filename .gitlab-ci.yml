@@ -1,0 +1,206 @@
+# GitLab CI/CD Pipeline for Proxmox Infrastructure
+# Constitution Compliance: Automated linting and testing
+
+stages:
+  - lint
+  - test
+  - docs
+
+# === Linting Stage ===
+
+ansible-lint:
+  stage: lint
+  image: cytopia/ansible-lint:latest
+  script:
+    - echo "🔍 Running ansible-lint on playbooks and roles..."
+    - ansible-lint playbooks/ roles/
+    - echo "✅ Ansible lint passed"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH =~ /^[0-9]{3}-.*/'  # Feature branches
+  allow_failure: false
+
+yaml-lint:
+  stage: lint
+  image: cytopia/yamllint:latest
+  script:
+    - echo "🔍 Running yamllint on YAML files..."
+    - yamllint -c .yamllint playbooks/ roles/ inventory/
+    - echo "✅ YAML lint passed"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH =~ /^[0-9]{3}-.*/'  # Feature branches
+  allow_failure: false
+
+vault-check:
+  stage: lint
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache file grep
+  script:
+    - echo "🔒 Checking vault encryption..."
+    - |
+      # Check that secrets.yml files are encrypted
+      for vault_file in $(find . -name "secrets.yml"); do
+        if ! file "$vault_file" | grep -q "Ansible Vault"; then
+          echo "❌ ERROR: $vault_file is not encrypted with Ansible Vault!"
+          exit 1
+        else
+          echo "✅ $vault_file is properly encrypted"
+        fi
+      done
+    - echo "✅ All vault files properly encrypted"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: false
+
+# === Testing Stage ===
+
+syntax-check:
+  stage: test
+  image: willhallonline/ansible:latest
+  script:
+    - echo "🔍 Running Ansible syntax check..."
+    - ansible-playbook --syntax-check playbooks/site.yml
+    - ansible-playbook --syntax-check playbooks/dmz-rebuild.yml
+    - echo "✅ Syntax check passed"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: false
+
+readme-check:
+  stage: test
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash
+  script:
+    - echo "📚 Checking that all roles have README.md..."
+    - |
+      missing_readmes=0
+      for role in roles/*/; do
+        role_name=$(basename "$role")
+        if [[ ! -f "$role/README.md" ]]; then
+          echo "❌ Missing README.md in role: $role_name"
+          missing_readmes=$((missing_readmes + 1))
+        fi
+      done
+
+      if [[ $missing_readmes -gt 0 ]]; then
+        echo ""
+        echo "❌ Found $missing_readmes roles without README.md"
+        echo "💡 Run: bash generate_role_readmes.sh"
+        exit 1
+      fi
+    - echo "✅ All roles have README.md documentation"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: false
+
+constitution-check:
+  stage: test
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache bash grep
+  script:
+    - echo "⚖️  Checking constitution compliance..."
+    - |
+      # Check that constitution exists
+      if [[ ! -f ".specify/memory/constitution.md" ]]; then
+        echo "❌ Constitution file missing!"
+        exit 1
+      fi
+
+      # Check for TODO placeholders in constitution
+      if grep -q "TODO(RATIFICATION_DATE)" .specify/memory/constitution.md; then
+        echo "⚠️  WARNING: Constitution has unresolved TODO(RATIFICATION_DATE)"
+        echo "Please set ratification date in .specify/memory/constitution.md"
+      fi
+
+      echo "✅ Constitution compliance check passed"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: true  # Warning only
+
+# === Documentation Stage ===
+
+docs-build:
+  stage: docs
+  image: alpine:latest
+  script:
+    - echo "📖 Validating documentation structure..."
+    - |
+      required_docs=(
+        "docs/network-topology.md"
+        "docs/firewall-deployment.md"
+        "docs/proxmox-access.md"
+        "docs/secrets-management.md"
+      )
+
+      missing_docs=0
+      for doc in "${required_docs[@]}"; do
+        if [[ ! -f "$doc" ]]; then
+          echo "⚠️  Missing recommended doc: $doc"
+          missing_docs=$((missing_docs + 1))
+        fi
+      done
+
+      if [[ $missing_docs -gt 0 ]]; then
+        echo "⚠️  $missing_docs recommended documentation files missing"
+      else
+        echo "✅ All core documentation present"
+      fi
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  allow_failure: true  # Documentation is recommended but not blocking
+
+# === Manual Jobs ===
+
+deploy-staging:
+  stage: test
+  image: willhallonline/ansible:latest
+  script:
+    - echo "🚀 Deploying to staging environment..."
+    - echo "⚠️  This is a manual deployment job"
+    - ansible-playbook -i inventory/staging playbooks/site.yml --check --diff
+  when: manual
+  only:
+    - merge_requests
+  environment:
+    name: staging
+    action: prepare
+
+# === Notification ===
+
+.notification-template: &notification
+  image: curlimages/curl:latest
+  script:
+    - |
+      if [[ -n "${MATTERMOST_WEBHOOK_URL:-}" ]]; then
+        curl -X POST "${MATTERMOST_WEBHOOK_URL}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"text\": \"Pipeline ${CI_PIPELINE_STATUS} for ${CI_PROJECT_NAME}\",
+            \"username\": \"GitLab CI\",
+            \"channel\": \"infrastructure-alerts\"
+          }"
+      fi
+
+pipeline-success:
+  <<: *notification
+  stage: .post
+  when: on_success
+  only:
+    - main
+
+pipeline-failure:
+  <<: *notification
+  stage: .post
+  when: on_failure
+  only:
+    - main

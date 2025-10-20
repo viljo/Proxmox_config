@@ -1,0 +1,5 @@
+dn: cn={{ ldap_group_name }},{{ ldap_groups_base_dn }}
+objectClass: top
+objectClass: groupOfNames
+cn: {{ ldap_group_name }}
+member: {{ ldap_group_seed_member }}

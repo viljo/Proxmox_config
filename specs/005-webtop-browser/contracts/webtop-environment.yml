@@ -1,0 +1,282 @@
+# Webtop Docker Container Environment Variables Contract
+# Purpose: Define required and optional environment variables for webtop configuration
+# Version: 1.0.0
+# Date: 2025-10-20
+# Reference: https://docs.linuxserver.io/images/docker-webtop/
+
+---
+# Required Environment Variables
+
+PUID:
+  description: "User ID for file permissions"
+  type: integer
+  required: true
+  default: 1000
+  validation: "Must be >= 1000 (non-root user)"
+  example: 1000
+
+PGID:
+  description: "Group ID for file permissions"
+  type: integer
+  required: true
+  default: 1000
+  validation: "Must be >= 1000 (non-root group)"
+  example: 1000
+
+TZ:
+  description: "Timezone for container and desktop"
+  type: string
+  required: true
+  default: "Europe/Stockholm"
+  validation: "Must be valid TZ database identifier"
+  example: "Europe/Stockholm"
+
+# Authentication Variables (Phase 1: Built-in)
+
+CUSTOM_USER:
+  description: "Initial admin username"
+  type: string
+  required: false
+  default: "admin"
+  validation: "Alphanumeric, 3-32 characters"
+  example: "{{ webtop_admin_user }}"  # From Ansible Vault
+  security: "Store in Ansible Vault"
+
+CUSTOM_PASSWORD:
+  description: "Initial admin password"
+  type: string
+  required: false
+  default: null
+  validation: "Minimum 12 characters, complexity required"
+  example: "{{ webtop_admin_password }}"  # From Ansible Vault
+  security: "MUST be stored in Ansible Vault, never plaintext"
+
+# Authentication Variables (Phase 2: LDAP Integration)
+
+LDAP_URI:
+  description: "LDAP server connection URI"
+  type: string
+  required: false
+  default: null
+  validation: "Must be ldap:// or ldaps:// URI"
+  example: "ldap://ldap.infra.local:389"
+  phase: 2
+
+LDAP_BASE_DN:
+  description: "LDAP search base distinguished name"
+  type: string
+  required: false
+  default: null
+  validation: "Valid DN format"
+  example: "dc=infra,dc=local"
+  phase: 2
+
+LDAP_BIND_DN:
+  description: "LDAP service account bind DN"
+  type: string
+  required: false
+  default: null
+  validation: "Valid DN format"
+  example: "cn=webtop,ou=services,dc=infra,dc=local"
+  security: "Store in Ansible Vault"
+  phase: 2
+
+LDAP_BIND_PASSWORD:
+  description: "LDAP service account password"
+  type: string
+  required: false
+  default: null
+  validation: "Non-empty string"
+  example: "{{ ldap_bind_password }}"  # From Ansible Vault
+  security: "MUST be stored in Ansible Vault"
+  phase: 2
+
+LDAP_USER_FILTER:
+  description: "LDAP user search filter template"
+  type: string
+  required: false
+  default: "(uid=%s)"
+  validation: "Valid LDAP filter with %s placeholder"
+  example: "(uid=%s)"
+  phase: 2
+
+# Display Configuration
+
+SUBFOLDER:
+  description: "URL subfolder path for webtop"
+  type: string
+  required: false
+  default: "/"
+  validation: "Must start with /"
+  example: "/"
+  note: "Typically root path when using dedicated subdomain"
+
+TITLE:
+  description: "Browser tab title for webtop interface"
+  type: string
+  required: false
+  default: "Webtop"
+  validation: "Any string, max 100 characters"
+  example: "Webtop - browser.viljo.se"
+
+# Desktop Environment Configuration
+
+KEYBOARD:
+  description: "Keyboard layout"
+  type: string
+  required: false
+  default: "en-us-qwerty"
+  validation: "Valid keyboard layout identifier"
+  example: "sv-se-qwerty"
+  options:
+    - "en-us-qwerty"
+    - "sv-se-qwerty"
+    - "de-de-qwertz"
+
+# Performance Tuning
+
+START_DOCKER:
+  description: "Start Docker daemon inside container"
+  type: boolean
+  required: false
+  default: true
+  validation: "true or false"
+  example: true
+  note: "Set to false if Docker not needed inside desktop"
+
+# Debugging
+
+DEBUG:
+  description: "Enable debug logging"
+  type: boolean
+  required: false
+  default: false
+  validation: "true or false"
+  example: false
+  note: "Only enable for troubleshooting"
+
+---
+# Volume Mount Contract
+
+volumes:
+  - source: "/var/lib/webtop/config"
+    target: "/config"
+    type: "bind"
+    description: "Desktop configuration and user settings"
+    required: true
+    permissions: "rw"
+
+  - source: "/var/lib/webtop/data"
+    target: "/data"
+    type: "bind"
+    description: "User home directories and files"
+    required: true
+    permissions: "rw"
+
+---
+# Port Mapping Contract
+
+ports:
+  - container_port: 3000
+    host_port: 3000
+    protocol: "tcp"
+    description: "KasmVNC web interface (HTTPS via Traefik)"
+    exposed_to: "Traefik reverse proxy only"
+
+  - container_port: 3001
+    host_port: null
+    protocol: "tcp"
+    description: "VNC protocol port (optional, not exposed by default)"
+    exposed_to: "Internal only"
+
+---
+# Validation Rules
+
+validation_script: |
+  # Check required environment variables
+  - PUID must be set
+  - PGID must be set
+  - TZ must be valid timezone
+
+  # Check authentication (either built-in OR LDAP, not both)
+  if CUSTOM_USER set:
+    - CUSTOM_PASSWORD must be set
+    - Password must meet complexity requirements
+
+  if LDAP_URI set:
+    - LDAP_BASE_DN must be set
+    - LDAP_BIND_DN must be set
+    - LDAP_BIND_PASSWORD must be set
+    - LDAP URI must be reachable
+
+  # Check volume mounts
+  - /var/lib/webtop/config must exist on LXC host
+  - /var/lib/webtop/data must exist on LXC host
+  - Directories must be owned by PUID:PGID
+
+---
+# Example Ansible Template Usage
+
+example_jinja2_template: |
+  # webtop.env.j2
+  PUID={{ webtop_puid | default(1000) }}
+  PGID={{ webtop_pgid | default(1000) }}
+  TZ={{ timezone | default('Europe/Stockholm') }}
+
+  {% if webtop_auth_mode == 'builtin' %}
+  CUSTOM_USER={{ webtop_admin_user }}
+  CUSTOM_PASSWORD={{ webtop_admin_password }}
+  {% endif %}
+
+  {% if webtop_auth_mode == 'ldap' %}
+  LDAP_URI={{ ldap_uri }}
+  LDAP_BASE_DN={{ ldap_base_dn }}
+  LDAP_BIND_DN={{ ldap_bind_dn }}
+  LDAP_BIND_PASSWORD={{ ldap_bind_password }}
+  LDAP_USER_FILTER={{ ldap_user_filter | default('(uid=%s)') }}
+  {% endif %}
+
+  SUBFOLDER=/
+  TITLE=Webtop - browser.viljo.se
+  KEYBOARD=sv-se-qwerty
+  START_DOCKER=true
+
+---
+# Security Requirements
+
+security_checklist:
+  - name: "No plaintext passwords"
+    requirement: "All password variables encrypted in Ansible Vault"
+    validation: "grep -r 'CUSTOM_PASSWORD\\|LDAP_BIND_PASSWORD' group_vars/ should find no plaintext"
+
+  - name: "Environment file permissions"
+    requirement: "webtop.env file must be 0600 (owner read/write only)"
+    validation: "stat -c '%a' webtop.env should return 600"
+
+  - name: "Volume mount ownership"
+    requirement: "Volume directories owned by PUID:PGID"
+    validation: "ls -ld /var/lib/webtop/* should show correct ownership"
+
+---
+# Phase Rollout Plan
+
+phase_1_variables:
+  - PUID
+  - PGID
+  - TZ
+  - CUSTOM_USER
+  - CUSTOM_PASSWORD
+  - SUBFOLDER
+  - TITLE
+  - KEYBOARD
+
+phase_2_variables:
+  - LDAP_URI
+  - LDAP_BASE_DN
+  - LDAP_BIND_DN
+  - LDAP_BIND_PASSWORD
+  - LDAP_USER_FILTER
+
+phase_3_variables:
+  # Reserved for future SSO/OIDC integration via Traefik ForwardAuth
+  # Webtop will delegate auth to Traefik middleware

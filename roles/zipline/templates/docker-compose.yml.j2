@@ -1,0 +1,17 @@
+version: '3.9'
+services:
+  zipline:
+    image: diced/zipline:latest
+    restart: unless-stopped
+    environment:
+{% for key, value in zipline_env.items() %}
+      {{ key }}: {{ value }}
+{% endfor %}
+    ports:
+      - "3000:3000"
+    volumes:
+      - zipline_data:/zipline/data
+      - zipline_uploads:/zipline/uploads
+volumes:
+  zipline_data:
+  zipline_uploads:

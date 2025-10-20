@@ -1,0 +1,64 @@
+---
+- name: Teardown Demo Website
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: false
+
+  vars_prompt:
+    - name: confirm_teardown
+      prompt: "Are you sure you want to DESTROY the demo site container? This action cannot be undone! (Type 'yes' to confirm)"
+      private: false
+
+  pre_tasks:
+    - name: Verify teardown confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_teardown == "yes"
+        fail_msg: "Teardown cancelled. You must type 'yes' to confirm."
+        success_msg: "Teardown confirmed. Proceeding with container destruction."
+
+  tasks:
+    - name: Check if demo site container exists
+      ansible.builtin.command:
+        cmd: pct status {{ demo_site_container_id | default(2300) }}
+      register: demo_site_status
+      changed_when: false
+      failed_when: false
+
+    - name: Stop demo site container if running
+      ansible.builtin.command:
+        cmd: pct stop {{ demo_site_container_id | default(2300) }}
+      when:
+        - demo_site_status.rc == 0
+        - "'running' in demo_site_status.stdout"
+      changed_when: true
+
+    - name: Destroy demo site container
+      ansible.builtin.command:
+        cmd: pct destroy {{ demo_site_container_id | default(2300) }}
+      when: demo_site_status.rc == 0
+      changed_when: true
+
+    - name: Remove temporary demo site files
+      ansible.builtin.file:
+        path: "/tmp/demo-site-{{ item }}.{{ demo_site_container_id | default(2300) }}"
+        state: absent
+      loop:
+        - "index.html"
+        - "hello.html"
+      ignore_errors: true
+
+  post_tasks:
+    - name: Display teardown summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          Demo Site Teardown Complete
+          ========================================
+
+          Container {{ demo_site_container_id | default(2300) }} has been destroyed.
+
+          Reminder:
+          - Traefik routing configuration should be manually removed if no longer needed
+          - DNS records should be updated if the domain will not be used
+          - Consider cleaning up any backup snapshots

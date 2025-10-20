@@ -1,0 +1,283 @@
+---
+- name: Ensure Keycloak LXC template cache directory exists
+  ansible.builtin.file:
+    path: "{{ keycloak_template_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download Debian template for Keycloak container
+  ansible.builtin.get_url:
+    url: "{{ keycloak_template_url }}"
+    dest: "{{ keycloak_template_file }}"
+    mode: "0644"
+    force: false
+  when: not ansible_check_mode
+
+- name: Build Keycloak container network configuration
+  ansible.builtin.set_fact:
+    keycloak_net0: >-
+      name=eth0,bridge={{ keycloak_bridge }}{% if keycloak_vlan_tag %},tag={{ keycloak_vlan_tag }}{% endif %},ip={{ keycloak_ip_config }}{% if keycloak_gateway is defined and keycloak_gateway %},gw={{ keycloak_gateway }}{% endif %}
+
+- name: Ensure Keycloak container exists
+  ansible.builtin.shell: |
+    pct create {{ keycloak_container_id }} {{ keycloak_template_file }} \
+      --hostname {{ keycloak_hostname }} \
+      --cores {{ keycloak_cores }} \
+      --memory {{ keycloak_memory }} \
+      --swap {{ keycloak_swap }} \
+      --rootfs {{ keycloak_rootfs_storage }}:{{ keycloak_disk }} \
+      --net0 {{ keycloak_net0 }} \
+      {% if keycloak_unprivileged %}--unprivileged 1{% endif %}
+  args:
+    creates: "/etc/pve/lxc/{{ keycloak_container_id }}.conf"
+  when: not ansible_check_mode
+
+- name: Stat Keycloak container configuration
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ keycloak_container_id }}.conf"
+  register: keycloak_container_conf
+
+- name: Ensure Keycloak container network configuration
+  ansible.builtin.command:
+    cmd: >
+      pct set {{ keycloak_container_id }} --net0 {{ keycloak_net0 }}
+  when: not ansible_check_mode and keycloak_container_conf.stat.exists
+
+- name: Ensure Keycloak container onboot flag is set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ keycloak_container_id }}.conf"
+    regexp: '^onboot:'
+    line: "onboot: {{ 1 if keycloak_start_onboot else 0 }}"
+    insertafter: EOF
+  when: keycloak_container_conf.stat.exists
+
+- name: Ensure Keycloak container features list is present
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ keycloak_container_id }}.conf"
+    regexp: '^features:'
+    line: "features: {{ keycloak_features | dictsort | map('join', '=') | join(';') }}"
+    insertafter: EOF
+  when: keycloak_container_conf.stat.exists and keycloak_features | length > 0
+
+- name: Ensure Keycloak container DNS servers are set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ keycloak_container_id }}.conf"
+    regexp: '^nameserver:'
+    line: "nameserver: {{ keycloak_dns_servers | join(' ') }}"
+    insertafter: EOF
+  when: keycloak_container_conf.stat.exists and keycloak_dns_servers is defined and keycloak_dns_servers | length > 0
+
+- name: Read Keycloak container status
+  ansible.builtin.command:
+    cmd: pct status {{ keycloak_container_id }}
+  register: keycloak_status
+  changed_when: false
+  failed_when: keycloak_status.rc not in [0, 2]
+
+- name: Start Keycloak container
+  ansible.builtin.command:
+    cmd: pct start {{ keycloak_container_id }}
+  when: not ansible_check_mode and (keycloak_status.rc != 0 or (keycloak_status.stdout is defined and ('stopped' in keycloak_status.stdout)))
+
+- name: Wait for Keycloak container to boot
+  ansible.builtin.command:
+    cmd: pct exec {{ keycloak_container_id }} -- bash -lc "true"
+  register: keycloak_boot_probe
+  failed_when: false
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: keycloak_boot_probe.rc == 0
+  when: not ansible_check_mode
+
+- name: Ensure Keycloak root password is set
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "echo 'root:{{ keycloak_root_password }}' | chpasswd"
+  no_log: true
+  when: not ansible_check_mode and keycloak_root_password is defined and keycloak_root_password | length > 0
+
+- name: Check for existing Keycloak provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "test -f /etc/keycloak/.provisioned"
+  register: keycloak_provision_marker
+  changed_when: false
+  failed_when: false
+
+- name: Install Keycloak dependencies
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "apt-get update && apt-get install -y openjdk-17-jre-headless unzip curl"
+  when: not ansible_check_mode and keycloak_provision_marker.rc != 0
+
+- name: Check Keycloak runtime group
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- getent group {{ keycloak_runtime_group }}
+  register: keycloak_group_check
+  failed_when: false
+  changed_when: false
+
+- name: Ensure Keycloak runtime group exists
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- groupadd -r {{ keycloak_runtime_group }}
+  when: not ansible_check_mode and keycloak_group_check.rc != 0
+
+- name: Check Keycloak runtime user
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- id {{ keycloak_runtime_user }}
+  register: keycloak_user_check
+  failed_when: false
+  changed_when: false
+
+- name: Ensure Keycloak runtime user exists
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- useradd -r -g {{ keycloak_runtime_group }} -d {{ keycloak_install_dir }} -s /usr/sbin/nologin {{ keycloak_runtime_user }}
+  when: not ansible_check_mode and keycloak_user_check.rc != 0
+
+- name: Ensure Keycloak directories exist
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "mkdir -p {{ keycloak_install_dir }} {{ keycloak_install_dir }}/conf {{ keycloak_data_dir }} {{ keycloak_log_dir }}"
+  changed_when: false
+
+- name: Ensure Keycloak container has Postgres host entry
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "grep -q 'postgres.infra.local' /etc/hosts || echo '{{ keycloak_db_host }} postgres.infra.local' >> /etc/hosts"
+  when: not ansible_check_mode and keycloak_container_conf.stat.exists
+
+- name: Download and extract Keycloak distribution
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "if [ ! -f {{ keycloak_install_dir }}/bin/kc.sh ]; then curl -L {{ keycloak_download_url }} -o /tmp/keycloak.tar.gz && rm -rf {{ keycloak_install_dir }} && mkdir -p {{ keycloak_install_dir }} && tar -xzf /tmp/keycloak.tar.gz -C {{ keycloak_install_dir }} --strip-components=1 && rm -f /tmp/keycloak.tar.gz; fi"
+  when: not ansible_check_mode and keycloak_provision_marker.rc != 0
+
+- name: Ensure Keycloak ownership prior to build
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "for dir in {{ keycloak_install_dir }} {{ keycloak_data_dir }} {{ keycloak_log_dir }}; do mkdir -p \"$dir\"; chown -R {{ keycloak_runtime_user }}:{{ keycloak_runtime_group }} \"$dir\"; done"
+  when: not ansible_check_mode
+
+- name: Run Keycloak build step
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "if [ ! -f {{ keycloak_install_dir }}/.built ]; then KC_DB=postgres KC_DB_USERNAME='{{ keycloak_db_username }}' KC_DB_PASSWORD='{{ keycloak_db_password }}' KC_DB_URL_HOST='{{ keycloak_db_host }}' KC_DB_URL_PORT='{{ keycloak_db_port }}' KC_DB_URL_DATABASE='{{ keycloak_db_database }}' su -s /bin/sh -c '{{ keycloak_install_dir }}/bin/kc.sh build --db=postgres --health-enabled=true --metrics-enabled=true' {{ keycloak_runtime_user }} && touch {{ keycloak_install_dir }}/.built; fi"
+  when: not ansible_check_mode and keycloak_provision_marker.rc != 0
+  no_log: false
+
+- name: Ensure Keycloak config and systemd directories exist
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "mkdir -p /etc/keycloak /etc/systemd/system"
+  changed_when: false
+
+- name: Render Keycloak environment file locally
+  ansible.builtin.template:
+    src: keycloak.env.j2
+    dest: "/tmp/keycloak.env.{{ keycloak_container_id }}"
+
+- name: Push Keycloak environment file into container
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ keycloak_container_id }} /tmp/keycloak.env.{{ keycloak_container_id }} /etc/keycloak/keycloak.env
+  notify: restart keycloak
+
+- name: Set permissions on Keycloak environment file
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "chown root:{{ keycloak_runtime_group }} /etc/keycloak/keycloak.env && chmod 640 /etc/keycloak/keycloak.env"
+
+- name: Remove temporary Keycloak environment file
+  ansible.builtin.file:
+    path: "/tmp/keycloak.env.{{ keycloak_container_id }}"
+    state: absent
+
+- name: Render Keycloak configuration locally
+  ansible.builtin.template:
+    src: keycloak.conf.j2
+    dest: "/tmp/keycloak.conf.{{ keycloak_container_id }}"
+
+- name: Push Keycloak configuration into container
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ keycloak_container_id }} /tmp/keycloak.conf.{{ keycloak_container_id }} {{ keycloak_install_dir }}/conf/keycloak.conf
+  notify: restart keycloak
+
+- name: Set permissions on Keycloak configuration
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "chown {{ keycloak_runtime_user }}:{{ keycloak_runtime_group }} {{ keycloak_install_dir }}/conf/keycloak.conf && chmod 640 {{ keycloak_install_dir }}/conf/keycloak.conf"
+
+- name: Remove temporary Keycloak configuration file
+  ansible.builtin.file:
+    path: "/tmp/keycloak.conf.{{ keycloak_container_id }}"
+    state: absent
+
+- name: Render Keycloak systemd service locally
+  ansible.builtin.template:
+    src: keycloak.service.j2
+    dest: "/tmp/keycloak.service.{{ keycloak_container_id }}"
+
+- name: Push Keycloak systemd service into container
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ keycloak_container_id }} /tmp/keycloak.service.{{ keycloak_container_id }} /etc/systemd/system/keycloak.service
+  notify: restart keycloak
+
+- name: Remove temporary Keycloak systemd service file
+  ansible.builtin.file:
+    path: "/tmp/keycloak.service.{{ keycloak_container_id }}"
+    state: absent
+
+- name: Reload systemd inside container
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- systemctl daemon-reload
+
+- name: Check if Keycloak service is enabled
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- systemctl is-enabled keycloak
+  register: keycloak_service_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Enable Keycloak service
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- systemctl enable keycloak
+  when: not ansible_check_mode and keycloak_service_enabled.rc != 0
+
+- name: Check Keycloak service state
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- systemctl is-active keycloak
+  register: keycloak_service_state
+  changed_when: false
+  failed_when: false
+
+- name: Ensure Keycloak service is running
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- systemctl start keycloak
+  when: not ansible_check_mode and keycloak_service_state.rc != 0
+
+- name: Ensure Keycloak ownership on install tree
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "chown -R {{ keycloak_runtime_user }}:{{ keycloak_runtime_group }} {{ keycloak_install_dir }} {{ keycloak_data_dir }} {{ keycloak_log_dir }}"
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Touch Keycloak provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ keycloak_container_id }} -- bash -lc "mkdir -p /etc/keycloak && touch /etc/keycloak/.provisioned"
+  when: not ansible_check_mode and keycloak_provision_marker.rc != 0

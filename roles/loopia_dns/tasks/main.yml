@@ -1,0 +1,126 @@
+---
+- name: Determine public bridge IPv4
+  ansible.builtin.command:
+    cmd: ip -4 -o addr show dev {{ loopia_dns_interface }} scope global
+  register: loopia_dns_ip_raw
+  changed_when: false
+  when: loopia_dns_enabled
+
+- name: Compose Loopia API credentials
+  ansible.builtin.set_fact:
+    loopia_dns_effective_user: >-
+      {{ loopia_dns_api_user | default(loopia_api_user | default(loopia_api_user_open | default(''))) }}
+    loopia_dns_effective_password: >-
+      {{ loopia_dns_api_password | default(loopia_api_password | default(loopia_api_password_open | default(''))) }}
+  when: loopia_dns_enabled
+
+- name: Extract public IPv4 address
+  ansible.builtin.set_fact:
+    loopia_public_ipv4: >-
+      {{ loopia_dns_ip_raw.stdout_lines[0].split()[3] | regex_replace('/.*', '') }}
+  when:
+    - loopia_dns_enabled
+    - loopia_dns_ip_raw.stdout_lines | length > 0
+
+- name: Fail when no public IPv4 was discovered
+  ansible.builtin.fail:
+    msg: >-
+      No IPv4 address found on interface {{ loopia_dns_interface }}; cannot update Loopia
+      DNS records.
+  when:
+    - loopia_dns_enabled
+    - loopia_public_ipv4 is not defined
+
+- name: Debug configured Loopia DNS records
+  ansible.builtin.debug:
+    var: loopia_dns_records
+  when:
+    - loopia_dns_enabled
+    - loopia_dns_debug | bool
+
+- name: Debug raw Loopia credentials
+  ansible.builtin.debug:
+    msg:
+      loopia_api_user: "{{ loopia_api_user | default('undefined') }}"
+      loopia_api_user_open: "{{ loopia_api_user_open | default('undefined') }}"
+      loopia_dns_api_user: "{{ loopia_dns_api_user | default('undefined') }}"
+  when:
+    - loopia_dns_enabled
+    - loopia_dns_debug | bool
+
+- name: Debug Loopia API user
+  ansible.builtin.debug:
+    var: loopia_dns_effective_user
+  when:
+    - loopia_dns_enabled
+    - loopia_dns_debug | bool
+
+- name: Update Loopia DNS records
+  ansible.builtin.shell: |
+    python3 - <<'PY'
+    import os
+    import sys
+    import xmlrpc.client
+
+    domain = os.environ["LOOPIA_DNS_DOMAIN"]
+    host = os.environ["LOOPIA_RECORD_HOST"]
+    record_type = os.environ["LOOPIA_RECORD_TYPE"]
+    ttl = int(os.environ["LOOPIA_RECORD_TTL"])
+    rdata = os.environ["LOOPIA_RECORD_DATA"]
+    user = os.environ["LOOPIA_API_USER"]
+    password = os.environ["LOOPIA_API_PASSWORD"]
+
+    client = xmlrpc.client.ServerProxy("https://api.loopia.se/RPCSERV", allow_none=True)
+
+    try:
+        records = client.getZoneRecords(user, password, domain, host)
+    except Exception as exc:
+        print(f"Failed to fetch existing records for {host}.{domain}: {exc}")
+        sys.exit(2)
+
+    target = next((record for record in records if record.get("type") == record_type), None)
+
+    if target and target.get("rdata") == rdata and int(target.get("ttl", ttl)) == ttl:
+        sys.exit(0)
+
+    try:
+        if target:
+            client.removeZoneRecord(user, password, domain, host, target["record_id"])
+            priority = target.get("priority", 0)
+        else:
+            priority = 0
+
+        record = {
+            "type": record_type,
+            "ttl": ttl,
+            "priority": priority,
+            "rdata": rdata,
+        }
+        client.addZoneRecord(user, password, domain, host, record)
+    except Exception as exc:
+        print(f"Failed to update record {host}.{domain}: {exc}")
+        sys.exit(2)
+
+    sys.exit(1)
+    PY
+  args:
+    executable: /bin/bash
+  environment:
+    LOOPIA_API_USER: "{{ loopia_dns_effective_user }}"
+    LOOPIA_API_PASSWORD: "{{ loopia_dns_effective_password }}"
+    LOOPIA_DNS_DOMAIN: "{{ loopia_dns_domain }}"
+    LOOPIA_RECORD_HOST: "{{ item.host }}"
+    LOOPIA_RECORD_TYPE: "{{ item.type | default('A') }}"
+    LOOPIA_RECORD_TTL: "{{ item.ttl | default(loopia_dns_default_ttl) }}"
+    LOOPIA_RECORD_DATA: "{{ item.rdata | default(loopia_public_ipv4) }}"
+  loop: "{{ loopia_dns_records }}"
+  loop_control:
+    label: "{{ item.host }}"
+  register: loopia_dns_update
+  changed_when: loopia_dns_update.rc == 1
+  failed_when: loopia_dns_update.rc not in [0, 1]
+  when:
+    - loopia_dns_enabled
+    - loopia_dns_records | length > 0
+    - loopia_dns_effective_user | length > 0
+    - loopia_dns_effective_password | length > 0

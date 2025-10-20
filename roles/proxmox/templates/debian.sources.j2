@@ -1,0 +1,14 @@
+# Managed by Ansible
+Types: deb
+URIs: {{ proxmox_debian_repository_uris | join(' ') }}
+Suites: {{ proxmox_debian_suites | join(' ') }}
+Components: {{ proxmox_debian_components | join(' ') }}
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+{% if proxmox_debian_security_uris | length > 0 and proxmox_debian_security_suites | length > 0 %}
+
+Types: deb
+URIs: {{ proxmox_debian_security_uris | join(' ') }}
+Suites: {{ proxmox_debian_security_suites | join(' ') }}
+Components: {{ proxmox_debian_components | join(' ') }}
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+{% endif %}

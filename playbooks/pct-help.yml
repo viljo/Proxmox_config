@@ -1,0 +1,11 @@
+---
+- hosts: proxmox_admin
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Show pct help
+      ansible.builtin.command:
+        cmd: pct --help
+      register: pct_help
+    - ansible.builtin.debug:
+        var: pct_help.stdout_lines
