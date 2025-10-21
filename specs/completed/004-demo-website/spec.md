@@ -1,8 +1,10 @@
 # Feature Specification: Demo Website
 
-**Feature Branch**: `004-demo-website`
+**Feature Branch**: `004-demo-website` (implemented in `001-google-oauth-keycloak`)
 **Created**: 2025-10-20
-**Status**: Draft
+**Completed**: 2025-10-21
+**Status**: ✅ **COMPLETED** - See [COMPLETION.md](./COMPLETION.md) for details
+**Production URL**: https://demosite.viljo.se/hello.html
 **Input**: User description: "demo website"
 
 ## User Scenarios & Testing *(mandatory)*
@@ -29,11 +31,11 @@ Infrastructure administrators need the demo website deployed as an LXC container
 
 **Why this priority**: Required for the website to be accessible but can be implemented once the container infrastructure is established.
 
-**Independent Test**: Can be tested by verifying LXC container (CT 2300) exists, is running, and nginx service is active inside the container.
+**Independent Test**: Can be tested by verifying LXC container (CT 160) exists, is running, and nginx service is active inside the container.
 
 **Acceptance Scenarios**:
 
-1. **Given** Ansible playbook is executed, **When** deployment completes, **Then** LXC container 2300 exists on DMZ network (172.16.10.60)
+1. **Given** Ansible playbook is executed, **When** deployment completes, **Then** LXC container 160 exists on DMZ network (172.16.10.160)
 2. **Given** Proxmox host reboots, **When** system comes back online, **Then** demo site container automatically starts
 3. **Given** container is running, **When** administrator checks nginx status, **Then** nginx service is active and serving content
 
@@ -79,8 +81,8 @@ The demo website must be accessible through Traefik reverse proxy with automatic
 
 ### Infrastructure Requirements *(for Proxmox deployments)*
 
-- **IR-001**: Service MUST run in unprivileged LXC container (CT 2300)
-- **IR-002**: Container MUST be deployed on vmbr3 (DMZ) at 172.16.10.60/24
+- **IR-001**: Service MUST run in unprivileged LXC container (CT 160)
+- **IR-002**: Container MUST be deployed on vmbr3 (DMZ) at 172.16.10.160/24
 - **IR-003**: Container MUST use 1GB RAM, 1 CPU core, 8GB disk (configurable)
 - **IR-004**: Container MUST integrate with Traefik for external HTTPS access
 - **IR-005**: Configuration MUST be managed via Ansible for reproducibility
@@ -96,7 +98,7 @@ The demo website must be accessible through Traefik reverse proxy with automatic
 
 ### Key Entities
 
-- **Demo Site Container**: LXC container (CT 2300) running nginx on Debian 13
+- **Demo Site Container**: LXC container (CT 160) running nginx on Debian 13
 - **Nginx Service**: Web server serving static HTML content on port 80
 - **Demo Content**: HTML pages (index.html, hello.html) with customizable branding
 - **Traefik Route**: Reverse proxy configuration directing external traffic to container

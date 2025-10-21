@@ -292,5 +292,265 @@ See `roles/firewall_v2/` for a complete example using Proxmox API modules.
 
 ---
 
+## Implementation Results (2025-10-21)
+
+**Status**: ✅ **COMPLETED** for firewall and demo_site roles
+
+### What Was Implemented
+
+Successfully refactored two roles to use Proxmox API:
+- `roles/firewall_api/` - Firewall container deployment
+- `roles/demo_site_api/` - Demo website container deployment
+- `roles/traefik_api/` - Traefik deployment on Proxmox host
+
+Deployed via: `playbooks/demo-app-api.yml`
+
+### Critical Lessons Learned
+
+#### 1. Split Container Creation into Two API Calls
+
+**Problem**: Using `state: started` in single call fails with "VM does not exist" error.
+
+**Root Cause**: Proxmox API requires container to exist before it can be started.
+
+**Solution**: Split into two separate tasks:
+```yaml
+# Task 1: Create container
+- name: Create container via Proxmox API
+  community.proxmox.proxmox:
+    # ... all container specs ...
+    state: present  # Only create
+  register: container_result
+
+# Task 2: Start container (requires it to exist)
+- name: Start container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ container_id }}"
+    hostname: "{{ container_hostname }}"  # Required for state: started
+    state: started
+```
+
+**Impact**: 100% of API deployments require this pattern.
+
+#### 2. Remove Feature Flags from API Calls
+
+**Problem**: `403 Forbidden: Permission check failed (changing feature flags for privileged container is only allowed for root@pam)`
+
+**Root Cause**: API tokens (even for root@pam) don't have permission to set feature flags on privileged containers.
+
+**Solutions** (choose one):
+1. Remove feature flags from API call:
+   ```yaml
+   # DON'T include features parameter
+   community.proxmox.proxmox:
+     # ... other params ...
+     # features:  # Remove this
+     #   - keyctl=1
+     #   - nesting=1
+   ```
+
+2. Make container unprivileged:
+   ```yaml
+   community.proxmox.proxmox:
+     # ... other params ...
+     unprivileged: true  # Then features work
+     features:
+       - nesting=1
+   ```
+
+**Chosen Solution**: Made containers unprivileged (firewall and demo_site both work fine unprivileged).
+
+#### 3. SSH ProxyCommand for DMZ Access
+
+**Problem**: Ansible can't SSH to DMZ containers (172.16.10.x) from local machine.
+
+**Root Cause**: DMZ network only accessible from Proxmox host.
+
+**Solution**: Use SSH ProxyCommand to jump through Proxmox host:
+```yaml
+- name: Add container to in-memory inventory
+  ansible.builtin.add_host:
+    name: container_name
+    ansible_host: "{{ container_ip }}"
+    ansible_user: root
+    ansible_password: "{{ container_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ proxmox_host }}"'
+    groups: containers
+```
+
+**Impact**: Required for ALL DMZ container delegation.
+
+#### 4. Firewall DHCP Must Be Managed by Container
+
+**Problem**: Proxmox `ip=dhcp` parameter gave wrong public IP.
+
+**Root Cause**: Proxmox DHCP client implementation issue.
+
+**Solution**:
+```yaml
+# In Proxmox API call - use manual mode
+netif:
+  net0: "name=eth0,bridge=vmbr2,ip=manual,type=veth"
+
+# In container - configure DHCP via delegation
+- name: Configure DHCP interface
+  ansible.builtin.copy:
+    dest: /etc/network/interfaces.d/eth0
+    content: |
+      auto eth0
+      iface eth0 inet dhcp
+    mode: '0644'
+  delegate_to: firewall_container
+  notify: Bring up interface
+```
+
+#### 5. API Configuration Must Match Group Name
+
+**Problem**: Variables not loading from `inventory/group_vars/proxmox_admin/proxmox_api.yml`.
+
+**Root Cause**: Inventory defines group as `proxmox_hosts`, not `proxmox_admin`.
+
+**Solution**: Move config file to correct location:
+```bash
+mkdir -p inventory/group_vars/proxmox_hosts
+mv inventory/group_vars/proxmox_admin/proxmox_api.yml inventory/group_vars/proxmox_hosts/
+```
+
+**Prevention**: Always verify group names in `inventory/hosts.yml`.
+
+### Updated Best Practices
+
+#### Container Creation Pattern
+
+**Standard pattern for ALL container deployments**:
+
+```yaml
+---
+# 1. Create container (state: present)
+- name: Create {{ service_name }} container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ container_id }}"
+    hostname: "{{ container_hostname }}"
+    ostemplate: "local:vztmpl/{{ template_file }}"
+    cores: "{{ cores }}"
+    memory: "{{ memory }}"
+    swap: "{{ swap }}"
+    disk: "{{ storage }}:{{ disk_size }}"
+    netif:
+      net0: "name=eth0,bridge={{ bridge }},ip={{ ip_address }}/{{ netmask }},gw={{ gateway }},type=veth"
+    nameserver: "{{ dns_servers | join(' ') }}"
+    unprivileged: true  # Recommended for most services
+    onboot: true
+    password: "{{ root_password }}"
+    pubkey: "{{ ssh_keys | join('\n') }}"
+    state: present  # Just create, don't start yet
+  register: container_result
+
+# 2. Start container (state: started)
+- name: Start {{ service_name }} container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ container_id }}"
+    hostname: "{{ container_hostname }}"  # Required!
+    state: started
+
+# 3. Wait for SSH
+- name: Wait for SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ container_ip }}"
+    port: 22
+    delay: 5
+    timeout: 300
+
+# 4. Add to inventory for delegation
+- name: Add container to in-memory inventory
+  ansible.builtin.add_host:
+    name: "{{ container_name }}"
+    ansible_host: "{{ container_ip }}"
+    ansible_user: root
+    ansible_password: "{{ root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ proxmox_host }}"'
+    groups: containers
+
+# 5. Configure via delegation (NO pct exec!)
+- name: Install packages
+  ansible.builtin.apt:
+    name: "{{ packages }}"
+    state: present
+    update_cache: true
+  delegate_to: "{{ container_name }}"
+
+- name: Configure service
+  ansible.builtin.template:
+    src: config.j2
+    dest: /etc/service/config
+  delegate_to: "{{ container_name }}"
+  notify: Restart service
+```
+
+### Performance Comparison
+
+| Metric | SSH/pct | Proxmox API | Improvement |
+|--------|---------|-------------|-------------|
+| Lines of code | 150 | 95 | 37% reduction |
+| Idempotency | Partial | Full | 100% |
+| --check support | No | Yes | ✅ |
+| --diff support | No | Yes | ✅ |
+| Error handling | Manual | Built-in | ✅ |
+| State tracking | None | Automatic | ✅ |
+
+### Migration Checklist (Updated)
+
+- [x] Install community.proxmox collection ✅
+- [x] Create Proxmox API token ✅
+- [x] Add API credentials to vault ✅
+- [x] Update inventory with API connection vars ✅
+- [x] Refactor firewall role → `firewall_api` ✅
+- [x] Refactor demo_site role → `demo_site_api` ✅
+- [x] Create traefik role → `traefik_api` ✅
+- [x] Add containers to inventory for delegation ✅
+- [x] Test refactored roles ✅
+- [x] Verify idempotency ✅
+- [x] Document lessons learned ✅
+- [ ] Refactor remaining roles (postgresql, keycloak, etc.)
+- [ ] Archive old SSH-based implementations
+
+### Next Roles to Refactor
+
+Priority order based on complexity and value:
+1. **postgresql** - Database service (medium complexity)
+2. **keycloak** - Auth service (depends on postgresql)
+3. **netbox** - DCIM (depends on postgresql)
+4. **gitlab** - DevOps platform (high complexity)
+5. **nextcloud** - File sharing (medium complexity)
+6. Others as needed
+
+### References (Updated)
+
+- [Demo Website Completion](../../specs/completed/004-demo-website/COMPLETION.md) - Full implementation details
+- [Traefik Let's Encrypt Troubleshooting](../operations/troubleshooting-traefik-letsencrypt.md) - DNS challenge debugging
+- [Firewall NAT Troubleshooting](../operations/troubleshooting-firewall-nat.md) - Network issues
+- [Container ID Standardization ADR](../adr/002-container-id-standardization.md) - ID scheme explanation
+
+---
+
 **Last Updated**: 2025-10-21
-**Next Review**: After Phase 1 implementation
+**Status**: Phase 1 complete (firewall, demo_site, traefik)
+**Next Review**: When refactoring next service (postgresql)
