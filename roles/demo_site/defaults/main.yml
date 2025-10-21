@@ -7,14 +7,12 @@ demo_site_cores: 1
 demo_site_disk: 8
 demo_site_swap: 512
 demo_site_bridge: "{{ public_bridge | default('vmbr3') }}"
-demo_site_ip_address: 172.16.10.60
+demo_site_ip_address: 172.16.10.160
 demo_site_netmask: 24
 demo_site_ip_config: "{{ demo_site_ip_address }}/{{ demo_site_netmask }}"
 demo_site_vlan_tag: null
-demo_site_gateway: 172.16.10.1
-demo_site_dns_servers:
-  - 172.16.10.1
-  - 1.1.1.1
+demo_site_gateway: "{{ dmz_gateway }}"
+demo_site_dns_servers: "{{ dmz_dns_servers }}"
 demo_site_rootfs_storage: local-lvm
 demo_site_unprivileged: true
 demo_site_start_onboot: true

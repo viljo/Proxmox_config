@@ -111,6 +111,15 @@
     cmd: pct exec {{ firewall_container_id }} -- dhclient {{ firewall_wan_interface }}
   when: not ansible_check_mode
 
+- name: Configure WAN interface for DHCP on boot
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ firewall_container_id }} -- bash -lc "cat > /etc/network/interfaces.d/{{ firewall_wan_interface }} << 'EOF'
+      auto {{ firewall_wan_interface }}
+      iface {{ firewall_wan_interface }} inet dhcp
+      EOF"
+  when: not ansible_check_mode
+
 - name: Configure sysctl for forwarding
   ansible.builtin.command:
     cmd: >

@@ -8,7 +8,7 @@ firewall_disk: 8
 firewall_swap: 512
 firewall_bridge_wan: "{{ wan_bridge | default('vmbr2') }}"
 firewall_bridge_lan: "{{ public_bridge | default('vmbr3') }}"
-firewall_wan_ip_config: dhcp
+firewall_wan_ip_config: manual  # Container manages DHCP internally via dhclient
 firewall_lan_ip_address: "{{ dmz_gateway }}"
 firewall_lan_prefix: "{{ dmz_prefix }}"
 firewall_dns_servers:
@@ -38,3 +38,4 @@ firewall_allow_management_ports:
   - 22
 firewall_wan_interface: eth0
 firewall_lan_interface: eth1
+firewall_wan_ip_mode: manual  # Use manual so container manages its own DHCP via dhclient

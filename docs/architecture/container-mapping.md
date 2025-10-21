@@ -10,15 +10,15 @@ All containers follow the standardized pattern:
 Container ID = Last octet of IP address + 100
 ```
 
-**Example**: Container ID `153` → IP Address `172.16.10.53` (153 - 100 = 53)
+**Example**: Container ID `153` → IP Address `172.16.10.153` (153 - 100 = 53)
 
 This convention was established in [ADR-002: Container ID Standardization](../adr/002-container-id-standardization.md).
 
 ## DMZ Network Configuration
 
 - **Network**: 172.16.10.0/24
-- **Gateway**: 172.16.10.1 (Firewall container)
-- **DNS**: 172.16.10.1, 1.1.1.1
+- **Gateway**: 172.16.10.101 (Firewall container)
+- **DNS**: 172.16.10.101, 1.1.1.1
 - **Bridge**: vmbr3
 
 ## Container Inventory
@@ -27,42 +27,42 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **101** | Firewall | 172.16.10.1 | firewall | `roles/firewall` | N/A (internal router) |
-| **150** | PostgreSQL | 172.16.10.50 | postgres | `roles/postgresql` | N/A (internal database) |
+| **101** | Firewall | 172.16.10.101 | firewall | `roles/firewall` | N/A (internal router) |
+| **150** | PostgreSQL | 172.16.10.150 | postgres | `roles/postgresql` | N/A (internal database) |
 
 ### Authentication & Identity
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **151** | Keycloak | 172.16.10.51 | keycloak | `roles/keycloak` | https://keycloak.viljo.se |
+| **151** | Keycloak | 172.16.10.151 | keycloak | `roles/keycloak` | https://keycloak.viljo.se |
 
 ### DevOps & Infrastructure
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **152** | NetBox | 172.16.10.52 | netbox | `roles/netbox` | https://netbox.viljo.se |
-| **153** | GitLab | 172.16.10.53 | gitlab | `roles/gitlab` | https://gitlab.viljo.se |
-| **154** | GitLab Runner | 172.16.10.54 | gitlab-runner | `roles/gitlab_runner` | N/A (internal) |
+| **152** | NetBox | 172.16.10.152 | netbox | `roles/netbox` | https://netbox.viljo.se |
+| **153** | GitLab | 172.16.10.153 | gitlab | `roles/gitlab` | https://gitlab.viljo.se |
+| **154** | GitLab Runner | 172.16.10.154 | gitlab-runner | `roles/gitlab_runner` | N/A (internal) |
 
 ### Collaboration & Productivity
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **155** | Nextcloud | 172.16.10.55 | nextcloud | `roles/nextcloud` | https://nextcloud.viljo.se |
-| **156** | Jellyfin | 172.16.10.56 | jellyfin | `roles/jellyfin` | https://jellyfin.viljo.se |
-| **157** | Home Assistant | 172.16.10.57 | homeassistant | `roles/homeassistant` | https://ha.viljo.se |
+| **155** | Nextcloud | 172.16.10.155 | nextcloud | `roles/nextcloud` | https://nextcloud.viljo.se |
+| **156** | Jellyfin | 172.16.10.156 | jellyfin | `roles/jellyfin` | https://jellyfin.viljo.se |
+| **157** | Home Assistant | 172.16.10.157 | homeassistant | `roles/homeassistant` | https://ha.viljo.se |
 
 ### Utilities & Tools
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **159** | qBittorrent | 172.16.10.59 | qbittorrent | `roles/qbittorrent` | https://qbit.viljo.se |
-| **160** | Demo Site | 172.16.10.60 | demosite | `roles/demo_site` | https://demosite.viljo.se |
-| **161** | Cosmos | 172.16.10.61 | cosmos | `roles/cosmos` | https://cosmos.viljo.se |
-| **162** | Wazuh | 172.16.10.62 | wazuh | `roles/wazuh` | https://wazuh.viljo.se |
-| **164** | OpenMediaVault | 172.16.10.64 | openmediavault | `roles/openmediavault` | https://omv.viljo.se |
-| **165** | Zipline | 172.16.10.65 | zipline | `roles/zipline` | https://zipline.viljo.se |
-| **190** | WireGuard VPN | 172.16.10.90 | wireguard | `roles/wireguard` | N/A (VPN endpoint) |
+| **159** | qBittorrent | 172.16.10.159 | qbittorrent | `roles/qbittorrent` | https://qbit.viljo.se |
+| **160** | Demo Site | 172.16.10.160 | demosite | `roles/demo_site` | https://demosite.viljo.se |
+| **161** | Cosmos | 172.16.10.161 | cosmos | `roles/cosmos` | https://cosmos.viljo.se |
+| **162** | Wazuh | 172.16.10.162 | wazuh | `roles/wazuh` | https://wazuh.viljo.se |
+| **164** | OpenMediaVault | 172.16.10.164 | openmediavault | `roles/openmediavault` | https://omv.viljo.se |
+| **165** | Zipline | 172.16.10.165 | zipline | `roles/zipline` | https://zipline.viljo.se |
+| **190** | WireGuard VPN | 172.16.10.190 | wireguard | `roles/wireguard` | N/A (VPN endpoint) |
 
 ## Resource Allocation Summary
 
@@ -98,13 +98,13 @@ Each service has configuration in:
 
 ### Firewall (Container 1)
 - **Upstream**: vmbr2 (WAN) - DHCP from ISP
-- **Downstream**: vmbr3 (DMZ) - 172.16.10.1/24
+- **Downstream**: vmbr3 (DMZ) - 172.16.10.101/24
 - **Function**: NAT gateway, port forwarding (80/443 → Traefik)
 
 ### Traefik (Not a container)
 - **Location**: Runs on Proxmox host
 - **Function**: Reverse proxy, TLS termination
-- **Upstream**: Firewall (172.16.10.1)
+- **Upstream**: Firewall (172.16.10.101)
 - **Downstream**: All public services on vmbr3
 
 ### PostgreSQL (Container 50)
@@ -153,7 +153,7 @@ ssh root@192.168.1.3 pct enter 153   # Enter container
 ### Network Testing
 ```bash
 # From Proxmox host
-ping 172.16.10.53  # Ping GitLab
+ping 172.16.10.153  # Ping GitLab
 
 # From within a container
 ssh root@192.168.1.3 pct exec 153 -- ping -c 2 1.1.1.1
