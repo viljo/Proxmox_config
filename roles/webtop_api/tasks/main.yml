@@ -84,6 +84,7 @@
           - CUSTOM_USER={{ webtop_custom_user }}
           - PASSWORD={{ webtop_password }}
           - SUDO_PASSWORD={{ webtop_sudo_password }}
+          - BASE_URL=https://{{ webtop_fqdn }}
         volumes:
           - /opt/webtop/config:/config
         ports:
