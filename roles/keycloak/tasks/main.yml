@@ -110,7 +110,7 @@
 - name: Install Keycloak dependencies
   ansible.builtin.command:
     cmd: >
-      pct exec {{ keycloak_container_id }} -- bash -lc "apt-get update && apt-get install -y openjdk-17-jre-headless unzip curl"
+      pct exec {{ keycloak_container_id }} -- bash -lc "apt-get update && apt-get install -y openjdk-21-jre-headless unzip curl"
   when: not ansible_check_mode and keycloak_provision_marker.rc != 0
 
 - name: Check Keycloak runtime group
@@ -150,7 +150,7 @@
 - name: Ensure Keycloak container has Postgres host entry
   ansible.builtin.command:
     cmd: >
-      pct exec {{ keycloak_container_id }} -- bash -lc "grep -q 'postgres.infra.local' /etc/hosts || echo '{{ keycloak_db_host }} postgres.infra.local' >> /etc/hosts"
+      pct exec {{ keycloak_container_id }} -- bash -lc "grep -q '{{ keycloak_db_host }}' /etc/hosts || echo '{{ keycloak_db_host }} postgresql postgres' >> /etc/hosts"
   when: not ansible_check_mode and keycloak_container_conf.stat.exists
 
 - name: Download and extract Keycloak distribution

@@ -9,7 +9,7 @@ User={{ keycloak_runtime_user }}
 Group={{ keycloak_runtime_group }}
 EnvironmentFile=-/etc/keycloak/keycloak.env
 WorkingDirectory={{ keycloak_install_dir }}
-ExecStart={{ keycloak_install_dir }}/bin/kc.sh start --config-file={{ keycloak_install_dir }}/conf/keycloak.conf
+ExecStart={{ keycloak_install_dir }}/bin/kc.sh start --optimized
 Restart=always
 RestartSec=10
 TimeoutStartSec=120

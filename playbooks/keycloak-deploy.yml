@@ -1,0 +1,22 @@
+---
+# Keycloak SSO Authentication Server Deployment
+#
+# Deploys Keycloak 24.0.3 in LXC container 151 at 172.16.10.151
+# Provides Single Sign-On authentication for Mattermost, NetBox, GitLab
+#
+# Dependencies:
+#   - PostgreSQL database (container 150 at 172.16.10.150)
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/keycloak-deploy.yml
+#
+# Post-deployment:
+#   Access: http://172.16.10.151:8080
+#   Admin console: http://172.16.10.151:8080/admin
+#   Login: admin / (from vault_keycloak_admin_password)
+
+- name: Deploy Keycloak SSO Authentication Server
+  hosts: proxmox_admin
+  become: true
+  roles:
+    - keycloak
