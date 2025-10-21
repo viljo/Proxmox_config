@@ -1,6 +1,6 @@
 ---
 loopia_ddns_enabled: false
-loopia_ddns_container_id: 2200
+loopia_ddns_container_id: 101
 loopia_ddns_interface: eth0
 loopia_ddns_interval: 5m
 loopia_ddns_state_dir: /var/lib/loopia-ddns

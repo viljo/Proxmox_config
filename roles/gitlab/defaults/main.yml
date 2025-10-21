@@ -1,5 +1,5 @@
 ---
-gitlab_container_id: 2050
+gitlab_container_id: 153
 gitlab_hostname: gitlab
 gitlab_domain: infra.local
 gitlab_memory: 8192

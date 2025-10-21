@@ -1,5 +1,5 @@
 ---
-wireguard_container_id: 2090
+wireguard_container_id: 190
 wireguard_hostname: wireguard
 wireguard_domain: infra.local
 wireguard_memory: 1024

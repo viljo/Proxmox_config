@@ -7,10 +7,10 @@ Complete reference of all LXC containers in the Proxmox infrastructure.
 All containers follow the standardized pattern:
 
 ```
-Container ID = Last octet of IP address
+Container ID = Last octet of IP address + 100
 ```
 
-**Example**: Container ID `53` → IP Address `172.16.10.53`
+**Example**: Container ID `153` → IP Address `172.16.10.53` (153 - 100 = 53)
 
 This convention was established in [ADR-002: Container ID Standardization](../adr/002-container-id-standardization.md).
 
@@ -27,42 +27,42 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **1** | Firewall | 172.16.10.1 | firewall | `roles/firewall` | N/A (internal router) |
-| **50** | PostgreSQL | 172.16.10.50 | postgres | `roles/postgresql` | N/A (internal database) |
+| **101** | Firewall | 172.16.10.1 | firewall | `roles/firewall` | N/A (internal router) |
+| **150** | PostgreSQL | 172.16.10.50 | postgres | `roles/postgresql` | N/A (internal database) |
 
 ### Authentication & Identity
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **51** | Keycloak | 172.16.10.51 | keycloak | `roles/keycloak` | https://keycloak.viljo.se |
+| **151** | Keycloak | 172.16.10.51 | keycloak | `roles/keycloak` | https://keycloak.viljo.se |
 
 ### DevOps & Infrastructure
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **52** | NetBox | 172.16.10.52 | netbox | `roles/netbox` | https://netbox.viljo.se |
-| **53** | GitLab | 172.16.10.53 | gitlab | `roles/gitlab` | https://gitlab.viljo.se |
-| **54** | GitLab Runner | 172.16.10.54 | gitlab-runner | `roles/gitlab_runner` | N/A (internal) |
+| **152** | NetBox | 172.16.10.52 | netbox | `roles/netbox` | https://netbox.viljo.se |
+| **153** | GitLab | 172.16.10.53 | gitlab | `roles/gitlab` | https://gitlab.viljo.se |
+| **154** | GitLab Runner | 172.16.10.54 | gitlab-runner | `roles/gitlab_runner` | N/A (internal) |
 
 ### Collaboration & Productivity
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **55** | Nextcloud | 172.16.10.55 | nextcloud | `roles/nextcloud` | https://nextcloud.viljo.se |
-| **56** | Jellyfin | 172.16.10.56 | jellyfin | `roles/jellyfin` | https://jellyfin.viljo.se |
-| **57** | Home Assistant | 172.16.10.57 | homeassistant | `roles/homeassistant` | https://ha.viljo.se |
+| **155** | Nextcloud | 172.16.10.55 | nextcloud | `roles/nextcloud` | https://nextcloud.viljo.se |
+| **156** | Jellyfin | 172.16.10.56 | jellyfin | `roles/jellyfin` | https://jellyfin.viljo.se |
+| **157** | Home Assistant | 172.16.10.57 | homeassistant | `roles/homeassistant` | https://ha.viljo.se |
 
 ### Utilities & Tools
 
 | Container ID | Service Name | IP Address | Hostname | Role | Public URL |
 |--------------|--------------|------------|----------|------|------------|
-| **59** | qBittorrent | 172.16.10.59 | qbittorrent | `roles/qbittorrent` | https://qbit.viljo.se |
-| **60** | Demo Site | 172.16.10.60 | demosite | `roles/demo_site` | https://demosite.viljo.se |
-| **61** | Cosmos | 172.16.10.61 | cosmos | `roles/cosmos` | https://cosmos.viljo.se |
-| **62** | Wazuh | 172.16.10.62 | wazuh | `roles/wazuh` | https://wazuh.viljo.se |
-| **64** | OpenMediaVault | 172.16.10.64 | openmediavault | `roles/openmediavault` | https://omv.viljo.se |
-| **65** | Zipline | 172.16.10.65 | zipline | `roles/zipline` | https://zipline.viljo.se |
-| **90** | WireGuard VPN | 172.16.10.90 | wireguard | `roles/wireguard` | N/A (VPN endpoint) |
+| **159** | qBittorrent | 172.16.10.59 | qbittorrent | `roles/qbittorrent` | https://qbit.viljo.se |
+| **160** | Demo Site | 172.16.10.60 | demosite | `roles/demo_site` | https://demosite.viljo.se |
+| **161** | Cosmos | 172.16.10.61 | cosmos | `roles/cosmos` | https://cosmos.viljo.se |
+| **162** | Wazuh | 172.16.10.62 | wazuh | `roles/wazuh` | https://wazuh.viljo.se |
+| **164** | OpenMediaVault | 172.16.10.64 | openmediavault | `roles/openmediavault` | https://omv.viljo.se |
+| **165** | Zipline | 172.16.10.65 | zipline | `roles/zipline` | https://zipline.viljo.se |
+| **190** | WireGuard VPN | 172.16.10.90 | wireguard | `roles/wireguard` | N/A (VPN endpoint) |
 
 ## Resource Allocation Summary
 
@@ -113,28 +113,28 @@ Each service has configuration in:
 ## Service Categories
 
 ### Core Infrastructure (Always Running)
-- Firewall (1)
-- PostgreSQL (50)
-- Keycloak (51)
+- Firewall (101)
+- PostgreSQL (150)
+- Keycloak (151)
 
 ### DevOps Platform
-- NetBox (52)
-- GitLab (53)
-- GitLab Runner (54)
+- NetBox (152)
+- GitLab (153)
+- GitLab Runner (154)
 
 ### User Applications
-- Nextcloud (55)
-- Jellyfin (56)
-- Home Assistant (57)
+- Nextcloud (155)
+- Jellyfin (156)
+- Home Assistant (157)
 
 ### Utilities
-- qBittorrent (59)
-- Demo Site (60) - Testing only
-- Cosmos (61)
-- Wazuh (62)
-- OpenMediaVault (64)
-- Zipline (65)
-- WireGuard VPN (90)
+- qBittorrent (159)
+- Demo Site (160) - Testing only
+- Cosmos (161)
+- Wazuh (162)
+- OpenMediaVault (164)
+- Zipline (165)
+- WireGuard VPN (190)
 
 ## Quick Reference Commands
 
@@ -145,9 +145,9 @@ ssh root@192.168.1.3 pct list
 
 ### Check Specific Container
 ```bash
-ssh root@192.168.1.3 pct status 53  # GitLab
-ssh root@192.168.1.3 pct config 53  # Show config
-ssh root@192.168.1.3 pct enter 53   # Enter container
+ssh root@192.168.1.3 pct status 153  # GitLab
+ssh root@192.168.1.3 pct config 153  # Show config
+ssh root@192.168.1.3 pct enter 153   # Enter container
 ```
 
 ### Network Testing
@@ -156,8 +156,8 @@ ssh root@192.168.1.3 pct enter 53   # Enter container
 ping 172.16.10.53  # Ping GitLab
 
 # From within a container
-ssh root@192.168.1.3 pct exec 53 -- ping -c 2 1.1.1.1
-ssh root@192.168.1.3 pct exec 53 -- curl -I https://gitlab.viljo.se
+ssh root@192.168.1.3 pct exec 153 -- ping -c 2 1.1.1.1
+ssh root@192.168.1.3 pct exec 153 -- curl -I https://gitlab.viljo.se
 ```
 
 ## Provisioning Status

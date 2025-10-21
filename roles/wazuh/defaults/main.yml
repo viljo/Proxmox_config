@@ -1,5 +1,5 @@
 ---
-wazuh_container_id: 2080
+wazuh_container_id: 162
 wazuh_hostname: wazuh
 wazuh_domain: infra.local
 wazuh_memory: 8192

@@ -1,5 +1,5 @@
 ---
-netbox_container_id: 2150
+netbox_container_id: 152
 netbox_hostname: netbox
 netbox_domain: infra.local
 netbox_memory: 4096

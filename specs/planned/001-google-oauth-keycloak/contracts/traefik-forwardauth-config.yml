@@ -1,0 +1,189 @@
+# Traefik Forward Authentication with OAuth2 Proxy Configuration
+# This configuration defines the Traefik middleware and routing for OAuth2 Proxy
+
+http:
+  # Middlewares
+  middlewares:
+    # OAuth2 Proxy authentication middleware
+    oauth2-auth:
+      forwardAuth:
+        address: "http://172.16.10.54:4180/oauth2/auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Groups
+          - Authorization
+        authRequestHeaders:
+          - Cookie
+          - X-Forwarded-Host
+          - X-Forwarded-Proto
+          - X-Forwarded-Uri
+
+    # OAuth2 Proxy sign-in redirect (for unauthenticated users)
+    oauth2-signin:
+      redirectRegex:
+        regex: "^https://([^/]+)/(.*)$"
+        replacement: "https://auth.{{ public_domain }}/oauth2/start?rd=https://$1/$2"
+
+    # Strip prefix for OAuth2 Proxy callbacks
+    oauth2-strip-prefix:
+      stripPrefix:
+        prefixes:
+          - /oauth2
+
+  # Routers
+  routers:
+    # OAuth2 Proxy service router
+    oauth2-proxy:
+      rule: "Host(`auth.{{ public_domain }}`)"
+      service: oauth2-proxy-svc
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - oauth2-strip-prefix
+
+    # OAuth2 Proxy callback router (for OIDC redirects)
+    oauth2-callback:
+      rule: "Host(`auth.{{ public_domain }}`) && PathPrefix(`/oauth2/callback`)"
+      service: oauth2-proxy-svc
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      priority: 100
+
+  # Services
+  services:
+    oauth2-proxy-svc:
+      loadBalancer:
+        servers:
+          - url: "http://172.16.10.54:4180"
+        healthCheck:
+          path: /ping
+          interval: 30s
+          timeout: 5s
+
+---
+# Example: Protect a service with OAuth2 Proxy
+
+http:
+  routers:
+    # Protected service router
+    demo-site-protected:
+      rule: "Host(`demosite.{{ public_domain }}`)"
+      service: demo-site-svc
+      entryPoints:
+        - websecure
+      middlewares:
+        - oauth2-auth  # Add authentication middleware
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    demo-site-svc:
+      loadBalancer:
+        servers:
+          - url: "http://172.16.10.60:80"
+
+---
+# Example: Group-based access control
+
+# Deploy multiple OAuth2 Proxy instances for different access levels
+# Instance 1: Admin-only services (port 4180)
+# Instance 2: Developer services (port 4181)
+# Instance 3: All authenticated users (port 4182)
+
+http:
+  middlewares:
+    # Admin-only middleware
+    admin-only-auth:
+      forwardAuth:
+        address: "http://172.16.10.54:4180/oauth2/auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Groups
+          - Authorization
+
+    # Developer middleware
+    developer-auth:
+      forwardAuth:
+        address: "http://172.16.10.54:4181/oauth2/auth"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Auth-Request-User
+          - X-Auth-Request-Email
+          - X-Auth-Request-Groups
+          - Authorization
+
+  routers:
+    # NetBox - Admin only
+    netbox-protected:
+      rule: "Host(`netbox.{{ public_domain }}`)"
+      service: netbox-svc
+      middlewares:
+        - admin-only-auth
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+    # GitLab - Developers and admins
+    gitlab-protected:
+      rule: "Host(`gitlab.{{ public_domain }}`)"
+      service: gitlab-svc
+      middlewares:
+        - developer-auth
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    netbox-svc:
+      loadBalancer:
+        servers:
+          - url: "http://172.16.10.58:8000"
+
+    gitlab-svc:
+      loadBalancer:
+        servers:
+          - url: "http://172.16.10.54:80"
+
+---
+# OAuth2 Proxy Configuration Reference
+# This section documents the OAuth2 Proxy configuration that works with above Traefik config
+
+# /etc/oauth2-proxy/oauth2-proxy.cfg
+# provider = "keycloak-oidc"
+# oidc_issuer_url = "https://keycloak.{{ public_domain }}/realms/master"
+# client_id = "oauth2-proxy"
+# client_secret = "{{ vault_oauth2_proxy_client_secret }}"
+# cookie_secret = "{{ vault_oauth2_proxy_cookie_secret }}"
+# redirect_url = "https://auth.{{ public_domain }}/oauth2/callback"
+# http_address = "0.0.0.0:4180"
+# reverse_proxy = true
+# cookie_domains = [".{{ public_domain }}"]
+# cookie_expire = "168h"  # 7 days
+# cookie_refresh = "1h"
+# cookie_secure = true
+# cookie_httponly = true
+# cookie_samesite = "lax"
+# pass_authorization_header = true
+# pass_access_token = true
+# set_authorization_header = true
+# set_xauthrequest = true
+# email_domains = ["*"]
+# skip_provider_button = false
+
+# Group/Role-based authorization (for admin-only instance):
+# allowed_groups = ["/admins"]
+# allowed_roles = ["admin"]
+
+# For developer instance:
+# allowed_groups = ["/developers", "/admins"]
+# allowed_roles = ["developer", "admin"]

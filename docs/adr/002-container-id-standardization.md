@@ -28,37 +28,39 @@ The original container ID assignment was arbitrary and inconsistent:
 
 ## Decision
 
-Standardize container IDs to match the last octet of their IP address:
+Standardize container IDs based on the last octet of their IP address plus 100:
 
 ```
-Container ID = Last octet of IP address (on 172.16.10.0/24 network)
+Container ID = Last octet of IP address + 100
 ```
+
+This formula satisfies Proxmox's requirement that VMIDs must be >= 100 while maintaining a predictable relationship between container ID and IP address.
 
 ### Examples
-| Service | New ID | IP Address | Mnemonic |
-|---------|--------|------------|----------|
-| Firewall | **1** | 172.16.10.**1** | .1 = Gateway |
-| PostgreSQL | **50** | 172.16.10.**50** | .50 = Backend services |
-| Keycloak | **51** | 172.16.10.**51** | .51 = Auth |
-| NetBox | **52** | 172.16.10.**52** | .52 = Infrastructure docs |
-| GitLab | **53** | 172.16.10.**53** | .53 = DevOps |
-| GitLab Runner | **54** | 172.16.10.**54** | .54 = CI runner |
-| Nextcloud | **55** | 172.16.10.**55** | .55 = Files |
-| Jellyfin | **56** | 172.16.10.**56** | .56 = Media |
-| Home Assistant | **57** | 172.16.10.**57** | .57 = IoT |
-| qBittorrent | **59** | 172.16.10.**59** | .59 = Torrents |
-| Demo Site | **60** | 172.16.10.**60** | .60 = Demo |
-| Cosmos | **61** | 172.16.10.**61** | .61 = Dashboard |
-| Wazuh | **62** | 172.16.10.**62** | .62 = Security |
-| OpenMediaVault | **64** | 172.16.10.**64** | .64 = NAS |
-| Zipline | **65** | 172.16.10.**65** | .65 = Screenshots |
-| WireGuard | **90** | 172.16.10.**90** | .90 = VPN |
+| Service | New ID | IP Address | Calculation | Mnemonic |
+|---------|--------|------------|-------------|----------|
+| Firewall | **101** | 172.16.10.**1** | 1 + 100 | .1 = Gateway |
+| PostgreSQL | **150** | 172.16.10.**50** | 50 + 100 | .50 = Backend services |
+| Keycloak | **151** | 172.16.10.**51** | 51 + 100 | .51 = Auth |
+| NetBox | **152** | 172.16.10.**52** | 52 + 100 | .52 = Infrastructure docs |
+| GitLab | **153** | 172.16.10.**53** | 53 + 100 | .53 = DevOps |
+| GitLab Runner | **154** | 172.16.10.**54** | 54 + 100 | .54 = CI runner |
+| Nextcloud | **155** | 172.16.10.**55** | 55 + 100 | .55 = Files |
+| Jellyfin | **156** | 172.16.10.**56** | 56 + 100 | .56 = Media |
+| Home Assistant | **157** | 172.16.10.**57** | 57 + 100 | .57 = IoT |
+| qBittorrent | **159** | 172.16.10.**59** | 59 + 100 | .59 = Torrents |
+| Demo Site | **160** | 172.16.10.**60** | 60 + 100 | .60 = Demo |
+| Cosmos | **161** | 172.16.10.**61** | 61 + 100 | .61 = Dashboard |
+| Wazuh | **162** | 172.16.10.**62** | 62 + 100 | .62 = Security |
+| OpenMediaVault | **164** | 172.16.10.**64** | 64 + 100 | .64 = NAS |
+| Zipline | **165** | 172.16.10.**65** | 65 + 100 | .65 = Screenshots |
+| WireGuard | **190** | 172.16.10.**90** | 90 + 100 | .90 = VPN |
 
 ## Rationale
 
 ### Mental Model Simplification
 - **Before**: "What's the IP of container 2050?" → Look it up
-- **After**: "What's the IP of container 53?" → "172.16.10.53"
+- **After**: "What's the IP of container 153?" → "172.16.10.53" (153 - 100 = 53)
 
 ### Reduced Documentation
 - Documentation can refer to just the ID or just the IP
@@ -70,8 +72,8 @@ Container ID = Last octet of IP address (on 172.16.10.0/24 network)
 # Old way - unclear what you're connecting to
 pct exec 2050 -- systemctl status gitlab
 
-# New way - instantly know it's the .53 IP
-pct exec 53 -- systemctl status gitlab
+# New way - instantly know it's the .53 IP (153 - 100 = 53)
+pct exec 153 -- systemctl status gitlab
 ```
 
 ### Consistency with Common Practices
@@ -113,22 +115,22 @@ Many infrastructure teams use this pattern:
 See `CONSISTENCY_FIXES_SUMMARY.md` (archived) for complete list of 22 files updated.
 
 Key changes:
-- `firewall.yml`: 2200 → 1
-- `postgresql.yml`: 1990 → 50
-- `keycloak.yml`: 2000 → 51
-- `netbox.yml`: 2150 → 52
-- `gitlab.yml`: 2050 → 53
-- `gitlab_runner.yml`: 2051 → 54
-- `nextcloud.yml`: 2040 → 55
-- `jellyfin.yml`: 2010 → 56
-- `homeassistant.yml`: 2030 → 57
-- `qbittorrent.yml`: 2070 → 59
-- `demo_site.yml`: 2300 → 60
-- `cosmos.yml`: 2100 → 61
-- `wazuh.yml`: 2080 → 62
-- `openmediavault.yml`: 2020 → 64
-- `zipline.yml`: 2060 → 65
-- `wireguard.yml`: 2090 → 90
+- `firewall.yml`: 2200 → 101 (IP .1 + 100)
+- `postgresql.yml`: 1990 → 150 (IP .50 + 100)
+- `keycloak.yml`: 2000 → 151 (IP .51 + 100)
+- `netbox.yml`: 2150 → 152 (IP .52 + 100)
+- `gitlab.yml`: 2050 → 153 (IP .53 + 100)
+- `gitlab_runner.yml`: 2051 → 154 (IP .54 + 100)
+- `nextcloud.yml`: 2040 → 155 (IP .55 + 100)
+- `jellyfin.yml`: 2010 → 156 (IP .56 + 100)
+- `homeassistant.yml`: 2030 → 157 (IP .57 + 100)
+- `qbittorrent.yml`: 2070 → 159 (IP .59 + 100)
+- `demo_site.yml`: 2300 → 160 (IP .60 + 100)
+- `cosmos.yml`: 2100 → 161 (IP .61 + 100)
+- `wazuh.yml`: 2080 → 162 (IP .62 + 100)
+- `openmediavault.yml`: 2020 → 164 (IP .64 + 100)
+- `zipline.yml`: 2060 → 165 (IP .65 + 100)
+- `wireguard.yml`: 2090 → 190 (IP .90 + 100)
 
 ## Consequences
 
@@ -142,25 +144,25 @@ Key changes:
 
 ### Negative
 - ⚠️ **Existing Containers**: Requires destruction and recreation
-- ⚠️ **ID Constraints**: Limited to IPs .1-.254 (but we only use ~16 services)
-- ⚠️ **Learning Curve**: Team must learn new IDs
+- ⚠️ **ID Range**: Container IDs 101-354 (IP .1-.254 + 100), but we only use ~16 services
+- ⚠️ **Learning Curve**: Team must learn new IDs and the +100 formula
 
 ### Neutral
 - 🔵 **One-Time Migration**: Required updating many files
 - 🔵 **Documentation**: All docs needed review and updates
-- 🔵 **Muscle Memory**: Commands like `pct exec 2050` need to change to `pct exec 53`
+- 🔵 **Muscle Memory**: Commands like `pct exec 2050` need to change to `pct exec 153`
 
 ## IP Range Allocation Strategy
 
 To maintain organization, services are grouped by IP range:
 
-| Range | Purpose | Current Usage |
-|-------|---------|---------------|
-| .1-.9 | Core infrastructure | Firewall (1) |
-| .10-.49 | Reserved future infrastructure | - |
-| .50-.59 | Backend services | PostgreSQL (50), Keycloak (51), NetBox (52), GitLab (53-54), Nextcloud (55), Jellyfin (56), Home Assistant (57) |
-| .60-.89 | User applications | Demo Site (60), Cosmos (61), Wazuh (62), OpenMediaVault (64), Zipline (65) |
-| .90-.99 | Network services | WireGuard VPN (90) |
+| IP Range | Container ID Range | Purpose | Current Usage |
+|----------|-------------------|---------|---------------|
+| .1-.9 | 101-109 | Core infrastructure | Firewall (101) |
+| .10-.49 | 110-149 | Reserved future infrastructure | - |
+| .50-.59 | 150-159 | Backend services | PostgreSQL (150), Keycloak (151), NetBox (152), GitLab (153-154), Nextcloud (155), Jellyfin (156), Home Assistant (157), qBittorrent (159) |
+| .60-.89 | 160-189 | User applications | Demo Site (160), Cosmos (161), Wazuh (162), OpenMediaVault (164), Zipline (165) |
+| .90-.99 | 190-199 | Network services | WireGuard VPN (190) |
 
 This provides clear separation and room for growth in each category.
 
@@ -217,12 +219,21 @@ Match container ID to last two IP octets (e.g., container 1053 for 172.16.10.53)
 - Third octet (10) never changes
 - Harder to type and remember
 
+### Selected Alternative: Last Octet + 100
+Add 100 to the last IP octet (e.g., container 153 for 172.16.10.53).
+
+**Chosen because**:
+- Meets Proxmox VMID >= 100 requirement
+- Simple mental arithmetic (subtract 100 to get IP last octet)
+- Compact IDs (101-254 range)
+- Maintains predictable relationship between ID and IP
+
 ## Compatibility Notes
 
 ### Proxmox Compatibility
-- Proxmox supports container IDs from 100 to 999999999
-- Our range (1-90) is well within limits
-- No technical issues with single or double-digit IDs
+- Proxmox requires container IDs >= 100 (enforced in Proxmox VE 9.0+)
+- Our range (101-190) satisfies this requirement
+- Formula ensures all IDs are >= 100 automatically
 
 ### Backup/Restore
 - Backups include container ID in filename

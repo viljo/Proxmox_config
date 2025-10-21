@@ -1,5 +1,5 @@
 ---
-jellyfin_container_id: 2010
+jellyfin_container_id: 156
 jellyfin_hostname: jellyfin
 jellyfin_domain: infra.local
 jellyfin_memory: 4096

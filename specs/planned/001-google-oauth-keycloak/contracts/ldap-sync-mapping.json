@@ -1,0 +1,174 @@
+{
+  "description": "Keycloak to OpenLDAP attribute mapping for user synchronization",
+  "version": "1.0.0",
+  "ldapConfiguration": {
+    "ldapUrl": "ldap://${LDAP_HOST}:389",
+    "bindDn": "cn=admin,dc=infra,dc=local",
+    "baseDn": "dc=infra,dc=local",
+    "usersDn": "ou=people,dc=infra,dc=local",
+    "groupsDn": "ou=groups,dc=infra,dc=local",
+    "servicesDn": "ou=services,dc=infra,dc=local"
+  },
+  "userAttributeMappings": [
+    {
+      "keycloakAttribute": "username",
+      "ldapAttribute": "uid",
+      "objectClass": "posixAccount",
+      "required": true,
+      "syncMode": "always",
+      "description": "Username - used as LDAP RDN"
+    },
+    {
+      "keycloakAttribute": "email",
+      "ldapAttribute": "mail",
+      "objectClass": "inetOrgPerson",
+      "required": true,
+      "syncMode": "always",
+      "description": "Email address"
+    },
+    {
+      "keycloakAttribute": "firstName",
+      "ldapAttribute": "givenName",
+      "objectClass": "inetOrgPerson",
+      "required": true,
+      "syncMode": "onUpdate",
+      "description": "Given name"
+    },
+    {
+      "keycloakAttribute": "lastName",
+      "ldapAttribute": "sn",
+      "objectClass": "inetOrgPerson",
+      "required": true,
+      "syncMode": "onUpdate",
+      "description": "Surname"
+    },
+    {
+      "keycloakAttribute": "firstName + ' ' + lastName",
+      "ldapAttribute": "cn",
+      "objectClass": "inetOrgPerson",
+      "required": true,
+      "syncMode": "onUpdate",
+      "description": "Common name (full name)",
+      "transform": "concatenate"
+    },
+    {
+      "keycloakAttribute": "customAttribute:uidNumber",
+      "ldapAttribute": "uidNumber",
+      "objectClass": "posixAccount",
+      "required": true,
+      "syncMode": "onCreate",
+      "description": "POSIX user ID - auto-allocated from counter",
+      "generation": "counter",
+      "counterDn": "cn=uidNext,ou=services,dc=infra,dc=local",
+      "startValue": 10001
+    },
+    {
+      "keycloakAttribute": "static:10000",
+      "ldapAttribute": "gidNumber",
+      "objectClass": "posixAccount",
+      "required": true,
+      "syncMode": "onCreate",
+      "description": "Primary group ID - default users group",
+      "generation": "static"
+    },
+    {
+      "keycloakAttribute": "'/home/' + username",
+      "ldapAttribute": "homeDirectory",
+      "objectClass": "posixAccount",
+      "required": true,
+      "syncMode": "onCreate",
+      "description": "Home directory path",
+      "transform": "template"
+    },
+    {
+      "keycloakAttribute": "static:/bin/bash",
+      "ldapAttribute": "loginShell",
+      "objectClass": "posixAccount",
+      "required": false,
+      "syncMode": "onCreate",
+      "description": "Default shell",
+      "generation": "static"
+    },
+    {
+      "keycloakAttribute": "firstName + ' ' + lastName",
+      "ldapAttribute": "gecos",
+      "objectClass": "posixAccount",
+      "required": false,
+      "syncMode": "onUpdate",
+      "description": "User description (GECOS field)",
+      "transform": "concatenate"
+    }
+  ],
+  "groupAttributeMappings": [
+    {
+      "keycloakAttribute": "name",
+      "ldapAttribute": "cn",
+      "objectClass": "posixGroup",
+      "required": true,
+      "syncMode": "always",
+      "description": "Group name"
+    },
+    {
+      "keycloakAttribute": "customAttribute:gidNumber",
+      "ldapAttribute": "gidNumber",
+      "objectClass": "posixGroup",
+      "required": true,
+      "syncMode": "onCreate",
+      "description": "POSIX group ID - auto-allocated from counter",
+      "generation": "counter",
+      "counterDn": "cn=gidNext,ou=services,dc=infra,dc=local",
+      "startValue": 10001
+    },
+    {
+      "keycloakAttribute": "members[].username",
+      "ldapAttribute": "memberUid",
+      "objectClass": "posixGroup",
+      "required": false,
+      "syncMode": "always",
+      "description": "Group members (UID-based membership)",
+      "transform": "extractArray"
+    },
+    {
+      "keycloakAttribute": "description",
+      "ldapAttribute": "description",
+      "objectClass": "posixGroup",
+      "required": false,
+      "syncMode": "onUpdate",
+      "description": "Group description"
+    }
+  ],
+  "ldapObjectClasses": {
+    "user": [
+      "top",
+      "inetOrgPerson",
+      "posixAccount"
+    ],
+    "group": [
+      "top",
+      "posixGroup"
+    ]
+  },
+  "syncBehavior": {
+    "createMissingUsers": true,
+    "updateExistingUsers": true,
+    "deleteRemovedUsers": false,
+    "disableInactiveUsers": true,
+    "syncGroups": true,
+    "syncGroupMembership": true,
+    "batchSize": 100,
+    "errorHandling": {
+      "continueOnError": true,
+      "logErrors": true,
+      "maxRetries": 3,
+      "retryDelay": 60
+    }
+  },
+  "counterManagement": {
+    "uidCounterDn": "cn=uidNext,ou=services,dc=infra,dc=local",
+    "gidCounterDn": "cn=gidNext,ou=services,dc=infra,dc=local",
+    "counterObjectClass": "extensibleObject",
+    "counterAttribute": "uidNumber",
+    "allocationMethod": "atomic",
+    "maxValue": 60000
+  }
+}
