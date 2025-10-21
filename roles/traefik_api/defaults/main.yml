@@ -1,0 +1,14 @@
+---
+# Traefik role - Runs on Proxmox host
+traefik_version: "v3.2"
+traefik_install_dir: /usr/local/bin
+traefik_config_dir: /etc/traefik
+traefik_dynamic_config_dir: "{{ traefik_config_dir }}/dynamic"
+traefik_acme_storage: /var/lib/traefik/acme.json
+traefik_log_dir: /var/log/traefik
+traefik_user: traefik
+traefik_group: traefik
+traefik_acme_email: "{{ vault_traefik_acme_email | default('admin@' + public_domain) }}"
+traefik_dns_provider: loopia
+traefik_api_user: "{{ vault_loopia_api_user }}"
+traefik_api_password: "{{ vault_loopia_api_password }}"

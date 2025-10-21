@@ -1,0 +1,9 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart loopia-ddns timer
+  ansible.builtin.systemd:
+    name: loopia-ddns.timer
+    state: restarted

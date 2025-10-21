@@ -1,0 +1,65 @@
+---
+# Demo App Deployment - Fully Refactored with Proxmox API
+# This playbook deploys the complete demo application stack from scratch
+# using Proxmox API modules instead of SSH/pct commands
+
+- name: Deploy demo application stack using Proxmox API
+  hosts: proxmox_admin
+  become: true
+
+  pre_tasks:
+    - name: Verify Proxmox API credentials are configured
+      ansible.builtin.assert:
+        that:
+          - proxmox_api_host is defined
+          - proxmox_api_user is defined
+          - proxmox_api_token_id is defined
+          - proxmox_api_token_secret is defined
+        fail_msg: "Proxmox API credentials not configured. Check inventory/group_vars/proxmox_admin/proxmox_api.yml"
+
+    - name: Ensure Debian template is downloaded
+      ansible.builtin.get_url:
+        url: "{{ debian_template_url }}"
+        dest: "{{ debian_template_file }}"
+        mode: '0644'
+      when: not ansible_check_mode
+
+  roles:
+    # 1. Configure network bridges on Proxmox host
+    - role: network
+      tags: [network]
+
+    # 2. Deploy firewall container (ID: 101, IP: 172.16.10.101)
+    - role: firewall_api
+      tags: [firewall]
+
+    # 3. Deploy demo site container (ID: 160, IP: 172.16.10.160)
+    - role: demo_site_api
+      tags: [demo_site]
+
+    # 4. Configure Traefik on Proxmox host (IP: 172.16.10.102)
+    - role: traefik_api
+      tags: [traefik]
+
+    # 5. Configure Loopia DDNS on Proxmox host
+    - role: loopia_ddns_api
+      tags: [loopia_ddns, dns]
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "✅ Demo application deployed successfully!"
+          - ""
+          - "Services:"
+          - "  - Firewall:   Container 101 (WAN: DHCP, DMZ: 172.16.10.101)"
+          - "  - Traefik:    Proxmox host (172.16.10.102)"
+          - "  - Demo Site:  Container 160 (172.16.10.160)"
+          - ""
+          - "Access:"
+          - "  - https://demosite.{{ public_domain }}/"
+          - ""
+          - "Next steps:"
+          - "  1. Wait ~10 minutes for DNS propagation"
+          - "  2. Verify: curl -I https://demosite.{{ public_domain }}/"
+          - "  3. Check firewall WAN IP: ssh root@{{ ansible_host }} 'pct exec 101 -- ip addr show eth0'"

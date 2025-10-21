@@ -1,0 +1,97 @@
+---
+# Demo Site deployment using Proxmox API
+
+- name: Create/update demo site container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ demo_site_container_id }}"
+    hostname: "{{ demo_site_hostname }}"
+    ostemplate: "local:vztmpl/{{ demo_site_template_file | basename }}"
+    cores: "{{ demo_site_cores }}"
+    memory: "{{ demo_site_memory }}"
+    swap: "{{ demo_site_swap }}"
+    disk: "{{ demo_site_rootfs_storage }}:{{ demo_site_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ demo_site_bridge }},ip={{ demo_site_ip_address }}/{{ demo_site_netmask }},gw={{ demo_site_gateway }},type=veth"
+    nameserver: "{{ demo_site_dns_servers | join(' ') }}"
+    features:
+      - nesting=1
+    unprivileged: "{{ demo_site_unprivileged }}"
+    onboot: true
+    password: "{{ demo_site_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: started
+  register: demo_site_container
+
+- name: Wait for demo site container SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ demo_site_ip_address }}"
+    port: 22
+    delay: 10
+    timeout: 120
+    state: started
+
+- name: Add demo site to in-memory inventory for delegation
+  ansible.builtin.add_host:
+    name: demo_site_container
+    ansible_host: "{{ demo_site_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ demo_site_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    groups: containers
+
+# Configuration using delegation - NO pct exec!
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+  delegate_to: demo_site_container
+
+- name: Install OpenSSH server
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+  delegate_to: demo_site_container
+
+- name: Create demo site HTML pages
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/var/www/html/{{ item }}"
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  loop:
+    - index.html
+    - hello.html
+  delegate_to: demo_site_container
+  notify: Restart nginx
+
+- name: Enable and start nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
+  delegate_to: demo_site_container
+
+- name: Enable and start SSH
+  ansible.builtin.systemd:
+    name: ssh
+    enabled: true
+    state: started
+  delegate_to: demo_site_container
+
+- name: Display demo site configuration
+  ansible.builtin.debug:
+    msg:
+      - "Demo site deployed successfully"
+      - "  Container ID: {{ demo_site_container_id }}"
+      - "  IP: {{ demo_site_ip_address }}"
+      - "  Hostname: {{ demo_site_hostname }}.{{ demo_site_external_domain }}"
+      - "  Internal URL: http://{{ demo_site_ip_address }}/"
+      - "  External URL: https://{{ demo_site_hostname }}.{{ demo_site_external_domain }}/"

@@ -1,0 +1,46 @@
+{% set transports = traefik_services_render | default([]) | selectattr('insecure_skip_verify', 'defined') | selectattr('insecure_skip_verify') | list %}
+http:
+  routers:
+{% for svc in traefik_services_render | default([]) %}
+    {{ svc.name }}:
+      rule: "Host(`{{ svc.host }}`{% if svc.additional_rule is defined %}{{ svc.additional_rule }}{% endif %})"
+      entryPoints:
+{% for ep in svc.entrypoints | default(['websecure']) %}
+        - {{ ep }}
+{% endfor %}
+      service: {{ svc.name }}
+      tls:
+        certResolver: {{ svc.tls_resolver | default('dns') }}
+{% if svc.middlewares is defined and svc.middlewares %}
+      middlewares:
+{% for mw in svc.middlewares %}
+        - {{ mw }}
+{% endfor %}
+{% endif %}
+{% endfor %}
+  services:
+{% for svc in traefik_services_render | default([]) %}
+    {{ svc.name }}:
+      loadBalancer:
+{% if svc.pass_host_header is defined %}
+        passHostHeader: {{ 'true' if svc.pass_host_header else 'false' }}
+{% else %}
+        passHostHeader: true
+{% endif %}
+        servers:
+          - url: "{{ svc.scheme | default('http') }}://{{ svc.backend_ip }}:{{ svc.port }}"
+{% if svc.sticky is defined %}
+        sticky:
+{{ svc.sticky | to_nice_yaml(indent=10, sort_keys=False) }}
+{% endif %}
+{% if svc.insecure_skip_verify | default(false) %}
+      serversTransport: {{ svc.name }}-transport
+{% endif %}
+{% endfor %}
+{% if transports %}
+serversTransports:
+{% for svc in traefik_services_render | default([]) if svc.insecure_skip_verify | default(false) %}
+  {{ svc.name }}-transport:
+    insecureSkipVerify: true
+{% endfor %}
+{% endif %}

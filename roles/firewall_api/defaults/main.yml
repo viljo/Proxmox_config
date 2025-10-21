@@ -1,0 +1,43 @@
+---
+# Firewall role - API-based version
+# Uses community.proxmox module instead of pct commands
+
+firewall_container_id: 101  # IP .101
+firewall_hostname: firewall
+firewall_domain: infra.local
+firewall_memory: 2048
+firewall_cores: 2
+firewall_disk: 8
+firewall_swap: 512
+firewall_bridge_wan: "{{ wan_bridge | default('vmbr2') }}"
+firewall_bridge_lan: "{{ public_bridge | default('vmbr3') }}"
+firewall_lan_ip_address: "{{ dmz_gateway }}"
+firewall_lan_prefix: "{{ dmz_prefix }}"
+firewall_dns_servers:
+  - 1.1.1.1
+  - 8.8.8.8
+firewall_root_password: "{{ vault_firewall_root_password | default('changeme') }}"
+firewall_template_url: "{{ debian_template_url }}"
+firewall_template_file: "{{ debian_template_file }}"
+firewall_rootfs_storage: local-lvm
+firewall_unprivileged: false
+firewall_features:
+  keyctl: 1
+  nesting: 1
+firewall_packages:
+  - nftables
+  - iproute2
+  - isc-dhcp-client
+  - openssh-server
+firewall_enable_ipv6: false
+firewall_forward_services:
+  - name: traefik_https
+    proto: tcp
+    ports:
+      - 80
+      - 443
+    target: "{{ dmz_host_ip }}"
+firewall_allow_management_ports:
+  - 22
+firewall_wan_interface: eth0
+firewall_lan_interface: eth1

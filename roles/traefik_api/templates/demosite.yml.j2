@@ -1,0 +1,15 @@
+http:
+  routers:
+    demosite:
+      rule: "Host(`demosite.{{ public_domain }}`)"
+      service: demosite
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: dns
+
+  services:
+    demosite:
+      loadBalancer:
+        servers:
+          - url: "http://172.16.10.160:80"

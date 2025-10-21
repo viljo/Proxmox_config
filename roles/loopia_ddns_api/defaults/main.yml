@@ -1,0 +1,10 @@
+---
+# Loopia DDNS role - Runs on Proxmox host
+loopia_ddns_enabled: "{{ loopia_ddns_enabled | default(true) }}"
+loopia_ddns_container_id: "{{ firewall_container_id | default(101) }}"
+loopia_ddns_interface: eth0
+loopia_ddns_interval: 15m
+loopia_api_user: "{{ vault_loopia_api_user }}"
+loopia_api_password: "{{ vault_loopia_api_password }}"
+loopia_dns_domain: "{{ public_domain }}"
+loopia_dns_records: "{{ loopia_dns_records | default([]) }}"
