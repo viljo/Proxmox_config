@@ -1,0 +1,136 @@
+---
+# Example: Refactored firewall role using Proxmox API instead of SSH
+# This demonstrates how to replace pct commands with declarative Ansible modules
+
+- name: Ensure firewall template exists
+  community.proxmox.proxmox_template:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    storage: local
+    content_type: vztmpl
+    template: "{{ firewall_template_file | basename }}"
+    state: present
+    force: false
+    timeout: 300
+
+- name: Create/update firewall container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ firewall_container_id }}"
+    hostname: "{{ firewall_hostname }}"
+    ostemplate: "local:vztmpl/{{ firewall_template_file | basename }}"
+    cores: "{{ firewall_cores }}"
+    memory: "{{ firewall_memory }}"
+    swap: "{{ firewall_swap }}"
+    disk: "{{ firewall_rootfs_storage }}:{{ firewall_disk }}"
+    netif:
+      net0: "name={{ firewall_wan_interface }},bridge={{ firewall_bridge_wan }},ip={{ firewall_wan_ip_config }},type=veth"
+      net1: "name={{ firewall_lan_interface }},bridge={{ firewall_bridge_lan }},ip={{ firewall_lan_ip_address }}/{{ firewall_lan_prefix }},type=veth"
+    features:
+      - keyctl=1
+      - nesting=1
+    unprivileged: "{{ firewall_unprivileged | bool }}"
+    onboot: true
+    password: "{{ firewall_root_password }}"
+    state: started
+  register: firewall_container
+
+- name: Wait for container to be ready
+  ansible.builtin.wait_for:
+    host: "{{ firewall_lan_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+  when: firewall_container.changed
+
+# Configuration management using direct delegation (no pct exec!)
+- name: Install firewall packages
+  ansible.builtin.apt:
+    name: "{{ firewall_packages }}"
+    state: present
+    update_cache: true
+  delegate_to: "{{ firewall_hostname }}"
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ firewall_lan_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ firewall_root_password }}"
+
+- name: Configure IP forwarding
+  ansible.builtin.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-firewall.conf
+    reload: true
+  loop:
+    - { name: "net.ipv4.ip_forward", value: "1" }
+    - { name: "net.ipv6.conf.all.forwarding", value: "{{ 1 if firewall_enable_ipv6 else 0 }}" }
+  delegate_to: "{{ firewall_hostname }}"
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ firewall_lan_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ firewall_root_password }}"
+
+- name: Configure nftables firewall rules
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: '0644'
+  delegate_to: "{{ firewall_hostname }}"
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ firewall_lan_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ firewall_root_password }}"
+  notify: Restart nftables
+
+- name: Configure WAN interface for DHCP on boot
+  ansible.builtin.copy:
+    content: |
+      auto {{ firewall_wan_interface }}
+      iface {{ firewall_wan_interface }} inet dhcp
+    dest: "/etc/network/interfaces.d/{{ firewall_wan_interface }}"
+    owner: root
+    group: root
+    mode: '0644'
+  delegate_to: "{{ firewall_hostname }}"
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ firewall_lan_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ firewall_root_password }}"
+
+- name: Enable and start nftables
+  ansible.builtin.systemd:
+    name: nftables
+    enabled: true
+    state: started
+  delegate_to: "{{ firewall_hostname }}"
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ firewall_lan_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ firewall_root_password }}"
+
+- name: Trigger DHCP on WAN interface
+  ansible.builtin.command:
+    cmd: dhclient {{ firewall_wan_interface }}
+  delegate_to: "{{ firewall_hostname }}"
+  vars:
+    ansible_connection: ssh
+    ansible_host: "{{ firewall_lan_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ firewall_root_password }}"
+  changed_when: false
