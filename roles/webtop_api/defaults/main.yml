@@ -1,0 +1,48 @@
+---
+# Webtop Container Configuration
+webtop_container_id: 170
+webtop_hostname: webtop
+webtop_domain: viljo.se
+webtop_fqdn: "browser.{{ webtop_domain }}"
+
+# Container Resources
+webtop_memory: 4096  # 4GB RAM for desktop environment
+webtop_cores: 2
+webtop_disk: 30  # GB
+webtop_swap: 2048
+
+# Network Configuration
+webtop_bridge: "{{ dmz_bridge | default('vmbr3') }}"
+webtop_ip_address: "172.16.10.170"
+webtop_ip_config: "{{ webtop_ip_address }}/24"
+webtop_gateway: "{{ dmz_gateway | default('172.16.10.101') }}"
+webtop_dns_servers: "{{ dmz_dns_servers | default(['1.1.1.1', '8.8.8.8']) }}"
+
+# Container Settings
+webtop_rootfs_storage: local-lvm
+webtop_unprivileged: true
+webtop_start_onboot: true
+webtop_features:
+  nesting: 1  # Required for Docker (fuse removed due to API permission)
+
+# Webtop Docker Configuration
+webtop_docker_image: "lscr.io/linuxserver/webtop:latest"
+webtop_desktop_environment: "xfce"  # xfce, kde, mate, i3, openbox, icewm
+webtop_port: 3000
+webtop_subfolder: "/"  # Can be /webtop if needed
+
+# Authentication
+webtop_custom_user: "webtop"
+webtop_password: "{{ vault_webtop_password | default('changeme') }}"
+webtop_sudo_password: "{{ vault_webtop_sudo_password | default('changeme') }}"
+
+# Timezone
+webtop_timezone: "Europe/Stockholm"
+webtop_puid: 1000
+webtop_pgid: 1000
+
+# Template
+webtop_template: "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+
+# Provisioning marker
+webtop_provision_marker: "/etc/webtop/.provisioned"

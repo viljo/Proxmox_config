@@ -1,0 +1,6 @@
+---
+- name: Deploy GitLab CE with PostgreSQL Backend
+  hosts: proxmox_admin
+  become: true
+  roles:
+    - gitlab

@@ -1,0 +1,136 @@
+---
+# Webtop Deployment Tasks
+
+- name: Create Webtop LXC container
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ vault_proxmox_api_token_id }}"
+    api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+    validate_certs: false
+    vmid: "{{ webtop_container_id }}"
+    hostname: "{{ webtop_hostname }}"
+    node: "{{ proxmox_node }}"
+    ostemplate: "{{ webtop_template }}"
+    cores: "{{ webtop_cores }}"
+    memory: "{{ webtop_memory }}"
+    swap: "{{ webtop_swap }}"
+    disk: "{{ webtop_rootfs_storage }}:{{ webtop_disk }}"
+    netif: "{{ {'net0': 'name=eth0,bridge=' + webtop_bridge + ',ip=' + webtop_ip_config + ',gw=' + webtop_gateway + ',type=veth'} }}"
+    nameserver: "{{ webtop_dns_servers | join(' ') }}"
+    unprivileged: "{{ webtop_unprivileged }}"
+    features:
+      - nesting=1
+    onboot: "{{ webtop_start_onboot }}"
+    state: present
+  register: webtop_container_create
+
+- name: Start Webtop container
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ vault_proxmox_api_token_id }}"
+    api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+    validate_certs: false
+    vmid: "{{ webtop_container_id }}"
+    state: started
+
+- name: Wait for Webtop container to be ready
+  ansible.builtin.command: "pct exec {{ webtop_container_id }} -- test -f /bin/bash"
+  register: container_ready
+  retries: 30
+  delay: 2
+  until: container_ready.rc == 0
+  changed_when: false
+
+- name: Check if Webtop is already provisioned
+  ansible.builtin.command: "pct exec {{ webtop_container_id }} -- test -f {{ webtop_provision_marker }}"
+  register: webtop_provision_check
+  failed_when: false
+  changed_when: false
+
+- name: Install Docker and dependencies
+  ansible.builtin.command: |
+    pct exec {{ webtop_container_id }} -- bash -c "
+      apt-get update &&
+      apt-get install -y ca-certificates curl gnupg &&
+      install -m 0755 -d /etc/apt/keyrings &&
+      curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc &&
+      chmod a+r /etc/apt/keyrings/docker.asc &&
+      echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable' > /etc/apt/sources.list.d/docker.list &&
+      apt-get update &&
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    "
+  when: webtop_provision_check.rc != 0
+
+- name: Create Webtop config directory
+  ansible.builtin.command: "pct exec {{ webtop_container_id }} -- mkdir -p /opt/webtop/config /etc/webtop"
+  when: webtop_provision_check.rc != 0
+
+- name: Create Webtop Docker Compose file
+  ansible.builtin.command: |
+    pct exec {{ webtop_container_id }} -- bash -c "cat > /opt/webtop/docker-compose.yml << 'EOF'
+    services:
+      webtop:
+        image: {{ webtop_docker_image }}
+        container_name: webtop
+        security_opt:
+          - seccomp:unconfined
+        environment:
+          - PUID={{ webtop_puid }}
+          - PGID={{ webtop_pgid }}
+          - TZ={{ webtop_timezone }}
+          - SUBFOLDER={{ webtop_subfolder }}
+          - CUSTOM_USER={{ webtop_custom_user }}
+          - PASSWORD={{ webtop_password }}
+          - SUDO_PASSWORD={{ webtop_sudo_password }}
+        volumes:
+          - /opt/webtop/config:/config
+        ports:
+          - {{ webtop_port }}:3000
+        shm_size: '1gb'
+        restart: unless-stopped
+    EOF"
+  when: webtop_provision_check.rc != 0
+
+- name: Start Webtop Docker container
+  ansible.builtin.command: "pct exec {{ webtop_container_id }} -- docker compose -f /opt/webtop/docker-compose.yml up -d"
+  when: webtop_provision_check.rc != 0
+
+- name: Create Webtop systemd service for auto-start
+  ansible.builtin.command: |
+    pct exec {{ webtop_container_id }} -- bash -c "cat > /etc/systemd/system/webtop.service << 'EOF'
+    [Unit]
+    Description=Webtop Desktop Environment
+    Requires=docker.service
+    After=docker.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    WorkingDirectory=/opt/webtop
+    ExecStart=/usr/bin/docker compose up -d
+    ExecStop=/usr/bin/docker compose down
+    TimeoutStartSec=0
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF"
+  when: webtop_provision_check.rc != 0
+
+- name: Enable Webtop service
+  ansible.builtin.command: "pct exec {{ webtop_container_id }} -- systemctl enable webtop.service"
+  when: webtop_provision_check.rc != 0
+
+- name: Create provision marker
+  ansible.builtin.command: "pct exec {{ webtop_container_id }} -- touch {{ webtop_provision_marker }}"
+  when: webtop_provision_check.rc != 0
+
+- name: Display Webtop access information
+  ansible.builtin.debug:
+    msg:
+      - "Webtop deployed successfully!"
+      - "Internal URL: http://{{ webtop_ip_address }}:{{ webtop_port }}"
+      - "External URL: https://{{ webtop_fqdn }} (requires Traefik configuration)"
+      - "Username: {{ webtop_custom_user }}"
+      - "Container ID: {{ webtop_container_id }}"

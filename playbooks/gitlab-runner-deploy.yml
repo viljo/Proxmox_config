@@ -1,0 +1,6 @@
+---
+- name: Deploy GitLab Runner for CI/CD
+  hosts: proxmox_admin
+  become: true
+  roles:
+    - gitlab_runner

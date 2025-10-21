@@ -1,16 +1,16 @@
 ---
 gitlab_container_id: 153
 gitlab_hostname: gitlab
-gitlab_domain: infra.local
+gitlab_domain: viljo.se
 gitlab_memory: 8192
 gitlab_cores: 4
 gitlab_disk: 128
 gitlab_swap: 2048
-gitlab_bridge: "{{ public_bridge | default('vmbr0') }}"
-gitlab_ip_config: dhcp
+gitlab_bridge: "{{ dmz_bridge | default('vmbr3') }}"
+gitlab_ip_config: "172.16.10.153/24"
 gitlab_vlan_tag: null
-gitlab_gateway: null
-gitlab_dns_servers: []
+gitlab_gateway: "{{ dmz_gateway | default('172.16.10.101') }}"
+gitlab_dns_servers: "{{ dmz_dns_servers | default(['1.1.1.1', '8.8.8.8']) }}"
 gitlab_rootfs_storage: local-lvm
 gitlab_unprivileged: false
 gitlab_start_onboot: true
@@ -19,6 +19,13 @@ gitlab_template_url: "{{ debian_template_url | default('http://download.proxmox.
 gitlab_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
 gitlab_root_password: "{{ vault_gitlab_root_password | default('') }}"
 gitlab_external_url: "https://gitlab.{{ gitlab_domain }}"
+gitlab_db_adapter: postgresql
+gitlab_db_encoding: unicode
+gitlab_db_host: "172.16.10.150"
+gitlab_db_port: 5432
+gitlab_db_database: gitlab
+gitlab_db_username: gitlab
+gitlab_db_password: "{{ vault_postgres_gitlab_password | default('') }}"
 gitlab_omnibus_package: gitlab-ce
 gitlab_edition_repo: "deb https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/debian/ bookworm main"
 gitlab_letsencrypt_enable: false

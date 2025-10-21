@@ -1,0 +1,6 @@
+---
+- name: Deploy Webtop Browser Desktop Environment
+  hosts: proxmox_admin
+  become: true
+  roles:
+    - webtop_api
