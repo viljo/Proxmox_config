@@ -20,7 +20,7 @@ firewall_root_password: "{{ vault_firewall_root_password | default('changeme') }
 firewall_template_url: "{{ debian_template_url }}"
 firewall_template_file: "{{ debian_template_file }}"
 firewall_rootfs_storage: local-lvm
-firewall_unprivileged: false
+firewall_unprivileged: true
 firewall_features:
   keyctl: 1
   nesting: 1

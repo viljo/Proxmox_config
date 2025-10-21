@@ -1,7 +1,7 @@
 ---
 # Demo Site deployment using Proxmox API
 
-- name: Create/update demo site container via Proxmox API
+- name: Create demo site container via Proxmox API
   community.proxmox.proxmox:
     api_host: "{{ proxmox_api_host }}"
     api_user: "{{ proxmox_api_user }}"
@@ -19,14 +19,24 @@
     netif:
       net0: "name=eth0,bridge={{ demo_site_bridge }},ip={{ demo_site_ip_address }}/{{ demo_site_netmask }},gw={{ demo_site_gateway }},type=veth"
     nameserver: "{{ demo_site_dns_servers | join(' ') }}"
-    features:
-      - nesting=1
     unprivileged: "{{ demo_site_unprivileged }}"
     onboot: true
     password: "{{ demo_site_root_password }}"
     pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
-    state: started
+    state: present
   register: demo_site_container
+
+- name: Start demo site container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ demo_site_container_id }}"
+    hostname: "{{ demo_site_hostname }}"
+    state: started
 
 - name: Wait for demo site container SSH to be available
   ansible.builtin.wait_for:
@@ -42,7 +52,7 @@
     ansible_host: "{{ demo_site_ip_address }}"
     ansible_user: root
     ansible_password: "{{ demo_site_root_password }}"
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
     groups: containers
 
 # Configuration using delegation - NO pct exec!

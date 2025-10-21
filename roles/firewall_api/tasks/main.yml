@@ -2,7 +2,7 @@
 # Firewall deployment using Proxmox API
 # No SSH/pct commands - fully declarative
 
-- name: Create/update firewall container via Proxmox API
+- name: Create firewall container via Proxmox API
   community.proxmox.proxmox:
     api_host: "{{ proxmox_api_host }}"
     api_user: "{{ proxmox_api_user }}"
@@ -20,15 +20,24 @@
     netif:
       net0: "name={{ firewall_wan_interface }},bridge={{ firewall_bridge_wan }},ip=manual,type=veth"
       net1: "name={{ firewall_lan_interface }},bridge={{ firewall_bridge_lan }},ip={{ firewall_lan_ip_address }}/{{ firewall_lan_prefix }},type=veth"
-    features:
-      - keyctl={{ firewall_features.keyctl }}
-      - nesting={{ firewall_features.nesting }}
     unprivileged: "{{ firewall_unprivileged }}"
     onboot: true
     password: "{{ firewall_root_password }}"
     pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
-    state: started
+    state: present
   register: firewall_container
+
+- name: Start firewall container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ firewall_container_id }}"
+    hostname: "{{ firewall_hostname }}"
+    state: started
 
 - name: Wait for firewall container SSH to be available
   ansible.builtin.wait_for:
@@ -44,7 +53,7 @@
     ansible_host: "{{ firewall_lan_ip_address }}"
     ansible_user: root
     ansible_password: "{{ firewall_root_password }}"
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ ansible_host }}"'
     groups: containers
 
 # Configuration using delegation - NO pct exec!

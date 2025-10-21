@@ -1,14 +1,43 @@
 ---
 # Traefik role - Runs on Proxmox host
-traefik_version: "v3.2"
+traefik_version: "v3.5.3"
 traefik_install_dir: /usr/local/bin
 traefik_config_dir: /etc/traefik
 traefik_dynamic_config_dir: "{{ traefik_config_dir }}/dynamic"
+traefik_dynamic_dir: "{{ traefik_config_dir }}/dynamic"
+traefik_data_dir: /var/lib/traefik
 traefik_acme_storage: /var/lib/traefik/acme.json
 traefik_log_dir: /var/log/traefik
+traefik_log_level: INFO
+traefik_dns_challenge_provider: loopia
+traefik_dns_challenge_delay: 120
+traefik_dns_challenge_resolvers: []
+traefik_static_config_extra: {}
 traefik_user: traefik
 traefik_group: traefik
-traefik_acme_email: "{{ vault_traefik_acme_email | default('admin@' + public_domain) }}"
+traefik_acme_email: "{{ vault_traefik_acme_email | default('anders@viljo.se') }}"
 traefik_dns_provider: loopia
 traefik_api_user: "{{ vault_loopia_api_user }}"
 traefik_api_password: "{{ vault_loopia_api_password }}"
+traefik_dmz_host_ip: "{{ dmz_host_ip | default('172.16.10.102') }}"
+public_domain: "viljo.se"
+
+# DNS Challenge environment variables for Loopia
+traefik_dns_challenge_env:
+  LOOPIA_API_USER: "{{ vault_loopia_api_user }}"
+  LOOPIA_API_PASSWORD: "{{ vault_loopia_api_password }}"
+
+# EntryPoints configuration
+traefik_effective_entrypoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: dns
