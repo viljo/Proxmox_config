@@ -1,0 +1,284 @@
+---
+- name: Create Nextcloud LXC container
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ vault_proxmox_api_token_id }}"
+    api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+    validate_certs: false
+    vmid: "{{ nextcloud_container_id }}"
+    hostname: "{{ nextcloud_hostname }}"
+    node: "{{ proxmox_node }}"
+    ostemplate: "{{ nextcloud_template }}"
+    cores: "{{ nextcloud_cores }}"
+    memory: "{{ nextcloud_memory }}"
+    swap: "{{ nextcloud_swap }}"
+    disk: "{{ nextcloud_rootfs_storage }}:{{ nextcloud_disk }}"
+    netif: "{{ {'net0': 'name=eth0,bridge=' + nextcloud_bridge + ',ip=' + nextcloud_ip_config + ',gw=' + nextcloud_gateway + ',type=veth'} }}"
+    nameserver: "{{ nextcloud_dns_servers | join(' ') }}"
+    unprivileged: "{{ nextcloud_unprivileged }}"
+    features:
+      - nesting=1
+    onboot: "{{ nextcloud_start_onboot }}"
+    state: present
+  register: nextcloud_container_create
+
+- name: Ensure Nextcloud container is started
+  ansible.builtin.command: "pct start {{ nextcloud_container_id }}"
+  ignore_errors: true
+  changed_when: false
+
+- name: Wait for Nextcloud container to be ready
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Check if Nextcloud is already provisioned
+  ansible.builtin.command: "pct exec {{ nextcloud_container_id }} -- test -f {{ nextcloud_provision_marker }}"
+  register: nextcloud_provision_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Update package cache
+  ansible.builtin.command: "pct exec {{ nextcloud_container_id }} -- apt-get update"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Install Nextcloud prerequisites
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    apt-get install -y {{ (nextcloud_php_modules + nextcloud_extra_packages) | join(' ') }}
+  when: nextcloud_provision_check.rc != 0
+
+- name: Create Nextcloud data directory
+  ansible.builtin.command: "pct exec {{ nextcloud_container_id }} -- mkdir -p {{ nextcloud_data_dir }}"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Download Nextcloud archive
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    wget -O /tmp/nextcloud.tar.bz2 {{ nextcloud_archive_url }}
+  when: nextcloud_provision_check.rc != 0
+
+- name: Extract Nextcloud to /var/www
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    bash -c "cd /var/www && tar -xjf /tmp/nextcloud.tar.bz2"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Set ownership of Nextcloud directories
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    chown -R {{ nextcloud_web_user }}:{{ nextcloud_web_group }} {{ item }}
+  loop:
+    - "{{ nextcloud_install_dir }}"
+    - "{{ nextcloud_data_dir }}"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Create Nextcloud nginx configuration
+  ansible.builtin.command: |
+    pct exec {{ nextcloud_container_id }} -- bash -c "cat > /etc/nginx/sites-available/nextcloud << 'EOF'
+    upstream php-handler {
+        server unix:{{ nextcloud_php_fpm_socket }};
+    }
+
+    map \$arg_v \$asset_immutable {
+        \"\" \"\";
+        default \"immutable\";
+    }
+
+    server {
+        listen {{ nextcloud_nginx_port }};
+        listen [::]:{{ nextcloud_nginx_port }};
+        server_name {{ nextcloud_fqdn }};
+
+        root {{ nextcloud_install_dir }};
+
+        index index.php index.html /index.php\$request_uri;
+
+        client_max_body_size {{ nextcloud_php_upload_limit }};
+        client_body_timeout 300s;
+        fastcgi_buffers 64 4K;
+
+        gzip on;
+        gzip_vary on;
+        gzip_comp_level 4;
+        gzip_min_length 256;
+        gzip_proxied expired no-cache no-store private no_last_modified no_etag auth;
+        gzip_types application/atom+xml text/javascript application/javascript application/json application/ld+json application/manifest+json application/rss+xml application/vnd.geo+json application/vnd.ms-fontobject application/wasm application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/bmp image/svg+xml image/x-icon text/cache-manifest text/css text/plain text/vcard text/vnd.rim.location.xloc text/vtt text/x-component text/x-cross-domain-policy;
+
+        add_header Referrer-Policy                   \"no-referrer\"       always;
+        add_header X-Content-Type-Options            \"nosniff\"           always;
+        add_header X-Frame-Options                   \"SAMEORIGIN\"        always;
+        add_header X-Permitted-Cross-Domain-Policies \"none\"              always;
+        add_header X-Robots-Tag                      \"noindex, nofollow\" always;
+        add_header X-XSS-Protection                  \"1; mode=block\"     always;
+
+        fastcgi_hide_header X-Powered-By;
+
+        location = /robots.txt {
+            allow all;
+            log_not_found off;
+            access_log off;
+        }
+
+        location ^~ /.well-known {
+            location = /.well-known/carddav { return 301 /remote.php/dav/; }
+            location = /.well-known/caldav  { return 301 /remote.php/dav/; }
+            location = /.well-known/webfinger { return 301 /index.php/.well-known/webfinger; }
+            location = /.well-known/nodeinfo { return 301 /index.php/.well-known/nodeinfo; }
+            location /.well-known/acme-challenge    { try_files \$uri \$uri/ =404; }
+            location /.well-known/pki-validation    { try_files \$uri \$uri/ =404; }
+            return 301 /index.php\$request_uri;
+        }
+
+        location ~ ^/(?:build|tests|config|lib|3rdparty|templates|data)(?:\$|/)  { return 404; }
+        location ~ ^/(?:\.|autotest|occ|issue|indie|db_|console)                  { return 404; }
+
+        location ~ \.php(?:\$|/) {
+            rewrite ^/(?!index|remote|public|cron|core\/ajax\/update|status|ocs\/v[12]|updater\/.+|ocs-provider\/.+|.+\/richdocumentscode(_arm64)?\/proxy) /index.php\$request_uri;
+
+            fastcgi_split_path_info ^(.+?\.php)(/.*)\$;
+            set \$path_info \$fastcgi_path_info;
+
+            try_files \$fastcgi_script_name =404;
+
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+            fastcgi_param PATH_INFO \$path_info;
+            fastcgi_param HTTPS on;
+
+            fastcgi_param modHeadersAvailable true;
+            fastcgi_param front_controller_active true;
+            fastcgi_pass php-handler;
+
+            fastcgi_intercept_errors on;
+            fastcgi_request_buffering off;
+
+            fastcgi_max_temp_file_size 0;
+        }
+
+        location ~ \.(?:css|js|mjs|svg|gif|png|jpg|ico|wasm|tflite|map|ogg|flac)\$ {
+            try_files \$uri /index.php\$request_uri;
+            add_header Cache-Control \"public, max-age=15778463, \$asset_immutable\";
+            access_log off;
+
+            location ~ \.wasm\$ {
+                default_type application/wasm;
+            }
+        }
+
+        location ~ \.woff2?\$ {
+            try_files \$uri /index.php\$request_uri;
+            expires 7d;
+            access_log off;
+        }
+
+        location /remote {
+            return 301 /remote.php\$request_uri;
+        }
+
+        location / {
+            try_files \$uri \$uri/ /index.php\$request_uri;
+        }
+    }
+    EOF"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Enable Nextcloud nginx site
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    bash -c "ln -sf /etc/nginx/sites-available/nextcloud /etc/nginx/sites-enabled/ && rm -f /etc/nginx/sites-enabled/default"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Configure PHP-FPM for Nextcloud
+  ansible.builtin.command: |
+    pct exec {{ nextcloud_container_id }} -- bash -c "cat >> /etc/php/{{ nextcloud_php_version }}/fpm/php.ini << 'EOF'
+    memory_limit = {{ nextcloud_php_memory_limit }}
+    upload_max_filesize = {{ nextcloud_php_upload_limit }}
+    post_max_size = {{ nextcloud_php_upload_limit }}
+    max_execution_time = {{ nextcloud_php_max_execution }}
+    opcache.enable=1
+    opcache.interned_strings_buffer=32
+    opcache.max_accelerated_files=10000
+    opcache.memory_consumption=256
+    opcache.save_comments=1
+    opcache.revalidate_freq=60
+    apc.enable_cli=1
+    EOF"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Restart PHP-FPM and nginx
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    bash -c "systemctl restart php{{ nextcloud_php_version }}-fpm nginx"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Install Nextcloud via OCC
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ maintenance:install
+    --database="{{ nextcloud_db_type }}"
+    --database-host="{{ nextcloud_db_host }}"
+    --database-port="{{ nextcloud_db_port }}"
+    --database-name="{{ nextcloud_db_name }}"
+    --database-user="{{ nextcloud_db_user }}"
+    --database-pass="{{ nextcloud_db_password }}"
+    --database-table-prefix="{{ nextcloud_db_table_prefix }}"
+    --admin-user="{{ nextcloud_admin_user }}"
+    --admin-pass="{{ nextcloud_admin_password }}"
+    --data-dir="{{ nextcloud_data_dir }}"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Configure trusted domains
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set trusted_domains {{ item.0 }}
+    --value="{{ item.1 }}"
+  loop: "{{ nextcloud_trusted_domains | zip(range(nextcloud_trusted_domains|length)) | list }}"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Configure reverse proxy settings
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set {{ item.key }}
+    --value="{{ item.value }}"
+  loop:
+    - { key: 'overwrite.cli.url', value: "{{ nextcloud_overwrite_cli_url }}" }
+    - { key: 'overwriteprotocol', value: "{{ nextcloud_overwrite_protocol }}" }
+    - { key: 'overwritehost', value: "{{ nextcloud_overwrite_host }}" }
+  when: nextcloud_provision_check.rc != 0
+
+- name: Configure Redis for file locking and caching
+  ansible.builtin.command: |
+    pct exec {{ nextcloud_container_id }} -- bash -c "sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set redis host --value='{{ nextcloud_redis_host }}'
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set redis port --value={{ nextcloud_redis_port }}
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set redis password --value='{{ nextcloud_redis_password }}'
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set redis dbindex --value={{ nextcloud_redis_database }}
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set memcache.local --value='\APCu'
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set memcache.distributed --value='\OC\Memcache\Redis'
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ config:system:set memcache.locking --value='\OC\Memcache\Redis'"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Create Nextcloud cron job
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    bash -c "echo '*/5 * * * * php -f {{ nextcloud_install_dir }}/cron.php' | crontab -u {{ nextcloud_web_user }} -"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Set background job to cron
+  ansible.builtin.command: >
+    pct exec {{ nextcloud_container_id }} --
+    sudo -u {{ nextcloud_web_user }} php {{ nextcloud_install_dir }}/occ background:cron
+  when: nextcloud_provision_check.rc != 0
+
+- name: Create provision marker
+  ansible.builtin.command: "pct exec {{ nextcloud_container_id }} -- bash -c 'mkdir -p $(dirname {{ nextcloud_provision_marker }}) && touch {{ nextcloud_provision_marker }}'"
+  when: nextcloud_provision_check.rc != 0
+
+- name: Display Nextcloud access information
+  ansible.builtin.debug:
+    msg:
+      - "Nextcloud deployed successfully!"
+      - "Internal URL: http://{{ nextcloud_ip_address }}"
+      - "External URL: https://{{ nextcloud_fqdn }} (requires Traefik configuration)"
+      - "Admin username: {{ nextcloud_admin_user }}"
+      - "Container ID: {{ nextcloud_container_id }}"

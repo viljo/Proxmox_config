@@ -1,0 +1,111 @@
+---
+# Nextcloud Container Configuration
+nextcloud_container_id: 155
+nextcloud_hostname: nextcloud
+nextcloud_domain: viljo.se
+nextcloud_fqdn: "nextcloud.{{ nextcloud_domain }}"
+
+# Container Resources
+nextcloud_memory: 6144  # 6GB RAM for Nextcloud
+nextcloud_cores: 4
+nextcloud_disk: 100  # GB
+nextcloud_swap: 2048
+
+# Network Configuration
+nextcloud_bridge: "{{ dmz_bridge | default('vmbr3') }}"
+nextcloud_ip_address: "172.16.10.155"
+nextcloud_ip_config: "{{ nextcloud_ip_address }}/24"
+nextcloud_gateway: "{{ dmz_gateway | default('172.16.10.101') }}"
+nextcloud_dns_servers: "{{ dmz_dns_servers | default(['1.1.1.1', '8.8.8.8']) }}"
+
+# Container Settings
+nextcloud_rootfs_storage: local-lvm
+nextcloud_unprivileged: true
+nextcloud_start_onboot: true
+nextcloud_features:
+  nesting: 1
+
+# Nextcloud Version and Installation
+nextcloud_version: "29.0.2"
+nextcloud_install_dir: "/var/www/nextcloud"
+nextcloud_data_dir: "/var/lib/nextcloud-data"
+nextcloud_archive_url: "https://download.nextcloud.com/server/releases/nextcloud-{{ nextcloud_version }}.tar.bz2"
+
+# Web Server Configuration
+nextcloud_web_user: www-data
+nextcloud_web_group: www-data
+nextcloud_nginx_port: 80
+
+# PHP Configuration
+nextcloud_php_version: "8.4"
+nextcloud_php_memory_limit: "1024M"
+nextcloud_php_upload_limit: "10G"
+nextcloud_php_max_execution: 3600
+nextcloud_php_fpm_socket: "/run/php/php{{ nextcloud_php_version }}-fpm.sock"
+
+# Database Configuration (PostgreSQL)
+nextcloud_db_type: "pgsql"
+nextcloud_db_host: "172.16.10.150"  # PostgreSQL container
+nextcloud_db_port: 5432
+nextcloud_db_name: "nextcloud"
+nextcloud_db_user: "nextcloud"
+nextcloud_db_password: "{{ vault_postgres_nextcloud_password | default('changeme') }}"
+nextcloud_db_table_prefix: "oc_"
+
+# Redis Configuration
+nextcloud_redis_host: "172.16.10.158"  # Redis container
+nextcloud_redis_port: 6379
+nextcloud_redis_password: "{{ vault_redis_password | default('') }}"
+nextcloud_redis_database: 1  # Use database 1 (0 is default)
+
+# Admin Configuration
+nextcloud_admin_user: "admin"
+nextcloud_admin_password: "{{ vault_nextcloud_admin_password | default('changeme') }}"
+
+# Trusted Domains
+nextcloud_trusted_domains:
+  - "{{ nextcloud_fqdn }}"
+  - "{{ nextcloud_ip_address }}"
+
+# Reverse Proxy Configuration
+nextcloud_overwrite_protocol: "https"
+nextcloud_overwrite_host: "{{ nextcloud_fqdn }}"
+nextcloud_overwrite_cli_url: "https://{{ nextcloud_fqdn }}"
+
+# Template
+nextcloud_template: "local:vztmpl/debian-13-standard_13.1-2_amd64.tar.zst"
+
+# Provisioning marker
+nextcloud_provision_marker: "/etc/nextcloud/.provisioned"
+
+# PHP Modules Required
+nextcloud_php_modules:
+  - "php{{ nextcloud_php_version }}"
+  - "php{{ nextcloud_php_version }}-fpm"
+  - "php{{ nextcloud_php_version }}-cli"
+  - "php{{ nextcloud_php_version }}-gd"
+  - "php{{ nextcloud_php_version }}-curl"
+  - "php{{ nextcloud_php_version }}-xml"
+  - "php{{ nextcloud_php_version }}-zip"
+  - "php{{ nextcloud_php_version }}-mbstring"
+  - "php{{ nextcloud_php_version }}-bz2"
+  - "php{{ nextcloud_php_version }}-intl"
+  - "php{{ nextcloud_php_version }}-bcmath"
+  - "php{{ nextcloud_php_version }}-gmp"
+  - "php{{ nextcloud_php_version }}-imagick"
+  - "php{{ nextcloud_php_version }}-pgsql"
+  - "php{{ nextcloud_php_version }}-redis"
+  - "php{{ nextcloud_php_version }}-apcu"
+
+# Extra Packages
+nextcloud_extra_packages:
+  - nginx
+  - postgresql-client
+  - redis-tools
+  - unzip
+  - curl
+  - wget
+  - bzip2
+  - ffmpeg
+  - smbclient
+  - libsmbclient

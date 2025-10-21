@@ -1,0 +1,6 @@
+---
+- name: Deploy Nextcloud File Sharing Platform
+  hosts: proxmox_admin
+  become: true
+  roles:
+    - nextcloud_api
