@@ -25,7 +25,7 @@ _No specs currently in active development_
 | [006](planned/006-wireguard-vpn/) | WireGuard VPN | High | Medium | Secure remote access |
 | [007](planned/007-gitlab-ci-runner/) | GitLab CI Runners | Medium | Low | Build executors |
 | [008](planned/008-gitlab-cicd/) | GitLab CI/CD Pipelines | Medium | Medium | Automated deployments |
-| [009](planned/009-bittorrent-client/) | BitTorrent Client (qBittorrent) | Low | Low | Torrent download service |
+| [009](planned/009-jellyfin-media-server/) | Jellyfin Media Server | Medium | Medium | Media streaming service |
 
 ## Specification Lifecycle
 
