@@ -43,6 +43,7 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 | **52** | NetBox | 172.16.10.52 | netbox | `roles/netbox` | https://netbox.viljo.se |
 | **53** | GitLab | 172.16.10.53 | gitlab | `roles/gitlab` | https://gitlab.viljo.se |
 | **54** | GitLab Runner | 172.16.10.54 | gitlab-runner | `roles/gitlab_runner` | N/A (internal) |
+| **66** | Coolify | 172.16.10.66 | coolify | `roles/coolify` | https://coolify.viljo.se |
 
 ### Collaboration & Productivity
 
@@ -73,6 +74,7 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 | NetBox | 2 | 2048 | 32 | Infrastructure docs |
 | GitLab | 4 | 8192 | 128 | High resource usage |
 | GitLab Runner | 2 | 4096 | 64 | Build executor |
+| Coolify | 2 | 4096 | 64 | Self-hosted PaaS |
 | Nextcloud | 2 | 4096 | 64 | File storage |
 | Jellyfin | 4 | 4096 | 64 | Media streaming |
 | Home Assistant | 2 | 2048 | 32 | IoT automation |
@@ -83,7 +85,7 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 | Zipline | 2 | 2048 | 32 | Screenshot sharing |
 | WireGuard | 1 | 512 | 8 | VPN server |
 
-**Total Resources**: ~35 cores, ~46GB RAM, ~744GB storage
+**Total Resources**: ~37 cores, ~50GB RAM, ~808GB storage
 
 ## Configuration Files
 
@@ -119,6 +121,7 @@ Each service has configuration in:
 - NetBox (52)
 - GitLab (53)
 - GitLab Runner (54)
+- Coolify (66)
 
 ### User Applications
 - Nextcloud (55)
@@ -165,6 +168,7 @@ ssh root@192.168.1.3 pct exec 53 -- curl -I https://gitlab.viljo.se
 | PostgreSQL | ✅ Deployed | Yes | Production |
 | Keycloak | ⚠️ Planned | No | Not yet implemented |
 | NetBox | ✅ Implemented | No | Role complete, ready for deployment |
+| Coolify | ✅ Implemented | No | Role complete, ready for deployment |
 | GitLab | ⚠️ Partial | No | Role complete, not deployed |
 | GitLab Runner | ⚠️ Planned | No | Depends on GitLab |
 | Nextcloud | ⚠️ Planned | No | Not yet implemented |

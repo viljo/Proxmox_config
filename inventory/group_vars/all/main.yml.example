@@ -22,6 +22,7 @@ loopia_dns_records:
   - host: openmediavault
   - host: zipline
   - host: zabbix
+  - host: coolify
 traefik_services:
   - name: viljo
     host: "{{ public_domain }}"
@@ -83,6 +84,10 @@ traefik_services:
     host: "zabbix.{{ public_domain }}"
     container_id: "{{ zabbix_container_id }}"
     port: 80
+  - name: coolify
+    host: "coolify.{{ public_domain }}"
+    container_id: "{{ coolify_container_id }}"
+    port: "{{ coolify_service_port }}"
 management_bridge: vmbr0
 wan_bridge: vmbr2
 public_bridge: vmbr3
