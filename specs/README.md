@@ -9,6 +9,7 @@ This directory contains feature specifications for infrastructure enhancements a
 | Spec ID | Feature Name | Status | Deployed | Notes |
 |---------|--------------|--------|----------|-------|
 | [004](completed/004-demo-website/) | Demo Website | ✅ Complete | Yes | Validation website for Traefik/DNS |
+| [010](completed/010-links-portal/) | Links Portal & Matrix Landing | ✅ Complete | Yes | Service directory at links.viljo.se + matrix animation at viljo.se |
 
 ### 🚧 Active
 
@@ -119,6 +120,28 @@ git mv specs/active/XXX-feature specs/completed/XXX-feature
 - **Medium**: 1-2 weeks of work, some integration required
 - **High**: 2+ weeks, significant architecture changes
 
+## Global Requirements for All New Services
+
+All new public-facing services MUST comply with the following requirements:
+
+### Service Registry Requirement
+
+**SRR-001**: ALL new public-facing services MUST be added to the links portal
+- Service entry MUST be added to `roles/demo_site/templates/links.html.j2`
+- Entry MUST include: service name, description, icon/emoji, and full URL
+- Service MUST be added to appropriate logical grouping
+- When service is deprecated or removed, entry MUST be removed from links page
+
+**Purpose**: Ensures users have a centralized directory to discover all available services.
+
+**Reference**: See [Spec 010 - Links Portal](completed/010-links-portal/spec.md)
+
+### DNS and Routing Requirements
+
+- Service subdomain MUST be added to `loopia_dns_records` in inventory
+- Service MUST be added to `traefik_services` configuration
+- Service MUST be accessible via HTTPS with valid TLS certificate
+
 ## Implementation Guidelines
 
 Before moving a spec to Active:
@@ -137,6 +160,7 @@ Before moving to Completed:
 4. ✅ Documentation updated
 5. ✅ Verified working as specified
 6. ✅ Runbooks created if needed
+7. ✅ **Service added to links portal** (if public-facing)
 
 ## Archived Specs
 
@@ -165,5 +189,5 @@ This ensures:
 ---
 
 **Last Updated**: 2025-10-22
-**Total Specs**: 9 (1 completed, 1 active, 7 planned)
+**Total Specs**: 10 (2 completed, 1 active, 7 planned)
 

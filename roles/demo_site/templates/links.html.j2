@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Services - Viljo Infrastructure</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-card: #334155;
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --border: #475569;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 2px solid var(--border);
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 1.125rem;
+    }
+
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .service-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+
+    .service-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(59, 130, 246, 0.2);
+      border-color: var(--accent);
+    }
+
+    .service-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--bg-card);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .service-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--text-primary);
+    }
+
+    .service-description {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+      margin-bottom: 0.75rem;
+    }
+
+    .service-url {
+      color: var(--accent);
+      font-size: 0.875rem;
+      font-family: monospace;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 2px solid var(--border);
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+    }
+
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2rem;
+      }
+
+      .services-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Viljo Infrastructure Services</h1>
+      <p class="subtitle">Direct access to all deployed services</p>
+    </header>
+
+    <div class="services-grid">
+      <a href="https://gitlab.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">🦊</div>
+        <div class="service-name">GitLab</div>
+        <div class="service-description">Repository management and CI/CD platform</div>
+        <div class="service-url">gitlab.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://nextcloud.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">☁️</div>
+        <div class="service-name">Nextcloud</div>
+        <div class="service-description">File storage and collaboration platform</div>
+        <div class="service-url">nextcloud.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://jellyfin.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">🎬</div>
+        <div class="service-name">Jellyfin</div>
+        <div class="service-description">Media streaming and management server</div>
+        <div class="service-url">jellyfin.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://homeassistant.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">🏠</div>
+        <div class="service-name">Home Assistant</div>
+        <div class="service-description">IoT and home automation platform</div>
+        <div class="service-url">homeassistant.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://netbox.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">📦</div>
+        <div class="service-name">NetBox</div>
+        <div class="service-description">Infrastructure documentation and IPAM</div>
+        <div class="service-url">netbox.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://keycloak.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">🔐</div>
+        <div class="service-name">Keycloak</div>
+        <div class="service-description">Identity and access management (SSO/OIDC)</div>
+        <div class="service-url">keycloak.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://wazuh.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">🛡️</div>
+        <div class="service-name">Wazuh</div>
+        <div class="service-description">Security monitoring and threat detection</div>
+        <div class="service-url">wazuh.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://openmediavault.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">💾</div>
+        <div class="service-name">OpenMediaVault</div>
+        <div class="service-description">Network-attached storage (NAS) solution</div>
+        <div class="service-url">openmediavault.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://zipline.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">📸</div>
+        <div class="service-name">Zipline</div>
+        <div class="service-description">Screenshot sharing and image hosting</div>
+        <div class="service-url">zipline.{{ demo_site_external_domain }}</div>
+      </a>
+
+      <a href="https://qbittorrent.{{ demo_site_external_domain }}" class="service-card">
+        <div class="service-icon">🌊</div>
+        <div class="service-name">qBittorrent</div>
+        <div class="service-description">Torrent client and download manager</div>
+        <div class="service-url">qbittorrent.{{ demo_site_external_domain }}</div>
+      </a>
+    </div>
+
+    <footer>
+      <p>Proxmox Infrastructure - Managed with Ansible</p>
+      <p>All services are secured with TLS certificates via Traefik</p>
+    </footer>
+  </div>
+</body>
+</html>
