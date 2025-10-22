@@ -143,6 +143,54 @@
     - omv_provision_marker.rc is defined
     - omv_provision_marker.rc != 0
 
+- name: Install OMV-Extras plugin repository
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ omv_container_id }} -- bash -lc "wget -O - https://github.com/OpenMediaVault-Plugin-Developers/packages/raw/master/install | bash"
+  when:
+    - not ansible_check_mode
+    - omv_container_conf.stat.exists
+    - omv_provision_marker.rc is defined
+    - omv_provision_marker.rc != 0
+    - omv_install_extras
+
+- name: Set OMV web admin password
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ omv_container_id }} -- bash -lc "omv-firstaid <<EOF
+      1
+      {{ omv_admin_password }}
+      {{ omv_admin_password }}
+      EOF"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - omv_container_conf.stat.exists
+    - omv_provision_marker.rc is defined
+    - omv_provision_marker.rc != 0
+    - omv_admin_password is defined
+    - omv_admin_password | length > 0
+
+- name: Ensure OMV services are enabled and started
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ omv_container_id }} -- bash -lc "systemctl enable --now openmediavault-engined"
+  when:
+    - not ansible_check_mode
+    - omv_container_conf.stat.exists
+    - omv_provision_marker.rc is defined
+    - omv_provision_marker.rc != 0
+
+- name: Apply OMV configuration changes
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ omv_container_id }} -- bash -lc "omv-salt deploy run"
+  when:
+    - not ansible_check_mode
+    - omv_container_conf.stat.exists
+    - omv_provision_marker.rc is defined
+    - omv_provision_marker.rc != 0
+
 - name: Touch OMV provisioning marker
   ansible.builtin.command:
     cmd: >

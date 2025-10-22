@@ -1,0 +1,18 @@
+---
+- name: restart omv-engined
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ omv_container_id }} -- bash -lc "systemctl restart openmediavault-engined"
+  when: not ansible_check_mode
+
+- name: apply omv config
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ omv_container_id }} -- bash -lc "omv-salt deploy run"
+  when: not ansible_check_mode
+
+- name: restart nginx
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ omv_container_id }} -- bash -lc "systemctl restart nginx"
+  when: not ansible_check_mode
