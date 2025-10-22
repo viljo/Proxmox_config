@@ -48,7 +48,6 @@ Container ID = Last octet of IP address (on 172.16.10.0/24 network)
 | Home Assistant | **57** | 172.16.10.**57** | .57 = IoT |
 | qBittorrent | **59** | 172.16.10.**59** | .59 = Torrents |
 | Demo Site | **60** | 172.16.10.**60** | .60 = Demo |
-| Cosmos | **61** | 172.16.10.**61** | .61 = Dashboard |
 | Wazuh | **62** | 172.16.10.**62** | .62 = Security |
 | OpenMediaVault | **64** | 172.16.10.**64** | .64 = NAS |
 | Zipline | **65** | 172.16.10.**65** | .65 = Screenshots |
@@ -124,7 +123,6 @@ Key changes:
 - `homeassistant.yml`: 2030 → 57
 - `qbittorrent.yml`: 2070 → 59
 - `demo_site.yml`: 2300 → 60
-- `cosmos.yml`: 2100 → 61
 - `wazuh.yml`: 2080 → 62
 - `openmediavault.yml`: 2020 → 64
 - `zipline.yml`: 2060 → 65
@@ -159,7 +157,7 @@ To maintain organization, services are grouped by IP range:
 | .1-.9 | Core infrastructure | Firewall (1) |
 | .10-.49 | Reserved future infrastructure | - |
 | .50-.59 | Backend services | PostgreSQL (50), Keycloak (51), NetBox (52), GitLab (53-54), Nextcloud (55), Jellyfin (56), Home Assistant (57) |
-| .60-.89 | User applications | Demo Site (60), Cosmos (61), Wazuh (62), OpenMediaVault (64), Zipline (65) |
+| .60-.89 | User applications | Demo Site (60), Wazuh (62), OpenMediaVault (64), Zipline (65) |
 | .90-.99 | Network services | WireGuard VPN (90) |
 
 This provides clear separation and room for growth in each category.

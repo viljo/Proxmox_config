@@ -250,7 +250,6 @@ Update role defaults to match actual environment:
 | Qbittorrent | 2070 | 172.16.10.59 | 255.255.255.0 | 172.16.10.1 | Torrent |
 | Wazuh | 2080 | 172.16.10.62 | 255.255.255.0 | 172.16.10.1 | Monitoring |
 | Wireguard | 2090 | 172.16.10.90 | 255.255.255.0 | 172.16.10.1 | VPN |
-| Cosmos | 2100 | 172.16.10.61 | 255.255.255.0 | 172.16.10.1 | Dashboard (CONFLICT!) |
 | Netbox | 2150 | 172.16.10.52 | 255.255.255.0 | 172.16.10.1 | IPAM (CONFLICT!) |
 | Demo Site | 2300 | 172.16.10.60 | 255.255.255.0 | 172.16.10.1 | Test |
 
@@ -271,13 +270,11 @@ Update role defaults to match actual environment:
    **Files:**
    - `/Users/anders/git/Proxmox_config/inventory/group_vars/all/gitlab.yml` line 2
 
-3. **172.16.10.61** - Assigned to BOTH:
+3. **172.16.10.61** - Assigned to:
    - Zipline (zipline_ip_address: 172.16.10.61)
-   - Cosmos (cosmos_ip_address: 172.16.10.61)
-   
+
    **Files:**
    - `/Users/anders/git/Proxmox_config/inventory/group_vars/all/zipline.yml` line 2
-   - `/Users/anders/git/Proxmox_config/inventory/group_vars/all/cosmos.yml` line 2
 
 **Impact:**
 - Network collisions when deploying services
@@ -299,11 +296,12 @@ Assign unique IPs to each service:
 172.16.10.58 = (reserve for future)
 172.16.10.59 = Qbittorrent
 172.16.10.60 = Demo Site
-172.16.10.61 = Cosmos (reassign Zipline)
+172.16.10.61 = Zipline
 172.16.10.62 = Wazuh
-172.16.10.63 = Wireguard (move from .90)
+172.16.10.63 = (reserve for future)
 172.16.10.64 = OpenMediaVault (move from .52)
-172.16.10.65 = Zipline (move from .61)
+172.16.10.65 = (reserve for future)
+172.16.10.90 = Wireguard
 ```
 
 ---
@@ -382,13 +380,10 @@ Standardize all variable names to use full service names:
 5. `/Users/anders/git/Proxmox_config/inventory/group_vars/all/openmediavault.yml`
    - Line 3: Change `omv_ip_address: 172.16.10.52` → `172.16.10.64`
 
-6. `/Users/anders/git/Proxmox_config/inventory/group_vars/all/cosmos.yml`
-   - Line 2: Change `cosmos_ip_address: 172.16.10.61` → `172.16.10.61` (keep) or assign new
+6. `/Users/anders/git/Proxmox_config/inventory/group_vars/all/zipline.yml`
+   - Line 2: Keep `zipline_ip_address: 172.16.10.61`
 
-7. `/Users/anders/git/Proxmox_config/inventory/group_vars/all/zipline.yml`
-   - Line 2: Change `zipline_ip_address: 172.16.10.61` → `172.16.10.65`
-
-8. All service group_vars files - Update abbreviated variable names:
+7. All service group_vars files - Update abbreviated variable names:
    - `nextcloud.yml`: `nc_*` → `nextcloud_*`
    - `homeassistant.yml`: `ha_*` → `homeassistant_*`
    - `openmediavault.yml`: `omv_*` → `openmediavault_*`
