@@ -24,7 +24,6 @@ All container IDs now match their IP last octet (172.16.10.X → Container ID X)
 | HomeAssistant | 2030 | **57** | 172.16.10.57 |
 | Qbittorrent | 2070 | **59** | 172.16.10.59 |
 | Demo Site | 2300 | **60** | 172.16.10.60 |
-| Cosmos | 2100 | **61** | 172.16.10.61 |
 | Wazuh | 2080 | **62** | 172.16.10.62 |
 | OpenMediaVault | 2020 | **64** | 172.16.10.64 ← NEW IP |
 | Zipline | 2060 | **65** | 172.16.10.65 ← NEW IP |
@@ -168,8 +167,7 @@ All container IDs now match their IP last octet (172.16.10.X → Container ID X)
 10. `inventory/group_vars/all/homeassistant.yml` - Container ID 2030 → 57, variables renamed
 11. `inventory/group_vars/all/qbittorrent.yml` - Container ID 2070 → 59
 12. `inventory/group_vars/all/demo_site.yml` - Container ID 2300 → 60
-13. `inventory/group_vars/all/cosmos.yml` - Container ID 2100 → 61
-14. `inventory/group_vars/all/wazuh.yml` - Container ID 2080 → 62
+13. `inventory/group_vars/all/wazuh.yml` - Container ID 2080 → 62
 15. `inventory/group_vars/all/openmediavault.yml` - Container ID 2020 → 64, IP → .64, variables renamed
 16. `inventory/group_vars/all/zipline.yml` - Container ID 2060 → 65, IP → .65
 17. `inventory/group_vars/all/wireguard.yml` - Container ID 2090 → 90

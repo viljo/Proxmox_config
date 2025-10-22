@@ -16,7 +16,6 @@ loopia_dns_records:
   - host: nextcloud
   - host: jellyfin
   - host: homeassistant
-  - host: cosmos
   - host: qbittorrent
   - host: wazuh
   - host: openmediavault
@@ -50,10 +49,6 @@ traefik_services:
     host: "homeassistant.{{ public_domain }}"
     container_id: "{{ ha_container_id }}"
     port: 8123
-  - name: cosmos
-    host: "cosmos.{{ public_domain }}"
-    container_id: "{{ cosmos_container_id }}"
-    port: 9000
   - name: qbittorrent
     host: "qbittorrent.{{ public_domain }}"
     container_id: "{{ qbittorrent_container_id }}"
