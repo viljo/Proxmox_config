@@ -30,7 +30,7 @@ services:
       {{ key }}: {{ value | to_json }}
 {% endfor %}
     ports:
-      - "{{ netbox_http_port }}:8080"
+      - "{{ netbox_service_port }}:8080"
     volumes:
       - netbox_media:/opt/netbox/netbox/media
       - netbox_reports:/opt/netbox/netbox/reports

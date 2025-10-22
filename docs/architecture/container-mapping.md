@@ -164,7 +164,7 @@ ssh root@192.168.1.3 pct exec 53 -- curl -I https://gitlab.viljo.se
 | Firewall | ✅ Deployed | Yes | Production |
 | PostgreSQL | ✅ Deployed | Yes | Production |
 | Keycloak | ⚠️ Planned | No | Not yet implemented |
-| NetBox | ⚠️ Planned | No | Not yet implemented |
+| NetBox | ✅ Implemented | No | Role complete, ready for deployment |
 | GitLab | ⚠️ Partial | No | Role complete, not deployed |
 | GitLab Runner | ⚠️ Planned | No | Depends on GitLab |
 | Nextcloud | ⚠️ Planned | No | Not yet implemented |
