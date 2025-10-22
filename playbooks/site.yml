@@ -15,6 +15,7 @@
       tags: ["loopia_ddns"]
     - postgresql
     - netbox
+    - coolify
     - role: zabbix
       tags: ["zabbix", "monitoring"]
     - role: demo_site

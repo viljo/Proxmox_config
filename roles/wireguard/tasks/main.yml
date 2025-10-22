@@ -100,7 +100,17 @@
 - name: Install WireGuard packages
   ansible.builtin.command:
     cmd: >
-      pct exec {{ wireguard_container_id }} -- bash -lc "apt-get update && apt-get install -y wireguard qrencode"
+      pct exec {{ wireguard_container_id }} -- bash -lc "apt-get update && apt-get install -y wireguard iptables qrencode"
+  when:
+    - not ansible_check_mode
+    - wireguard_container_conf.stat.exists
+    - wireguard_provision_marker.rc is defined
+    - wireguard_provision_marker.rc != 0
+
+- name: Enable IP forwarding
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ wireguard_container_id }} -- bash -lc "echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-wireguard.conf && sysctl -p /etc/sysctl.d/99-wireguard.conf"
   when:
     - not ansible_check_mode
     - wireguard_container_conf.stat.exists
