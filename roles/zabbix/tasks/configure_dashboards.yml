@@ -1,0 +1,44 @@
+---
+# Configure custom Zabbix dashboards using API
+- name: Wait for Zabbix API to be available
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "timeout 60 bash -c 'until curl -s http://localhost/api_jsonrpc.php > /dev/null; do sleep 2; done'"
+  register: api_wait
+  failed_when: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Copy dashboard provisioning script
+  ansible.builtin.template:
+    src: setup_dashboards.py.j2
+    dest: "{{ zabbix_rootfs_path }}/root/setup_dashboards.py"
+    owner: root
+    group: root
+    mode: "0750"
+  when: zabbix_container_conf.stat.exists
+
+- name: Install Python dependencies for dashboard setup
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "apt-get install -y python3 python3-requests"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+
+- name: Execute dashboard provisioning script
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- python3 /root/setup_dashboards.py
+  register: dashboard_setup
+  changed_when: "'Dashboard created' in dashboard_setup.stdout"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+
+- name: Display dashboard setup results
+  ansible.builtin.debug:
+    var: dashboard_setup.stdout_lines
+  when:
+    - dashboard_setup is defined
+    - dashboard_setup.stdout_lines is defined
