@@ -1,16 +1,20 @@
 ---
-netbox_container_id: 2150
+netbox_container_id: 52
 netbox_hostname: netbox
-netbox_domain: infra.local
-netbox_memory: 4096
+netbox_domain: viljo.se
+netbox_memory: 2048
 netbox_cores: 2
-netbox_disk: 64
-netbox_swap: 2048
-netbox_bridge: "{{ public_bridge | default('vmbr0') }}"
-netbox_ip_config: dhcp
+netbox_disk: 32
+netbox_swap: 1024
+netbox_bridge: "{{ public_bridge | default('vmbr3') }}"
+netbox_ip_address: 172.16.10.52
+netbox_netmask: 24
+netbox_ip_config: "{{ netbox_ip_address }}/{{ netbox_netmask }}"
 netbox_vlan_tag: null
-netbox_gateway: null
-netbox_dns_servers: []
+netbox_gateway: 172.16.10.1
+netbox_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
 netbox_rootfs_storage: local-lvm
 netbox_unprivileged: true
 netbox_start_onboot: true
@@ -25,7 +29,7 @@ netbox_version: v4.0.9
 netbox_image: "ghcr.io/netbox-community/netbox:{{ netbox_version }}"
 netbox_postgres_image: postgres:15-alpine
 netbox_redis_image: redis:7-alpine
-netbox_http_port: 8001
+netbox_service_port: 8080
 netbox_db_name: netbox
 netbox_db_user: netbox
 netbox_db_password: "{{ vault_netbox_db_password | default('') }}"
@@ -33,11 +37,11 @@ netbox_redis_password: "{{ vault_netbox_redis_password | default('') }}"
 netbox_superuser_email: "admin@{{ netbox_domain }}"
 netbox_superuser_password: "{{ vault_netbox_superuser_password | default('') }}"
 netbox_secret_key: "{{ vault_netbox_secret_key | default('') }}"
-netbox_allowed_hosts: "{{ netbox_hostname }},{{ netbox_hostname }}.{{ netbox_domain }},netbox,localhost"
+netbox_allowed_hosts: "{{ netbox_hostname }},{{ netbox_hostname }}.{{ netbox_domain }},netbox.{{ netbox_domain }},netbox,localhost"
 netbox_env_defaults:
   ALLOWED_HOSTS: "{{ netbox_allowed_hosts }}"
   CACHE_TIMEOUT: "900"
-  CSRF_TRUSTED_ORIGINS: "https://{{ netbox_hostname }}.{{ netbox_domain }}"
+  CSRF_TRUSTED_ORIGINS: "https://netbox.{{ netbox_domain }}"
   DB_HOST: postgres
   DB_NAME: "{{ netbox_db_name }}"
   DB_PASSWORD: "{{ netbox_db_password }}"

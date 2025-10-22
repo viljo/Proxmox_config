@@ -36,7 +36,7 @@ traefik_services:
   - name: netbox
     host: "netbox.{{ public_domain }}"
     container_id: "{{ netbox_container_id }}"
-    port: 8001
+    port: "{{ netbox_service_port }}"
   - name: nextcloud
     host: "nextcloud.{{ public_domain }}"
     container_id: "{{ nc_container_id }}"
