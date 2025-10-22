@@ -1,0 +1,286 @@
+---
+- name: Ensure Zabbix template cache directory exists
+  ansible.builtin.file:
+    path: "{{ zabbix_template_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download template for Zabbix container
+  ansible.builtin.get_url:
+    url: "{{ zabbix_template_url }}"
+    dest: "{{ zabbix_template_file }}"
+    mode: "0644"
+    force: false
+  when: not ansible_check_mode
+
+- name: Compose Zabbix container network configuration
+  ansible.builtin.set_fact:
+    zabbix_net0: >-
+      name=eth0,bridge={{ zabbix_bridge }}{% if zabbix_vlan_tag %},tag={{ zabbix_vlan_tag }}{% endif %},ip={{ zabbix_ip_config }}{% if zabbix_gateway is defined and zabbix_gateway %},gw={{ zabbix_gateway }}{% endif %}
+
+- name: Ensure Zabbix container exists
+  ansible.builtin.shell: |
+    pct create {{ zabbix_container_id }} {{ zabbix_template_file }} \
+      --hostname {{ zabbix_hostname }} \
+      --cores {{ zabbix_cores }} \
+      --memory {{ zabbix_memory }} \
+      --swap {{ zabbix_swap }} \
+      --rootfs {{ zabbix_rootfs_storage }}:{{ zabbix_disk }} \
+      --net0 {{ zabbix_net0 }} \
+      {% if zabbix_unprivileged %}--unprivileged 1{% endif %}
+  args:
+    creates: "/etc/pve/lxc/{{ zabbix_container_id }}.conf"
+  when: not ansible_check_mode
+
+- name: Stat Zabbix container configuration
+  ansible.builtin.stat:
+    path: "/etc/pve/lxc/{{ zabbix_container_id }}.conf"
+  register: zabbix_container_conf
+
+- name: Ensure Zabbix container onboot flag is set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ zabbix_container_id }}.conf"
+    regexp: '^onboot:'
+    line: "onboot: {{ 1 if zabbix_start_onboot else 0 }}"
+    insertafter: EOF
+  when: zabbix_container_conf.stat.exists
+
+- name: Ensure Zabbix container features list is present
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ zabbix_container_id }}.conf"
+    regexp: '^features:'
+    line: "features: {{ zabbix_features | dictsort | map('join', '=') | join(';') }}"
+    insertafter: EOF
+  when: zabbix_container_conf.stat.exists and zabbix_features | length > 0
+
+- name: Ensure Zabbix container DNS servers are set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ zabbix_container_id }}.conf"
+    regexp: '^nameserver:'
+    line: "nameserver: {{ zabbix_dns_servers | join(' ') }}"
+    insertafter: EOF
+  when: zabbix_container_conf.stat.exists and zabbix_dns_servers is defined and zabbix_dns_servers | length > 0
+
+- name: Read Zabbix container status
+  ansible.builtin.command:
+    cmd: pct status {{ zabbix_container_id }}
+  register: zabbix_status
+  changed_when: false
+  failed_when: zabbix_status.rc not in [0, 2]
+  when: zabbix_container_conf.stat.exists
+
+- name: Start Zabbix container
+  ansible.builtin.command:
+    cmd: pct start {{ zabbix_container_id }}
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_status.rc is defined
+    - (zabbix_status.rc != 0 or ('stopped' in zabbix_status.stdout | default('')))
+
+- name: Wait for Zabbix container to boot
+  ansible.builtin.command:
+    cmd: pct exec {{ zabbix_container_id }} -- bash -lc "true"
+  register: zabbix_boot_probe
+  failed_when: false
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: zabbix_boot_probe.rc == 0
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+
+- name: Ensure Zabbix root password is set
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "echo 'root:{{ zabbix_root_password }}' | chpasswd"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_root_password is defined
+    - zabbix_root_password | length > 0
+
+- name: Check Zabbix provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "test -f /etc/zabbix/.provisioned"
+  register: zabbix_provision_marker
+  changed_when: false
+  failed_when: false
+  when: zabbix_container_conf.stat.exists
+
+# Install Zabbix repository and packages
+- name: Install Zabbix repository prerequisites
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "apt-get update && apt-get install -y wget curl gnupg2 apt-transport-https ca-certificates"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_provision_marker.rc is defined
+    - zabbix_provision_marker.rc != 0
+
+- name: Download Zabbix repository package
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "wget -O /tmp/zabbix-release.deb https://repo.zabbix.com/zabbix/{{ zabbix_version_major }}.{{ zabbix_version_minor }}/debian/pool/main/z/zabbix-release/zabbix-release_latest+debian13_all.deb"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_provision_marker.rc is defined
+    - zabbix_provision_marker.rc != 0
+
+- name: Install Zabbix repository
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "dpkg -i /tmp/zabbix-release.deb && apt-get update"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_provision_marker.rc is defined
+    - zabbix_provision_marker.rc != 0
+
+- name: Install Zabbix server, frontend, and agent
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y zabbix-server-pgsql zabbix-frontend-php php{{ zabbix_version_major }}.2-pgsql zabbix-{{ zabbix_web_server }}-conf zabbix-sql-scripts zabbix-agent postgresql-client"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_provision_marker.rc is defined
+    - zabbix_provision_marker.rc != 0
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+
+# Configure PostgreSQL database
+- name: Check if Zabbix database exists
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ postgres_container_id }} -- bash -lc "sudo -u postgres psql -tAc \"SELECT 1 FROM pg_database WHERE datname='{{ zabbix_db_name }}'\""
+  register: zabbix_db_check
+  changed_when: false
+  failed_when: false
+  when: zabbix_container_conf.stat.exists
+
+- name: Create Zabbix database user
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ postgres_container_id }} -- bash -lc "sudo -u postgres psql -c \"CREATE ROLE {{ zabbix_db_user }} WITH LOGIN PASSWORD '{{ zabbix_db_password }}';\""
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_db_check.stdout != "1"
+
+- name: Create Zabbix database
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ postgres_container_id }} -- bash -lc "sudo -u postgres createdb -O {{ zabbix_db_user }} {{ zabbix_db_name }}"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_db_check.stdout != "1"
+
+- name: Check if Zabbix database schema is imported
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "test -f /etc/zabbix/.db_schema_imported"
+  register: zabbix_schema_check
+  changed_when: false
+  failed_when: false
+  when: zabbix_container_conf.stat.exists
+
+- name: Import Zabbix initial database schema
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "zcat /usr/share/zabbix-sql-scripts/postgresql/server.sql.gz | PGPASSWORD='{{ zabbix_db_password }}' psql -h {{ zabbix_db_host }} -U {{ zabbix_db_user }} {{ zabbix_db_name }}"
+  no_log: true
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_schema_check.rc != 0
+
+- name: Mark database schema as imported
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "touch /etc/zabbix/.db_schema_imported"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_schema_check.rc != 0
+
+# Configure Zabbix server
+- name: Template Zabbix server configuration
+  ansible.builtin.template:
+    src: zabbix_server.conf.j2
+    dest: "{{ zabbix_rootfs_path }}/etc/zabbix/zabbix_server.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  when: zabbix_container_conf.stat.exists
+  notify: restart zabbix-server
+
+# Configure Zabbix frontend
+- name: Template Zabbix frontend configuration
+  ansible.builtin.template:
+    src: zabbix.conf.php.j2
+    dest: "{{ zabbix_rootfs_path }}/etc/zabbix/web/zabbix.conf.php"
+    owner: root
+    group: root
+    mode: "0644"
+  when: zabbix_container_conf.stat.exists
+  notify: restart zabbix-frontend
+
+- name: Configure PHP timezone for Zabbix
+  ansible.builtin.lineinfile:
+    path: "{{ zabbix_rootfs_path }}/etc/php/8.2/apache2/php.ini"
+    regexp: '^;?date.timezone\s*='
+    line: "date.timezone = {{ zabbix_php_timezone }}"
+  when: zabbix_container_conf.stat.exists
+  notify: restart zabbix-frontend
+
+# Start services
+- name: Ensure Zabbix server service is enabled
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- systemctl enable zabbix-server zabbix-agent {{ zabbix_web_server }}
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+
+- name: Ensure Zabbix services are running
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- systemctl restart zabbix-server zabbix-agent {{ zabbix_web_server }}
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+
+# Deploy Zabbix agent to monitored containers
+- name: Deploy Zabbix agent configuration to containers
+  ansible.builtin.include_tasks: deploy_agent.yml
+  loop: "{{ zabbix_monitored_containers }}"
+  loop_control:
+    loop_var: container
+  when: zabbix_container_conf.stat.exists
+
+# Configure custom dashboards
+- name: Deploy custom dashboard configuration
+  ansible.builtin.include_tasks: configure_dashboards.yml
+  when:
+    - zabbix_container_conf.stat.exists
+    - zabbix_create_dashboards
+
+- name: Touch Zabbix provisioning marker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ zabbix_container_id }} -- bash -lc "mkdir -p /etc/zabbix && touch /etc/zabbix/.provisioned"
+  when:
+    - not ansible_check_mode
+    - zabbix_container_conf.stat.exists
+    - zabbix_provision_marker.rc is defined
+    - zabbix_provision_marker.rc != 0
