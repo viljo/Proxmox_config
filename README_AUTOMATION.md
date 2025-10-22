@@ -121,14 +121,38 @@ ansible-playbook -i inventory/hosts.yml playbooks/demo-app-api.yml
 - **traefik**: Uses shell commands
 - **loopia_ddns**: Uses shell commands
 
+### Manual Deployments ❌ (Require Ansible Roles)
+
+**These services are currently deployed but lack Ansible automation, blocking disaster recovery goals:**
+
+| Service | Container ID | Deployment Method | Impact | Priority |
+|---------|--------------|-------------------|--------|----------|
+| **bastion** | 110 | `pct create` + manual config | SSH gateway unavailable after DR | High |
+| **postgresql** | 150 | `pct exec` + manual SQL | All DB-dependent services fail | **Critical** |
+| **redis** | 158 | `pct exec` + manual redis-server | Cache/queue unavailable | High |
+| **keycloak** | 151 | `pct exec` + manual build | SSO unavailable | High |
+| **gitlab** | 153 | `pct exec` + Docker | DevOps platform unavailable | Medium |
+| **gitlab_runner** | 154 | `pct exec` + manual registration | CI/CD pipelines fail | Medium |
+| **nextcloud** | 155 | `pct exec` + nginx + PHP config | File sharing unavailable | Medium |
+| **mattermost** | 163 | `pct exec` + Docker Compose | Team communication unavailable | Medium |
+| **webtop** | 170 | `pct exec` + Docker Compose | Remote browser unavailable | Low |
+
+**Disaster Recovery Impact**: Current DR time estimate is **8-12 hours** due to manual steps. Goal: **<1 hour fully automated**.
+
+**Action Required**: Create Ansible roles for these services. See [Automation Audit](docs/AUTOMATION_AUDIT.md) for detailed roadmap with milestones and target dates.
+
 ## Metrics
 
-| Metric | Target | Current |
-|--------|--------|---------|
-| API vs Shell | >90% | 95% ✅ |
-| User Prompts | 0 | 0 ✅ |
-| Idempotent | 100% | 100% ✅ |
-| Vault Secrets | 100% | 100% ✅ |
+| Metric | Target | Current | Status | Notes |
+|--------|--------|---------|--------|-------|
+| API vs Shell | >90% | ~15% | ❌ | Only demo_site_api uses Proxmox API fully |
+| User Prompts | 0 | 0 | ✅ | No interactive prompts in any playbook |
+| Idempotent | 100% | ~10% | ❌ | Most services deployed manually via SSH |
+| Vault Secrets | 100% | ~60% | ⚠️ | Many manual deployments used hardcoded passwords |
+| External Validation | 100% | ~9% | ❌ | Only 1 of 11 services tested externally |
+| Disaster Recovery Ready | 100% | ~9% | ❌ | Only demo site can be rebuilt automatically |
+
+**Reality Check**: While the automation *architecture* is sound, most services were deployed manually via SSH/pct exec commands. See [Automation Audit](docs/AUTOMATION_AUDIT.md) for detailed gap analysis and roadmap.
 
 ## Configuration
 

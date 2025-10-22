@@ -23,69 +23,89 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 
 ## Container Inventory
 
-### Infrastructure Services
+### Currently Deployed Services
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **101** | Firewall | 172.16.10.101 | firewall | `roles/firewall` | N/A (internal router) |
-| **150** | PostgreSQL | 172.16.10.150 | postgres | `roles/postgresql` | N/A (internal database) |
+#### Infrastructure & Core Services
 
-### Authentication & Identity
+| Container ID | Service Name | IP Address | Network | Hostname | Role | Public URL | Automation Status |
+|--------------|--------------|------------|---------|----------|------|------------|-------------------|
+| **101** | Firewall | 172.16.10.101<br>192.168.1.1 | DMZ/Mgmt | firewall | `roles/firewall_api` | N/A (router) | ⚠️ Partial |
+| **110** | SSH Bastion | 192.168.1.10 | Mgmt | bastion | N/A | ssh.viljo.se | ❌ Manual |
+| **150** | PostgreSQL 17 | 172.16.10.150 | DMZ | postgres | N/A | N/A (internal) | ❌ Manual |
+| **158** | Redis 8.0.2 | 172.16.10.158 | DMZ | redis | N/A | N/A (internal) | ❌ Manual |
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **151** | Keycloak | 172.16.10.151 | keycloak | `roles/keycloak` | https://keycloak.viljo.se |
+#### Authentication & Identity
 
-### DevOps & Infrastructure
+| Container ID | Service Name | IP Address | Network | Hostname | Role | Public URL | Automation Status |
+|--------------|--------------|------------|---------|----------|------|------------|-------------------|
+| **151** | Keycloak 24.0.3 | 172.16.10.151 | DMZ | keycloak | N/A | https://keycloak.viljo.se | ❌ Manual |
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **152** | NetBox | 172.16.10.152 | netbox | `roles/netbox` | https://netbox.viljo.se |
-| **153** | GitLab | 172.16.10.153 | gitlab | `roles/gitlab` | https://gitlab.viljo.se |
-| **154** | GitLab Runner | 172.16.10.154 | gitlab-runner | `roles/gitlab_runner` | N/A (internal) |
+#### DevOps & Infrastructure
 
-### Collaboration & Productivity
+| Container ID | Service Name | IP Address | Network | Hostname | Role | Public URL | Automation Status |
+|--------------|--------------|------------|---------|----------|------|------------|-------------------|
+| **153** | GitLab CE 18.5.0 | 172.16.10.153 | DMZ | gitlab | N/A | https://gitlab.viljo.se | ❌ Manual |
+| **154** | GitLab Runner 18.5.0 | 172.16.10.154 | DMZ | gitlab-runner | N/A | N/A (internal) | ❌ Manual |
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **155** | Nextcloud | 172.16.10.155 | nextcloud | `roles/nextcloud` | https://nextcloud.viljo.se |
-| **156** | Jellyfin | 172.16.10.156 | jellyfin | `roles/jellyfin` | https://jellyfin.viljo.se |
-| **157** | Home Assistant | 172.16.10.157 | homeassistant | `roles/homeassistant` | https://ha.viljo.se |
+#### Collaboration & Productivity
 
-### Utilities & Tools
+| Container ID | Service Name | IP Address | Network | Hostname | Role | Public URL | Automation Status |
+|--------------|--------------|------------|---------|----------|------|------------|-------------------|
+| **155** | Nextcloud 32.0.0 | 172.16.10.155 | DMZ | nextcloud | `roles/nextcloud_api` | https://nextcloud.viljo.se | ❌ Manual |
+| **163** | Mattermost 11.0.2 | 172.16.10.163 | DMZ | mattermost | N/A | https://mattermost.viljo.se | ❌ Manual |
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **159** | qBittorrent | 172.16.10.159 | qbittorrent | `roles/qbittorrent` | https://qbit.viljo.se |
-| **160** | Demo Site | 172.16.10.160 | demosite | `roles/demo_site` | https://demosite.viljo.se |
-| **161** | Cosmos | 172.16.10.161 | cosmos | `roles/cosmos` | https://cosmos.viljo.se |
-| **162** | Wazuh | 172.16.10.162 | wazuh | `roles/wazuh` | https://wazuh.viljo.se |
-| **164** | OpenMediaVault | 172.16.10.164 | openmediavault | `roles/openmediavault` | https://omv.viljo.se |
-| **165** | Zipline | 172.16.10.165 | zipline | `roles/zipline` | https://zipline.viljo.se |
-| **190** | WireGuard VPN | 172.16.10.190 | wireguard | `roles/wireguard` | N/A (VPN endpoint) |
+#### Utilities & Tools
+
+| Container ID | Service Name | IP Address | Network | Hostname | Role | Public URL | Automation Status |
+|--------------|--------------|------------|---------|----------|------|------------|-------------------|
+| **160** | Demo Site | 172.16.10.160 | DMZ | demosite | `roles/demo_site_api` | https://demosite.viljo.se | ✅ Automated |
+| **170** | Webtop (XFCE) | 172.16.10.170 | DMZ | webtop | N/A | https://browser.viljo.se | ❌ Manual |
+
+**Automation Status Legend:**
+- ✅ **Automated**: Fully deployed via Ansible (idempotent, supports `--check` mode)
+- ⚠️ **Partial**: Ansible role exists but uses manual steps (pct exec commands)
+- ❌ **Manual**: Deployed via SSH/pct exec (requires Ansible role for disaster recovery)
+
+### Planned Services (Not Yet Deployed)
+
+| Container ID | Service Name | IP Address | Hostname | Notes |
+|--------------|--------------|------------|----------|-------|
+| **152** | NetBox | 172.16.10.152 | netbox | Infrastructure documentation |
+| **156** | Jellyfin | 172.16.10.156 | jellyfin | Media streaming |
+| **157** | Home Assistant | 172.16.10.157 | homeassistant | IoT automation |
+| **159** | qBittorrent | 172.16.10.159 | qbittorrent | Torrent client |
+| **161** | Cosmos | 172.16.10.161 | cosmos | Dashboard |
+| **162** | Wazuh | 172.16.10.162 | wazuh | Security monitoring |
+| **164** | OpenMediaVault | 172.16.10.164 | openmediavault | NAS/Storage |
+| **165** | Zipline | 172.16.10.165 | zipline | Screenshot sharing |
+| **190** | WireGuard VPN | 172.16.10.190 | wireguard | VPN server |
 
 ## Resource Allocation Summary
 
-| Service | CPU Cores | RAM (MB) | Disk (GB) | Notes |
-|---------|-----------|----------|-----------|-------|
-| Firewall | 1 | 512 | 8 | Minimal - routing only |
-| PostgreSQL | 2 | 2048 | 32 | Shared database |
-| Keycloak | 2 | 2048 | 16 | SSO/Authentication |
-| NetBox | 2 | 2048 | 32 | Infrastructure docs |
-| GitLab | 4 | 8192 | 128 | High resource usage |
-| GitLab Runner | 2 | 4096 | 64 | Build executor |
-| Nextcloud | 2 | 4096 | 64 | File storage |
-| Jellyfin | 4 | 4096 | 64 | Media streaming |
-| Home Assistant | 2 | 2048 | 32 | IoT automation |
-| qBittorrent | 2 | 2048 | 128 | Torrent client |
-| Demo Site | 1 | 1024 | 8 | Static website |
-| Cosmos | 2 | 2048 | 32 | Dashboard |
-| Wazuh | 4 | 8192 | 64 | Security monitoring |
-| OpenMediaVault | 2 | 2048 | 64 | NAS/Storage |
-| Zipline | 2 | 2048 | 32 | Screenshot sharing |
-| WireGuard | 1 | 512 | 8 | VPN server |
+### Currently Deployed Services
 
-**Total Resources**: ~37 cores, ~48GB RAM, ~776GB storage
+| Service | CPU Cores | RAM (GB) | Disk (GB) | Notes | Automation |
+|---------|-----------|----------|-----------|-------|------------|
+| Firewall | 1 | 0.5 | 8 | NAT gateway + routing | ⚠️ Partial |
+| SSH Bastion | 1 | 0.5 | 8 | External SSH access | ❌ Manual |
+| PostgreSQL | 4 | 8 | 100 | Shared database (Keycloak, GitLab, Nextcloud, Mattermost) | ❌ Manual |
+| Redis | 2 | 2 | 20 | Cache + message queue (GitLab, Nextcloud) | ❌ Manual |
+| Keycloak | 4 | 2 | 30 | SSO/Authentication | ❌ Manual |
+| GitLab CE | 4 | 8 | 100 | DevOps platform + CI/CD | ❌ Manual |
+| GitLab Runner | 2 | 2 | 40 | Build executor (3 runners) | ❌ Manual |
+| Nextcloud | 4 | 6 | 100 | File storage + collaboration | ❌ Manual |
+| Mattermost | 2 | 4 | 40 | Team collaboration | ❌ Manual |
+| Demo Site | 1 | 1 | 8 | Static website (testing) | ✅ Automated |
+| Webtop | 2 | 4 | 40 | Remote browser (XFCE desktop) | ❌ Manual |
+
+**Total Deployed**: 27 cores, 38 GB RAM, 494 GB storage across 11 containers
+
+### Additional Infrastructure (Not Containers)
+
+| Component | Location | Resources | Notes |
+|-----------|----------|-----------|-------|
+| Traefik | Proxmox host | ~100MB RAM | Reverse proxy, HTTPS termination |
+| Loopia DDNS | Proxmox host | Minimal | DNS auto-update (15min intervals) |
 
 ## Configuration Files
 
@@ -160,26 +180,37 @@ ssh root@192.168.1.3 pct exec 153 -- ping -c 2 1.1.1.1
 ssh root@192.168.1.3 pct exec 153 -- curl -I https://gitlab.viljo.se
 ```
 
-## Provisioning Status
+## Deployment and Automation Status
 
-| Service | Status | Deployed | Notes |
-|---------|--------|----------|-------|
-| Firewall | ✅ Deployed | Yes | Production |
-| PostgreSQL | ✅ Deployed | Yes | Production |
-| Keycloak | ⚠️ Planned | No | Not yet implemented |
-| NetBox | ⚠️ Planned | No | Not yet implemented |
-| GitLab | ⚠️ Partial | No | Role complete, not deployed |
-| GitLab Runner | ⚠️ Planned | No | Depends on GitLab |
-| Nextcloud | ⚠️ Planned | No | Not yet implemented |
-| Jellyfin | ⚠️ Planned | No | Not yet implemented |
-| Home Assistant | ⚠️ Planned | No | Not yet implemented |
-| qBittorrent | ⚠️ Planned | No | Not yet implemented |
-| Demo Site | ✅ Deployed | Yes | Testing/validation |
-| Cosmos | ⚠️ Planned | No | Not yet implemented |
-| Wazuh | ⚠️ Planned | No | Not yet implemented |
-| OpenMediaVault | ⚠️ Planned | No | Not yet implemented |
-| Zipline | ⚠️ Planned | No | Not yet implemented |
-| WireGuard VPN | ⚠️ Planned | No | Not yet implemented |
+### Deployed Services (11 containers)
+
+| Service | Status | Automation | Ansible Role | External Access | Notes |
+|---------|--------|------------|--------------|-----------------|-------|
+| Firewall | ✅ Running | ⚠️ Partial | `firewall_api` | N/A | Role uses pct exec |
+| SSH Bastion | ✅ Running | ❌ Manual | N/A | ssh.viljo.se | SSH gateway |
+| PostgreSQL 17 | ✅ Running | ❌ Manual | N/A | N/A | Shared DB (4 services) |
+| Redis 8.0.2 | ✅ Running | ❌ Manual | N/A | N/A | Cache + queue |
+| Keycloak 24.0.3 | ✅ Running | ❌ Manual | N/A | https://keycloak.viljo.se | SSO (not externally validated) |
+| GitLab CE 18.5.0 | ✅ Running | ❌ Manual | N/A | https://gitlab.viljo.se | DevOps platform |
+| GitLab Runner 18.5.0 | ✅ Running | ❌ Manual | N/A | N/A | 3 runners active |
+| Nextcloud 32.0.0 | ✅ Running | ❌ Manual | `nextcloud_api` | https://nextcloud.viljo.se | File sharing |
+| Mattermost 11.0.2 | ✅ Running | ❌ Manual | N/A | https://mattermost.viljo.se | Awaiting external test |
+| Demo Site | ✅ Running | ✅ Automated | `demo_site_api` | https://demosite.viljo.se | Only automated service |
+| Webtop (XFCE) | ✅ Running | ❌ Manual | N/A | https://browser.viljo.se | Remote desktop |
+
+### Planned Services (9 services)
+
+| Service | Container ID | IP | Priority | Notes |
+|---------|--------------|-----|----------|-------|
+| NetBox | 152 | 172.16.10.152 | Medium | Infrastructure docs |
+| Jellyfin | 156 | 172.16.10.156 | Low | Media streaming |
+| Home Assistant | 157 | 172.16.10.157 | Low | IoT automation |
+| qBittorrent | 159 | 172.16.10.159 | Low | Torrent client |
+| Cosmos | 161 | 172.16.10.161 | Low | Dashboard |
+| Wazuh | 162 | 172.16.10.162 | Medium | Security monitoring |
+| OpenMediaVault | 164 | 172.16.10.164 | Low | NAS/Storage |
+| Zipline | 165 | 172.16.10.165 | Low | Screenshot sharing |
+| WireGuard VPN | 190 | 172.16.10.190 | High | VPN server |
 
 ## Reserved IP Ranges
 
@@ -188,12 +219,28 @@ ssh root@192.168.1.3 pct exec 153 -- curl -I https://gitlab.viljo.se
 - **60-89**: User-facing applications
 - **90-99**: Network services (VPN, DNS, etc.)
 
+## Disaster Recovery and Automation
+
+**Current Automation Coverage**: ~9% (1 of 11 services fully automated)
+
+**Disaster Recovery Goal**: Clean Proxmox install → Ansible playbooks → Backup restore → 100% functionality in <1 hour
+
+See [Automation Audit](../AUTOMATION_AUDIT.md) for:
+- Detailed automation gaps analysis
+- Roadmap for creating Ansible roles
+- Milestone tracking with target dates
+- Success metrics and progress tracking
+
+See [External Testing Methodology](../operations/external-testing-methodology.md#disaster-recovery-validation) for disaster recovery validation procedures.
+
 ## See Also
 
 - [Network Topology](network-topology.md) - Complete network architecture
 - [Firewall Deployment](../deployment/firewall-deployment.md) - Firewall setup guide
 - [ADR-002](../adr/002-container-id-standardization.md) - Container ID standardization decision
+- [SSH Access Methods](../operations/ssh-access-methods.md) - Remote and on-site access
+- [Automation Audit](../AUTOMATION_AUDIT.md) - Automation gaps and roadmap
 
 ---
 
-**Last Updated**: 2025-10-20 during project restructure
+**Last Updated**: 2025-10-22 during automation audit

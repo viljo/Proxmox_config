@@ -28,7 +28,14 @@ This repository contains a set of Ansible roles and configuration files for depl
 
 ## Usage
 
-Each Ansible role is contained in `roles/` and is designed to be idempotent.  The top-level playbook `playbooks/site.yml` orchestrates the deployment, while `playbooks/dmz-rebuild.yml` can be used to tear down and redeploy only the public services after network changes (it calls `roles/dmz_cleanup` to purge old LXCs before recreating them on the 172.16.10.0/24 DMZ).
+Each Ansible role is contained in `roles/` and **should be** designed to be idempotent. The top-level playbook `playbooks/site.yml` orchestrates the deployment, while `playbooks/dmz-rebuild.yml` can be used to tear down and redeploy only the public services after network changes (it calls `roles/dmz_cleanup` to purge old LXCs before recreating them on the 172.16.10.0/24 DMZ).
+
+**Current Automation Status**:
+- ✅ **Fully automated**: Demo Site, Traefik, Loopia DDNS, Network, DMZ Cleanup
+- ⚠️ **Partially automated**: Firewall (Ansible role exists but uses pct exec commands)
+- ❌ **Manual deployment**: PostgreSQL, Keycloak, GitLab, Nextcloud, Mattermost, Webtop, Redis, Bastion, GitLab Runner
+
+See [Automation Audit](docs/AUTOMATION_AUDIT.md) for the roadmap to achieve 100% automation and [External Testing Methodology](docs/operations/external-testing-methodology.md#disaster-recovery-validation) for disaster recovery requirements.
 
 Secrets and sensitive credentials now live exclusively in the encrypted vault (`inventory/group_vars/all/secrets.yml`); edit them with:
 ```bash
@@ -37,7 +44,12 @@ ansible-vault edit inventory/group_vars/all/secrets.yml
 
 Or provide a custom `--vault-password-file`.  The helper password file `.vault_pass.txt` is ignored by Git—create it locally if you want non-interactive vault operations.  See the [documentation](docs/) for details on variables, network segmentation, backup schedules, and daily maintenance jobs.
 
-Day-to-day access to the Proxmox host is via `ssh root@192.168.1.3`.  All Ansible playbooks target the `proxmox_admin` host defined in `inventory/hosts.yml`, using that SSH transport.
+Day-to-day access to the Proxmox host depends on your network location:
+
+- **From admin network** (192.168.1.0/16): `ssh root@192.168.1.3`
+- **From internet**: `ssh -J root@ssh.viljo.se root@192.168.1.3`
+
+All Ansible playbooks target the `proxmox_admin` host defined in `inventory/hosts.yml`. See [SSH Access Methods](docs/operations/ssh-access-methods.md) for detailed connection instructions, SSH config examples, and troubleshooting.
 
 The host now keeps its default route on the management network (`vmbr0` → gateway `192.168.1.1`); the firewall LXC handles WAN access on `vmbr2`, while the service DMZ lives on `vmbr3` (`172.16.10.0/24`).
 
@@ -58,16 +70,30 @@ All LXC roles default to the Debian 13 (Trixie) standard template (`{{ debian_te
 
 ## Key Services
 
-| Service | Container ID | IP Address | URL |
-|---------|--------------|------------|-----|
-| Firewall | 1 | 172.16.10.1 | N/A (NAT gateway) |
-| PostgreSQL | 50 | 172.16.10.50 | N/A (internal) |
-| Keycloak | 51 | 172.16.10.51 | https://keycloak.viljo.se |
-| NetBox | 52 | 172.16.10.52 | https://netbox.viljo.se |
-| GitLab | 53 | 172.16.10.53 | https://gitlab.viljo.se |
-| Demo Site | 60 | 172.16.10.60 | https://demosite.viljo.se |
+### Currently Deployed Services
 
-See [Container Mapping](docs/architecture/container-mapping.md) for all 16 services.
+| Service | Container ID | IP Address | URL | Automation Status |
+|---------|--------------|------------|-----|-------------------|
+| Firewall | 101 | 172.16.10.101 (DMZ)<br>192.168.1.1 (Mgmt) | N/A (NAT gateway) | ⚠️ Partial |
+| Bastion | 110 | 192.168.1.10 | ssh.viljo.se | ❌ Manual |
+| PostgreSQL | 150 | 172.16.10.150 | N/A (internal) | ❌ Manual |
+| Keycloak | 151 | 172.16.10.151 | https://keycloak.viljo.se | ❌ Manual |
+| GitLab CE | 153 | 172.16.10.153 | https://gitlab.viljo.se | ❌ Manual |
+| GitLab Runner | 154 | 172.16.10.154 | N/A (internal) | ❌ Manual |
+| Nextcloud | 155 | 172.16.10.155 | https://nextcloud.viljo.se | ❌ Manual |
+| Redis | 158 | 172.16.10.158 | N/A (internal) | ❌ Manual |
+| Demo Site | 160 | 172.16.10.160 | https://demosite.viljo.se | ✅ Automated |
+| Mattermost | 163 | 172.16.10.163 | https://mattermost.viljo.se | ❌ Manual |
+| Webtop | 170 | 172.16.10.170 | https://browser.viljo.se | ❌ Manual |
+
+**Automation Status Legend:**
+- ✅ **Automated**: Fully deployed via Ansible (idempotent, supports `--check` mode)
+- ⚠️ **Partial**: Ansible role exists but uses manual steps (pct exec commands)
+- ❌ **Manual**: Deployed via SSH/pct exec (requires Ansible role for disaster recovery)
+
+**Planned Services** (not yet deployed): NetBox, Jellyfin, Home Assistant, qBittorrent, Cosmos, Wazuh, OpenMediaVault, Zipline, WireGuard
+
+See [Container Mapping](docs/architecture/container-mapping.md) for complete details and [Automation Audit](docs/AUTOMATION_AUDIT.md) for automation roadmap.
 
 ## Documentation
 
