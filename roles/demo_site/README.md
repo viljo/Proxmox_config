@@ -2,26 +2,47 @@
 
 ## Purpose
 
-Deploys a demonstration HTTPS website on Proxmox VE infrastructure to validate reverse proxy, TLS termination, and DNS configuration. This role creates an unprivileged LXC container on the DMZ network running nginx with custom HTML content, accessible via Traefik for HTTPS termination.
+Deploys a multi-purpose web portal on Proxmox VE infrastructure serving three distinct sites:
 
-**Use Case**: Verify that Traefik reverse proxy, Loopia DNS, and TLS certificate generation are working correctly before deploying production services.
+1. **Links Portal** (`links.viljo.se`) - Centralized directory of all public-facing services
+2. **Matrix Landing Page** (`viljo.se`) - Animated matrix rain effect landing page
+3. **Demo Site** (`demo.viljo.se`) - Original validation website for Traefik/TLS testing
+
+This role creates an unprivileged LXC container on the DMZ network running nginx with multiple virtual hosts, accessible via Traefik for HTTPS termination.
+
+**Use Cases**:
+- Provide users with easy access to all infrastructure services via links portal
+- Display visually appealing landing page for root domain
+- Validate that Traefik reverse proxy, DNS, and TLS are working correctly
 
 ## Architecture
 
 ```
 Internet
    ↓
-Loopia DNS (demosite.viljo.se → Public IP)
+Loopia DNS (viljo.se, links.viljo.se, demo.viljo.se → Public IP)
    ↓
 Traefik (TLS termination, HTTPS → HTTP)
    ↓
 Demo Site Container (172.16.10.60:80)
-   └─ Nginx serving static HTML
+   └─ Nginx with virtual hosts
+      ├─ viljo.se → matrix.html (Matrix animation)
+      ├─ links.viljo.se → links.html (Service directory)
+      └─ demo.viljo.se → index.html (Demo page)
 ```
 
 **Network**: DMZ network (vmbr3, 172.16.10.0/24)
 **Container Type**: Unprivileged LXC
 **Resources**: 1GB RAM, 1 CPU core, 8GB disk
+
+### Served Pages
+
+| Domain | Page | Purpose |
+|--------|------|---------|
+| `viljo.se` | `matrix.html` | Matrix rain animation landing page |
+| `links.viljo.se` | `links.html` | Service directory with links to all infrastructure services |
+| `demo.viljo.se` | `index.html` | Original demo/validation page |
+| Any domain | `hello.html` | Secondary test page (accessible via direct path) |
 
 ## Variables
 
@@ -154,19 +175,27 @@ The role performs the following steps:
 5. **Nginx Installation** (if not provisioned)
    - Update apt package cache
    - Install nginx web server
-   - Remove default nginx site
+   - Configure nginx virtual hosts for multiple domains
 
-6. **Content Deployment**
+6. **Nginx Configuration**
+   - Deploy nginx site configuration with server blocks
+   - Configure domain-based routing (viljo.se, links.viljo.se, demo.viljo.se)
+   - Remove default nginx site
+   - Enable custom site configuration
+
+7. **Content Deployment**
+   - Render `matrix.html.j2` template for viljo.se landing page
+   - Render `links.html.j2` template with all service links
    - Render `index.html.j2` template with custom title, message, and colors
    - Render `hello.html.j2` template for secondary page
-   - Copy HTML files to `/var/www/html/` in container
+   - Copy all HTML files to `/var/www/html/` in container
 
-7. **Service Configuration**
+8. **Service Configuration**
    - Enable nginx service on container boot
-   - Start nginx service
+   - Start/restart nginx service
    - Create provisioning marker to prevent re-provisioning
 
-8. **Verification**
+9. **Verification**
    - Display deployment summary with access URLs
    - Remind about Traefik configuration requirements
 
@@ -223,8 +252,10 @@ pct exec 60 -- ss -tlnp | grep :80
 curl http://172.16.10.60/
 
 # HTTPS access (via Traefik)
-curl https://demosite.viljo.se/
-curl https://demosite.viljo.se/hello.html
+curl https://viljo.se/                # Matrix landing page
+curl https://links.viljo.se/          # Service directory
+curl https://demo.viljo.se/           # Demo page
+curl https://demo.viljo.se/hello.html # Test page
 ```
 
 ### 4. DNS Resolution
@@ -239,41 +270,54 @@ curl -I https://demosite.viljo.se/
 
 ## Traefik Integration
 
-The demo site requires Traefik configuration for HTTPS access. Add to Traefik's dynamic configuration:
+The demo site requires Traefik configuration for HTTPS access to all three domains. The configuration is managed via the `traefik_services` variable in inventory.
 
-**File**: `traefik/dynamic/demo-site.yml`
+**Inventory Configuration** (`inventory/group_vars/all/main.yml`):
 
 ```yaml
-http:
-  routers:
-    demo-site:
-      rule: "Host(`demosite.viljo.se`)"
-      entryPoints:
-        - websecure
-      service: demo-site
-      tls:
-        certResolver: letsencrypt
-
-  services:
-    demo-site:
-      loadBalancer:
-        servers:
-          - url: "http://172.16.10.60:80"
+traefik_services:
+  - name: viljo
+    host: "{{ public_domain }}"           # viljo.se
+    container_id: "{{ demo_site_container_id }}"
+    port: "{{ demo_site_service_port }}"
+  - name: links
+    host: "links.{{ public_domain }}"     # links.viljo.se
+    container_id: "{{ demo_site_container_id }}"
+    port: "{{ demo_site_service_port }}"
+  - name: demo
+    host: "demo.{{ public_domain }}"      # demo.viljo.se
+    container_id: "{{ demo_site_container_id }}"
+    port: "{{ demo_site_service_port }}"
 ```
+
+All three domains route to the same container (172.16.10.60:80), with nginx virtual hosts serving different content based on the `Host` header.
 
 ## DNS Configuration
 
-Configure Loopia DNS to point to your public IP:
+Configure Loopia DNS records for all three domains:
 
+**Required DNS Records**:
 ```
 Record Type: A
-Hostname: demosite
+Hostname: @         # Root domain (viljo.se)
 Domain: viljo.se
 Value: [Your Public IP]
-TTL: 3600
+TTL: 600
+
+Record Type: A
+Hostname: links     # Subdomain (links.viljo.se)
+Domain: viljo.se
+Value: [Your Public IP]
+TTL: 600
+
+Record Type: A
+Hostname: demo      # Subdomain (demo.viljo.se)
+Domain: viljo.se
+Value: [Your Public IP]
+TTL: 600
 ```
 
-Or use the `loopia_dns` role to automate DNS management.
+Or use the `loopia_dns` role to automate DNS management. The DNS records are configured via the `loopia_dns_records` variable in inventory.
 
 ## Notes
 
@@ -341,6 +385,24 @@ rm traefik/dynamic/demo-site.yml
 - **No Persistence**: HTML content regenerated on reprovisioning (not persistent edits)
 - **DMZ Network Required**: Assumes vmbr3 bridge exists with 172.16.10.0/24 subnet
 - **Traefik Dependency**: HTTPS access requires separate Traefik deployment
+- **Manual Service Updates**: New services must be manually added to `links.html.j2` template
+
+### Service Registry Requirement
+
+**IMPORTANT**: When deploying new public-facing services to the infrastructure, you MUST update the links portal to include them:
+
+1. Edit `roles/demo_site/templates/links.html.j2`
+2. Add a new service card with:
+   - Service icon (emoji)
+   - Service name
+   - Service description
+   - Service URL (following pattern: `servicename.{{ demo_site_external_domain }}`)
+3. Group the service logically with similar services
+4. Redeploy the demo_site role to update the links page
+
+This requirement ensures users can discover all available services from the centralized portal.
+
+**Reference**: See [Spec 010 - Links Portal](../../specs/completed/010-links-portal/spec.md) and [Global Service Requirements](../../specs/README.md#global-requirements-for-all-new-services)
 
 ## Constitution Compliance
 

@@ -147,6 +147,40 @@
     - demo_site_provision_marker.rc is defined
     - demo_site_provision_marker.rc != 0
 
+- name: Render nginx site configuration locally
+  ansible.builtin.template:
+    src: "nginx-site.conf.j2"
+    dest: "/tmp/demo-site-nginx.conf.{{ demo_site_container_id }}"
+    mode: "0644"
+  when: demo_site_container_conf.stat.exists
+
+- name: Push nginx site configuration into container
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ demo_site_container_id }} /tmp/demo-site-nginx.conf.{{ demo_site_container_id }} /etc/nginx/sites-available/demo-site
+  changed_when: true
+  when: demo_site_container_conf.stat.exists
+
+- name: Remove default nginx site
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ demo_site_container_id }} -- bash -lc "rm -f /etc/nginx/sites-enabled/default"
+  changed_when: true
+  when: demo_site_container_conf.stat.exists
+
+- name: Enable demo site nginx configuration
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ demo_site_container_id }} -- bash -lc "ln -sf /etc/nginx/sites-available/demo-site /etc/nginx/sites-enabled/demo-site"
+  changed_when: true
+  when: demo_site_container_conf.stat.exists
+  notify: Restart demo site nginx
+
+- name: Remove temporary nginx configuration
+  ansible.builtin.file:
+    path: "/tmp/demo-site-nginx.conf.{{ demo_site_container_id }}"
+    state: absent
+
 - name: Render demo site pages locally
   ansible.builtin.template:
     src: "{{ item.src }}"
@@ -155,6 +189,8 @@
   loop:
     - { src: "index.html.j2", dest: "index.html" }
     - { src: "hello.html.j2", dest: "hello.html" }
+    - { src: "links.html.j2", dest: "links.html" }
+    - { src: "matrix.html.j2", dest: "matrix.html" }
   loop_control:
     label: "{{ item.dest }}"
   when: demo_site_container_conf.stat.exists
@@ -166,6 +202,8 @@
   loop:
     - { src: "index.html.j2", dest: "index.html" }
     - { src: "hello.html.j2", dest: "hello.html" }
+    - { src: "links.html.j2", dest: "links.html" }
+    - { src: "matrix.html.j2", dest: "matrix.html" }
   loop_control:
     label: "{{ item.dest }}"
   changed_when: true
@@ -186,6 +224,8 @@
   loop:
     - { src: "index.html.j2", dest: "index.html" }
     - { src: "hello.html.j2", dest: "hello.html" }
+    - { src: "links.html.j2", dest: "links.html" }
+    - { src: "matrix.html.j2", dest: "matrix.html" }
   loop_control:
     label: "{{ item.dest }}"
 

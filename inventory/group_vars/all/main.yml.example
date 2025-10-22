@@ -9,6 +9,7 @@ loopia_dns_interface: "{{ wan_bridge }}"
 loopia_dns_records:
   - host: "@"
     ttl: 600
+  - host: links
   - host: demo
   - host: gitlab
   - host: netbox
@@ -22,6 +23,14 @@ loopia_dns_records:
   - host: zipline
   - host: zabbix
 traefik_services:
+  - name: viljo
+    host: "{{ public_domain }}"
+    container_id: "{{ demo_site_container_id }}"
+    port: "{{ demo_site_service_port }}"
+  - name: links
+    host: "links.{{ public_domain }}"
+    container_id: "{{ demo_site_container_id }}"
+    port: "{{ demo_site_service_port }}"
   - name: demo
     host: "demo.{{ public_domain }}"
     container_id: "{{ demo_site_container_id }}"
