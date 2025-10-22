@@ -1,0 +1,181 @@
+---
+# Mattermost deployment using Proxmox API
+
+- name: Create mattermost container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ mattermost_container_id }}"
+    hostname: "{{ mattermost_hostname }}"
+    ostemplate: "local:vztmpl/{{ mattermost_template_file | basename }}"
+    cores: "{{ mattermost_cores }}"
+    memory: "{{ mattermost_memory }}"
+    swap: "{{ mattermost_swap }}"
+    disk: "{{ mattermost_rootfs_storage }}:{{ mattermost_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ mattermost_bridge }},ip={{ mattermost_ip_address }}/{{ mattermost_netmask }},gw={{ mattermost_gateway }},type=veth"
+    nameserver: "{{ mattermost_dns_servers | join(' ') }}"
+    unprivileged: "{{ mattermost_unprivileged }}"
+    onboot: true
+    password: "{{ mattermost_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: mattermost_container
+
+- name: Enable nesting feature for Docker support
+  ansible.builtin.command:
+    cmd: "pct set {{ mattermost_container_id }} --features {{ mattermost_features }}"
+  when: mattermost_container.changed
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Start mattermost container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ mattermost_container_id }}"
+    hostname: "{{ mattermost_hostname }}"
+    state: started
+
+- name: Wait for mattermost container SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ mattermost_ip_address }}"
+    port: 22
+    delay: 10
+    timeout: 120
+    state: started
+
+- name: Add mattermost to in-memory inventory for delegation
+  ansible.builtin.add_host:
+    name: mattermost_container
+    ansible_host: "{{ mattermost_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ mattermost_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+# Configuration using delegation - NO pct exec!
+- name: Install required system packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - locales
+    state: present
+    update_cache: true
+  delegate_to: mattermost_container
+
+- name: Generate en_US.UTF-8 locale
+  ansible.builtin.locale_gen:
+    name: en_US.UTF-8
+    state: present
+  delegate_to: mattermost_container
+
+- name: Set system locale
+  ansible.builtin.copy:
+    content: |
+      LANG=en_US.UTF-8
+      LC_ALL=en_US.UTF-8
+    dest: /etc/default/locale
+    mode: '0644'
+  delegate_to: mattermost_container
+
+- name: Create Docker repository keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  delegate_to: mattermost_container
+
+- name: Add Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+  delegate_to: mattermost_container
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
+    state: present
+    filename: docker
+  delegate_to: mattermost_container
+
+- name: Install Docker and Docker Compose
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  delegate_to: mattermost_container
+
+- name: Enable and start Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+  delegate_to: mattermost_container
+
+- name: Create Mattermost data directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "2000"
+    group: "2000"
+    mode: '0755'
+  loop:
+    - "{{ mattermost_data_dir }}"
+    - "{{ mattermost_data_dir }}/config"
+    - "{{ mattermost_data_dir }}/data"
+    - "{{ mattermost_data_dir }}/logs"
+    - "{{ mattermost_data_dir }}/plugins"
+    - "{{ mattermost_data_dir }}/client-plugins"
+  delegate_to: mattermost_container
+
+- name: Deploy Docker Compose configuration
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ mattermost_compose_file }}"
+    owner: root
+    group: root
+    mode: '0644'
+  delegate_to: mattermost_container
+  notify: Restart mattermost
+
+- name: Start Mattermost via Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ mattermost_data_dir }}"
+    state: present
+  delegate_to: mattermost_container
+
+- name: Wait for Mattermost to be ready
+  ansible.builtin.command:
+    cmd: "curl -f http://localhost:{{ mattermost_service_port }}/"
+  register: mattermost_health
+  until: mattermost_health.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  delegate_to: mattermost_container
+
+- name: Display mattermost configuration
+  ansible.builtin.debug:
+    msg:
+      - "Mattermost deployed successfully"
+      - "  Container ID: {{ mattermost_container_id }}"
+      - "  IP: {{ mattermost_ip_address }}"
+      - "  Hostname: {{ mattermost_hostname }}.{{ mattermost_external_domain }}"
+      - "  Internal URL: http://{{ mattermost_ip_address }}:{{ mattermost_service_port }}/"
+      - "  External URL: {{ mattermost_site_url }}/"
+      - "  Database: {{ mattermost_db_host }}:{{ mattermost_db_port }}/{{ mattermost_db_name }}"

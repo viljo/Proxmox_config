@@ -1,0 +1,37 @@
+services:
+  mattermost:
+    image: mattermost/mattermost-team-edition:{{ mattermost_version }}
+    container_name: mattermost
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
+    tmpfs:
+      - /tmp
+    ports:
+      - "{{ mattermost_service_port }}:8065"
+    environment:
+      # PostgreSQL settings
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: "postgres://{{ mattermost_db_user }}:{{ mattermost_db_password }}@{{ mattermost_db_host }}:{{ mattermost_db_port }}/{{ mattermost_db_name }}?sslmode=disable&connect_timeout=10"
+
+      # Cluster settings (disabled for single-node)
+      MM_CLUSTERSETTINGS_ENABLE: "false"
+      MM_CLUSTERSETTINGS_READONLYCONFIG: "false"
+
+      # Site URL
+      MM_SERVICESETTINGS_SITEURL: "{{ mattermost_site_url }}"
+      MM_SERVICESETTINGS_LISTENADDRESS: ":8065"
+
+      # Performance
+      MM_SQLSETTINGS_MAXIDLECONNS: 20
+      MM_SQLSETTINGS_MAXOPENCONNS: 300
+
+      # Timezone
+      TZ: "{{ mattermost_timezone }}"
+    volumes:
+      - {{ mattermost_data_dir }}/config:/mattermost/config:rw
+      - {{ mattermost_data_dir }}/data:/mattermost/data:rw
+      - {{ mattermost_data_dir }}/logs:/mattermost/logs:rw
+      - {{ mattermost_data_dir }}/plugins:/mattermost/plugins:rw
+      - {{ mattermost_data_dir }}/client-plugins:/mattermost/client/plugins:rw
