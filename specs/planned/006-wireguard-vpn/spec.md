@@ -66,7 +66,7 @@ The VPN server must start automatically on system boot and maintain stable conne
 
 ### Edge Cases
 
-- What happens when WireGuard container runs out of available IP addresses in the 10.8.0.0/24 subnet?
+- What happens when WireGuard container runs out of available IP addresses in the 192.168.100.0/24 subnet?
 - How does system handle peer connection attempts with expired or rotated keys?
 - What occurs if WireGuard listen port (51820) is blocked by firewall or already in use?
 - How are peer conflicts resolved when multiple peers claim the same allowed IPs?
@@ -81,7 +81,7 @@ The VPN server must start automatically on system boot and maintain stable conne
 
 - **FR-001**: System MUST provide encrypted VPN tunnel for remote network access
 - **FR-002**: System MUST support multiple concurrent peer connections without degradation
-- **FR-003**: System MUST assign unique VPN IP addresses to connected peers (10.8.0.0/24 subnet)
+- **FR-003**: System MUST assign unique VPN IP addresses to connected peers (192.168.100.0/24 subnet)
 - **FR-004**: System MUST route traffic between VPN peers and infrastructure networks
 - **FR-005**: System MUST persist peer configurations across service restarts
 - **FR-006**: System MUST enable/disable peers without affecting other connections
@@ -92,7 +92,7 @@ The VPN server must start automatically on system boot and maintain stable conne
 
 ### Infrastructure Requirements *(for Proxmox deployments)*
 
-- **IR-001**: Service MUST run in unprivileged LXC container (CT 2090) for isolation and resource efficiency
+- **IR-001**: Service MUST run in unprivileged LXC container (CT 90) for isolation and resource efficiency
 - **IR-002**: Container MUST be deployed on management network (vmbr0) to enable routing to management network (192.168.0.0/16 only)
 - **IR-003**: Container MUST allocate minimal resources (1GB RAM, 1 CPU core, 8GB disk) sufficient for VPN routing
 - **IR-004**: Container MUST expose UDP port 51820 for WireGuard protocol traffic
@@ -112,8 +112,8 @@ The VPN server must start automatically on system boot and maintain stable conne
 
 ### Key Entities
 
-- **WireGuard Server**: LXC container (CT 2090) running WireGuard daemon listening on UDP port 51820
-- **VPN Interface**: wg0 network interface with IP 10.8.0.1/24 serving as VPN gateway
+- **WireGuard Server**: LXC container (CT 90) running WireGuard daemon listening on UDP port 51820
+- **VPN Interface**: wg0 network interface with IP 192.168.100.1/24 serving as VPN gateway
 - **Server Key Pair**: Cryptographic private/public key pair identifying the VPN server
 - **Peer Configuration**: Individual client/server peer with public key, allowed IPs, endpoint, and keepalive settings
 - **VPN Tunnel**: Encrypted connection between server and peer with automatic key rotation and handshake
@@ -138,7 +138,7 @@ The VPN server must start automatically on system boot and maintain stable conne
 - Proxmox VE host has network connectivity for VPN traffic (firewall allows UDP 51820)
 - DNS resolution available for internal services accessed via VPN
 - Clients use modern WireGuard client software (Windows, macOS, Linux, iOS, Android)
-- Network topology supports routing between VPN subnet (10.8.0.0/24) and management network (192.168.0.0/16)
+- Network topology supports routing between VPN subnet (192.168.100.0/24) and management network (192.168.0.0/16)
 - Firewall rules allow VPN traffic to reach management network (192.168.0.0/16) but NOT DMZ (172.16.10.0/24)
 - Public IP address or dynamic DNS available for external peer connections
 - Loopia DDNS (or similar) keeps external hostname updated if using dynamic IP
