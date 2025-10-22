@@ -1,17 +1,22 @@
 version: '3.9'
+
 services:
   zipline:
-    image: diced/zipline:latest
+    image: ghcr.io/diced/zipline:latest
+    container_name: zipline
     restart: unless-stopped
     environment:
 {% for key, value in zipline_env.items() %}
-      {{ key }}: {{ value }}
+      {{ key }}: "{{ value }}"
 {% endfor %}
     ports:
-      - "3000:3000"
+      - "{{ zipline_service_port }}:{{ zipline_service_port }}"
     volumes:
-      - zipline_data:/zipline/data
       - zipline_uploads:/zipline/uploads
+      - zipline_public:/zipline/public
+    extra_hosts:
+      - "postgres:172.16.10.50"
+
 volumes:
-  zipline_data:
   zipline_uploads:
+  zipline_public:
