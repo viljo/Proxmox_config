@@ -1,16 +1,20 @@
 ---
-zipline_container_id: 2060
+zipline_container_id: 65
 zipline_hostname: zipline
-zipline_domain: infra.local
-zipline_memory: 4096
+zipline_domain: viljo.se
+zipline_memory: 2048
 zipline_cores: 2
 zipline_disk: 32
-zipline_swap: 1024
-zipline_bridge: "{{ public_bridge | default('vmbr0') }}"
-zipline_ip_config: dhcp
+zipline_swap: 512
+zipline_bridge: "{{ public_bridge | default('vmbr3') }}"
+zipline_ip_address: 172.16.10.65
+zipline_netmask: 24
+zipline_ip_config: "{{ zipline_ip_address }}/{{ zipline_netmask }}"
 zipline_vlan_tag: null
-zipline_gateway: null
-zipline_dns_servers: []
+zipline_gateway: 172.16.10.1
+zipline_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
 zipline_rootfs_storage: local-lvm
 zipline_unprivileged: true
 zipline_start_onboot: true
@@ -21,7 +25,12 @@ zipline_template_file: "{{ debian_template_file | default('/var/lib/vz/template/
 zipline_root_password: "{{ vault_zipline_root_password | default('') }}"
 zipline_rootfs_path: "/var/lib/lxc/{{ zipline_container_id }}/rootfs"
 zipline_compose_path: /opt/zipline
+zipline_service_port: 3000
+zipline_external_domain: "{{ loopia_dns_domain | default(zipline_domain) }}"
 zipline_env:
   CORE_SECRET: "{{ vault_zipline_core_secret | default('') }}"
-  DATABASE_URL: "sqlite:///data/zipline.db"
+  CORE_DATABASE_URL: "postgres://{{ vault_postgres_zipline_user | default('zipline') }}:{{ vault_postgres_zipline_password | default('') }}@172.16.10.50:5432/{{ vault_postgres_zipline_db | default('zipline') }}"
+  CORE_RETURN_HTTPS: "true"
+  CORE_COMPRESSION_ENABLED: "true"
   CORE_PORT: "3000"
+  CORE_HOST: "0.0.0.0"
