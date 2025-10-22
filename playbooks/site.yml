@@ -33,5 +33,6 @@
     - gitlab_runner
     - zipline
     - qbittorrent
+    - portainer
     - wazuh
     - wireguard
