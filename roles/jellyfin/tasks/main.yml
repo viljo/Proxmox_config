@@ -178,3 +178,31 @@
     - jellyfin_container_conf.stat.exists
     - jellyfin_provision_marker.rc is defined
     - jellyfin_provision_marker.rc != 0
+
+- name: Configure media mount points
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ jellyfin_container_id }}.conf"
+    regexp: "^mp{{ idx }}:"
+    line: "mp{{ idx }}: {{ item.source }},mp={{ item.target }}{% if item.ro | default(true) %},ro=1{% endif %}"
+    insertafter: EOF
+  loop: "{{ jellyfin_media_mounts }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item.target }}"
+  when:
+    - jellyfin_container_conf.stat.exists
+    - jellyfin_media_mounts | length > 0
+  notify: Restart Jellyfin container
+
+- name: Ensure Jellyfin media mount directories exist in container
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} -- bash -lc "mkdir -p {{ item.target }}"
+  loop: "{{ jellyfin_media_mounts }}"
+  loop_control:
+    label: "{{ item.target }}"
+  when:
+    - not ansible_check_mode
+    - jellyfin_container_conf.stat.exists
+    - jellyfin_media_mounts | length > 0
+  changed_when: false

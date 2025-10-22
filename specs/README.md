@@ -27,6 +27,7 @@ This directory contains feature specifications for infrastructure enhancements a
 | [006](planned/006-wireguard-vpn/) | WireGuard VPN | High | Medium | Secure remote access |
 | [007](planned/007-gitlab-ci-runner/) | GitLab CI Runners | Medium | Low | Build executors |
 | [008](planned/008-gitlab-cicd/) | GitLab CI/CD Pipelines | Medium | Medium | Automated deployments |
+| [009](planned/009-jellyfin-media-server/) | Jellyfin Media Server | Medium | Medium | Media streaming service |
 
 ## Specification Lifecycle
 
@@ -165,3 +166,4 @@ This ensures:
 
 **Last Updated**: 2025-10-22
 **Total Specs**: 9 (1 completed, 1 active, 7 planned)
+

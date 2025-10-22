@@ -1,15 +1,15 @@
 ---
-omv_container_id: 2020
+omv_container_id: 64
 omv_hostname: openmediavault
 omv_domain: infra.local
-omv_memory: 4096
+omv_memory: 2048
 omv_cores: 2
-omv_disk: 32
+omv_disk: 64
 omv_swap: 1024
-omv_bridge: "{{ public_bridge | default('vmbr0') }}"
-omv_ip_config: dhcp
+omv_bridge: "{{ dmz_bridge | default('vmbr3') }}"
+omv_ip_config: "172.16.10.64/24"
 omv_vlan_tag: null
-omv_gateway: null
+omv_gateway: "{{ dmz_gateway | default('172.16.10.1') }}"
 omv_dns_servers: []
 omv_rootfs_storage: local-lvm
 omv_unprivileged: true
@@ -21,3 +21,15 @@ omv_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cach
 omv_root_password: "{{ vault_omv_root_password | default('') }}"
 omv_release_codename: bookworm
 omv_rootfs_path: "/var/lib/lxc/{{ omv_container_id }}/rootfs"
+
+# OpenMediaVault Web Interface Configuration
+omv_admin_user: admin
+omv_admin_password: "{{ vault_omv_admin_password | default('') }}"
+
+# OpenMediaVault Plugin Configuration
+omv_install_extras: true
+omv_extra_plugins: []
+
+# Storage Configuration
+# Note: Storage mounts and shares should be configured via OMV web interface
+# This role focuses on container provisioning and OMV installation
