@@ -1,4 +1,24 @@
 ---
+# =============================================================================
+# Home Assistant Supervised LXC Container Deployment
+# =============================================================================
+# This role deploys Home Assistant Supervised with full add-on support
+# using Docker as the container runtime for the Supervisor and add-ons.
+#
+# Requirements:
+#   - Debian 12 (Bookworm) template
+#   - Privileged LXC container with nesting enabled
+#   - Sufficient resources for Docker and add-ons (min 2GB RAM, 32GB disk)
+#
+# References:
+#   - https://github.com/home-assistant/supervised-installer
+#   - Spec: specs/active/009-home-assistant-supervised/spec.md
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Phase 1: Container Creation
+# -----------------------------------------------------------------------------
+
 - name: Ensure Home Assistant template cache directory exists
   ansible.builtin.file:
     path: "{{ ha_template_file | dirname }}"
@@ -29,7 +49,7 @@
       --swap {{ ha_swap }} \
       --rootfs {{ ha_rootfs_storage }}:{{ ha_disk }} \
       --net0 {{ ha_net0 }} \
-      {% if ha_unprivileged %}--unprivileged 1{% endif %}
+      {% if not ha_unprivileged %}--unprivileged 0{% endif %}
   args:
     creates: "/etc/pve/lxc/{{ ha_container_id }}.conf"
   when: not ansible_check_mode
@@ -38,6 +58,10 @@
   ansible.builtin.stat:
     path: "/etc/pve/lxc/{{ ha_container_id }}.conf"
   register: ha_container_conf
+
+# -----------------------------------------------------------------------------
+# Phase 2: Container Configuration
+# -----------------------------------------------------------------------------
 
 - name: Ensure Home Assistant container onboot flag is set
   ansible.builtin.lineinfile:
@@ -51,9 +75,10 @@
   ansible.builtin.lineinfile:
     path: "/etc/pve/lxc/{{ ha_container_id }}.conf"
     regexp: '^features:'
-    line: "features: {{ ha_features | dictsort | map('join', '=') | join(';') }}"
+    line: "features: nesting=1"
     insertafter: EOF
-  when: ha_container_conf.stat.exists and ha_features | length > 0
+  when: ha_container_conf.stat.exists
+  notify: restart container
 
 - name: Ensure Home Assistant container DNS servers are set
   ansible.builtin.lineinfile:
@@ -62,6 +87,10 @@
     line: "nameserver: {{ ha_dns_servers | join(' ') }}"
     insertafter: EOF
   when: ha_container_conf.stat.exists and ha_dns_servers is defined and ha_dns_servers | length > 0
+
+# -----------------------------------------------------------------------------
+# Phase 3: Container Startup and Initial Setup
+# -----------------------------------------------------------------------------
 
 - name: Read Home Assistant container status
   ansible.builtin.command:
@@ -86,8 +115,8 @@
   register: ha_boot_probe
   failed_when: false
   changed_when: false
-  retries: 10
-  delay: 3
+  retries: 15
+  delay: 4
   until: ha_boot_probe.rc == 0
   when:
     - not ansible_check_mode
@@ -104,6 +133,10 @@
     - ha_root_password is defined
     - ha_root_password | length > 0
 
+# -----------------------------------------------------------------------------
+# Phase 4: Provisioning Check
+# -----------------------------------------------------------------------------
+
 - name: Check Home Assistant provisioning marker
   ansible.builtin.command:
     cmd: >
@@ -113,88 +146,192 @@
   failed_when: false
   when: ha_container_conf.stat.exists
 
-- name: Install Home Assistant prerequisites
+# -----------------------------------------------------------------------------
+# Phase 5: System Prerequisites
+# -----------------------------------------------------------------------------
+
+- name: Update apt cache
   ansible.builtin.command:
     cmd: >
-      pct exec {{ ha_container_id }} -- bash -lc "apt-get update && apt-get install -y python3 python3-venv python3-pip python3-dev libffi-dev libssl-dev libjpeg-dev zlib1g-dev tzdata curl"
+      pct exec {{ ha_container_id }} -- bash -lc "apt-get update"
   when:
     - not ansible_check_mode
     - ha_container_conf.stat.exists
     - ha_provision_marker.rc is defined
     - ha_provision_marker.rc != 0
+  changed_when: true
 
-- name: Ensure Home Assistant group exists
+- name: Install Home Assistant Supervised prerequisites
   ansible.builtin.command:
     cmd: >
-      pct exec {{ ha_container_id }} -- groupadd -f {{ ha_group }}
-  when: not ansible_check_mode and ha_container_conf.stat.exists
-
-- name: Ensure Home Assistant user exists
-  ansible.builtin.command:
-    cmd: >
-      pct exec {{ ha_container_id }} -- bash -lc "id {{ ha_user }} >/dev/null 2>&1 || useradd -r -m -d {{ ha_install_dir }} -g {{ ha_group }} -G dialout,video -s /usr/sbin/nologin {{ ha_user }}"
-  when: not ansible_check_mode and ha_container_conf.stat.exists
-
-- name: Ensure Home Assistant directories exist
-  ansible.builtin.command:
-    cmd: >
-      pct exec {{ ha_container_id }} -- bash -lc "mkdir -p {{ ha_install_dir }} {{ ha_config_dir }}"
-  when: not ansible_check_mode and ha_container_conf.stat.exists
-
-- name: Create Home Assistant virtual environment
-  ansible.builtin.command:
-    cmd: >
-      pct exec {{ ha_container_id }} -- bash -lc "test -d {{ ha_venv_path }} || {{ ha_venv_python }} -m venv {{ ha_venv_path }}"
+      pct exec {{ ha_container_id }} -- bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y
+      apparmor
+      cifs-utils
+      curl
+      dbus
+      jq
+      libglib2.0-bin
+      lsb-release
+      network-manager
+      nfs-common
+      systemd-journal-remote
+      systemd-resolved
+      udisks2
+      wget"
   when:
     - not ansible_check_mode
     - ha_container_conf.stat.exists
     - ha_provision_marker.rc is defined
     - ha_provision_marker.rc != 0
+  changed_when: true
 
-- name: Install Home Assistant via pip
+# -----------------------------------------------------------------------------
+# Phase 6: Docker Installation
+# -----------------------------------------------------------------------------
+
+- name: Check if Docker is already installed
   ansible.builtin.command:
     cmd: >
-      pct exec {{ ha_container_id }} -- bash -lc "source {{ ha_venv_path }}/bin/activate && pip install --upgrade pip && pip install homeassistant {{ ha_extra_requirements | join(' ') }}"
-  when:
-    - not ansible_check_mode
-    - ha_container_conf.stat.exists
-    - ha_provision_marker.rc is defined
-    - ha_provision_marker.rc != 0
-
-- name: Set ownership on Home Assistant directories
-  ansible.builtin.command:
-    cmd: >
-      pct exec {{ ha_container_id }} -- bash -lc "chown -R {{ ha_user }}:{{ ha_group }} {{ ha_install_dir }} {{ ha_config_dir }}"
-  when: not ansible_check_mode and ha_container_conf.stat.exists
-
-- name: Render Home Assistant systemd service locally
-  ansible.builtin.template:
-    src: home-assistant.service.j2
-    dest: "/tmp/home-assistant.service.{{ ha_container_id }}"
-
-- name: Push Home Assistant systemd service into container
-  ansible.builtin.command:
-    cmd: >
-      pct push {{ ha_container_id }} /tmp/home-assistant.service.{{ ha_container_id }} /etc/systemd/system/home-assistant.service
+      pct exec {{ ha_container_id }} -- bash -lc "which docker"
+  register: docker_check
+  changed_when: false
+  failed_when: false
   when: ha_container_conf.stat.exists
-  notify: restart home assistant
 
-- name: Remove temporary Home Assistant systemd service file
-  ansible.builtin.file:
-    path: "/tmp/home-assistant.service.{{ ha_container_id }}"
-    state: absent
-
-- name: Enable Home Assistant service
+- name: Install Docker prerequisites
   ansible.builtin.command:
     cmd: >
-      pct exec {{ ha_container_id }} -- systemctl enable home-assistant
-  when: not ansible_check_mode and ha_container_conf.stat.exists
+      pct exec {{ ha_container_id }} -- bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y
+      ca-certificates
+      curl
+      gnupg
+      lsb-release"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - docker_check.rc != 0
+  changed_when: true
 
-- name: Ensure Home Assistant service is running
+- name: Add Docker GPG key
   ansible.builtin.command:
     cmd: >
-      pct exec {{ ha_container_id }} -- systemctl start home-assistant
-  when: not ansible_check_mode and ha_container_conf.stat.exists
+      pct exec {{ ha_container_id }} -- bash -lc "install -m 0755 -d /etc/apt/keyrings &&
+      curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc &&
+      chmod a+r /etc/apt/keyrings/docker.asc"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - docker_check.rc != 0
+  changed_when: true
+
+- name: Add Docker repository
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "echo \"deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(lsb_release -cs) stable\" > /etc/apt/sources.list.d/docker.list"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - docker_check.rc != 0
+  changed_when: true
+
+- name: Update apt cache after adding Docker repo
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "apt-get update"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - docker_check.rc != 0
+  changed_when: true
+
+- name: Install Docker
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y
+      docker-ce
+      docker-ce-cli
+      containerd.io
+      docker-buildx-plugin
+      docker-compose-plugin"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - docker_check.rc != 0
+  changed_when: true
+
+- name: Ensure Docker service is enabled and started
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "systemctl enable docker && systemctl start docker"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - docker_check.rc != 0
+  changed_when: true
+
+# -----------------------------------------------------------------------------
+# Phase 7: Home Assistant Supervised Installation
+# -----------------------------------------------------------------------------
+
+- name: Check if Home Assistant Supervised is already installed
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "test -f /usr/bin/ha"
+  register: ha_supervised_check
+  changed_when: false
+  failed_when: false
+  when: ha_container_conf.stat.exists
+
+- name: Download Home Assistant Supervised installer
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "wget -O /tmp/homeassistant-supervised.deb {{ ha_supervised_installer_url }}"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_supervised_check.rc != 0
+  changed_when: true
+
+- name: Install Home Assistant Supervised
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "DEBIAN_FRONTEND=noninteractive apt-get install -y /tmp/homeassistant-supervised.deb"
+  environment:
+    BYPASS_OS_CHECK: "true"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_supervised_check.rc != 0
+  changed_when: true
+
+- name: Remove installer package
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "rm -f /tmp/homeassistant-supervised.deb"
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_supervised_check.rc != 0
+  changed_when: true
+
+# -----------------------------------------------------------------------------
+# Phase 8: Final Configuration
+# -----------------------------------------------------------------------------
+
+- name: Wait for Home Assistant Supervisor to initialize
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ ha_container_id }} -- bash -lc "systemctl is-active hassio-supervisor"
+  register: supervisor_status
+  retries: 30
+  delay: 10
+  until: supervisor_status.rc == 0
+  failed_when: false
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - ha_container_conf.stat.exists
+    - ha_supervised_check.rc != 0
 
 - name: Touch Home Assistant provisioning marker
   ansible.builtin.command:
@@ -205,3 +342,16 @@
     - ha_container_conf.stat.exists
     - ha_provision_marker.rc is defined
     - ha_provision_marker.rc != 0
+  changed_when: true
+
+- name: Display Home Assistant access information
+  ansible.builtin.debug:
+    msg:
+      - "Home Assistant Supervised has been deployed successfully!"
+      - "Access the web interface at: http://{{ ha_hostname }}.{{ ha_domain }}:8123"
+      - "Or via Traefik: https://{{ ha_public_hostname }}"
+      - "Initial setup may take 10-20 minutes while Home Assistant downloads and starts."
+      - "The Supervisor will be available in the sidebar once fully initialized."
+  when:
+    - ha_container_conf.stat.exists
+    - ha_supervised_check.rc != 0
