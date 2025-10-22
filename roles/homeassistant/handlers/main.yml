@@ -1,4 +1,35 @@
 ---
-- name: restart home assistant
+# =============================================================================
+# Home Assistant Supervised - Handlers
+# =============================================================================
+# Handlers for Home Assistant Supervised container management
+#
+# Note: With Home Assistant Supervised, services are managed by the Supervisor.
+# We provide container-level handlers for infrastructure changes.
+# =============================================================================
+
+- name: restart container
   ansible.builtin.command:
-    cmd: pct exec {{ ha_container_id }} -- systemctl restart home-assistant
+    cmd: pct restart {{ ha_container_id }}
+  when: not ansible_check_mode
+  listen: restart container
+
+- name: stop container
+  ansible.builtin.command:
+    cmd: pct stop {{ ha_container_id }}
+  when: not ansible_check_mode
+  listen: stop container
+
+- name: start container
+  ansible.builtin.command:
+    cmd: pct start {{ ha_container_id }}
+  when: not ansible_check_mode
+  listen: start container
+
+# NOTE: Home Assistant Supervisor manages all services internally
+# No direct service restart handlers needed as with Core installation
+# The Supervisor automatically manages:
+#   - hassio-supervisor.service
+#   - hassio-apparmor.service
+#   - Home Assistant Core container
+#   - Add-on containers

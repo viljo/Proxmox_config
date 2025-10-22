@@ -12,7 +12,9 @@ This directory contains feature specifications for infrastructure enhancements a
 
 ### 🚧 Active
 
-_No specs currently in active development_
+| Spec ID | Feature Name | Status | Started | Notes |
+|---------|--------------|--------|---------|-------|
+| [009](active/009-home-assistant-supervised/) | Home Assistant Supervised | 🚧 In Progress | 2025-10-22 | Add-on support (Hass.io) with Docker |
 
 ### 📋 Planned
 
@@ -161,5 +163,5 @@ This ensures:
 
 ---
 
-**Last Updated**: 2025-10-20
-**Total Specs**: 8 (1 completed, 0 active, 7 planned)
+**Last Updated**: 2025-10-22
+**Total Specs**: 9 (1 completed, 1 active, 7 planned)
