@@ -59,6 +59,7 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 |--------------|--------------|------------|----------|------|------------|
 | **59** | qBittorrent | 172.16.10.59 | qbittorrent | `roles/qbittorrent` | https://qbit.viljo.se |
 | **60** | Demo Site | 172.16.10.60 | demosite | `roles/demo_site` | https://demosite.viljo.se |
+| **61** | Portainer | 172.16.10.61 | portainer | `roles/portainer` | https://portainer.viljo.se |
 | **62** | Wazuh | 172.16.10.62 | wazuh | `roles/wazuh` | https://wazuh.viljo.se |
 | **64** | OpenMediaVault | 172.16.10.64 | openmediavault | `roles/openmediavault` | https://omv.viljo.se |
 | **65** | Zipline | 172.16.10.65 | zipline | `roles/zipline` | https://zipline.viljo.se |
@@ -80,13 +81,16 @@ This convention was established in [ADR-002: Container ID Standardization](../ad
 | Home Assistant | 2 | 2048 | 32 | IoT automation |
 | qBittorrent | 2 | 2048 | 128 | Torrent client |
 | Demo Site | 1 | 1024 | 8 | Static website |
+| Portainer | 2 | 1024 | 16 | Container management |
 | Wazuh | 4 | 8192 | 64 | Security monitoring |
 | OpenMediaVault | 2 | 2048 | 64 | NAS/Storage |
 | Zipline | 2 | 2048 | 32 | Screenshot sharing |
 | WireGuard | 1 | 512 | 8 | VPN server |
 
-**Total Resources**: ~37 cores, ~50GB RAM, ~808GB storage
 
+**Total Resources**: ~37 cores, ~47GB RAM, ~760GB storage
+
+=======
 ## Configuration Files
 
 Each service has configuration in:
@@ -131,6 +135,7 @@ Each service has configuration in:
 ### Utilities
 - qBittorrent (59)
 - Demo Site (60) - Testing only
+- Portainer (61) - Container management
 - Wazuh (62)
 - OpenMediaVault (64)
 - Zipline (65)

@@ -1,0 +1,9 @@
+---
+- name: restart container
+  ansible.builtin.command:
+    cmd: pct restart {{ portainer_container_id }}
+  when: not ansible_check_mode
+
+- name: restart portainer stack
+  ansible.builtin.command:
+    cmd: pct exec {{ portainer_container_id }} -- bash -lc "cd {{ portainer_compose_path }} && docker compose up -d"
