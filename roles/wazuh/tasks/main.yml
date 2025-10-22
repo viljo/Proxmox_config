@@ -47,6 +47,22 @@
     insertafter: EOF
   when: wazuh_container_conf.stat.exists
 
+- name: Ensure Wazuh container features list is present
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ wazuh_container_id }}.conf"
+    regexp: '^features:'
+    line: "features: {{ wazuh_features | dictsort | map('join', '=') | join(',') }}"
+    insertafter: EOF
+  when: wazuh_container_conf.stat.exists and wazuh_features | length > 0
+
+- name: Ensure Wazuh container DNS servers are set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ wazuh_container_id }}.conf"
+    regexp: '^nameserver:'
+    line: "nameserver: {{ wazuh_dns_servers | join(' ') }}"
+    insertafter: EOF
+  when: wazuh_container_conf.stat.exists and wazuh_dns_servers is defined and wazuh_dns_servers | length > 0
+
 - name: Read Wazuh container status
   ansible.builtin.command:
     cmd: pct status {{ wazuh_container_id }}
@@ -115,6 +131,19 @@
     group: root
     mode: "0755"
 
+- name: Ensure Wazuh config directories exist
+  ansible.builtin.file:
+    path: "{{ wazuh_rootfs_path }}{{ wazuh_compose_path }}/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - config
+    - config/wazuh_indexer_ssl_certs
+    - config/wazuh_cluster
+    - config/wazuh_dashboard
+
 - name: Deploy Wazuh docker compose file
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -133,3 +162,12 @@
     - wazuh_container_conf.stat.exists
     - wazuh_provision_marker.rc is defined
     - wazuh_provision_marker.rc != 0
+
+- name: Start Wazuh Docker compose stack
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ wazuh_container_id }} -- bash -lc "cd {{ wazuh_compose_path }} && docker compose up -d"
+  when:
+    - not ansible_check_mode
+    - wazuh_container_conf.stat.exists
+  changed_when: true
