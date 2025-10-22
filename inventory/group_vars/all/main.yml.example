@@ -94,3 +94,12 @@ dmz_dns_servers:
   - 1.1.1.1
 dmz_netmask: 255.255.255.0
 dmz_host_ip: 172.16.10.2
+wireguard_peer_configs:
+  - name: "Example Laptop"
+    public_key: "PEER_PUBLIC_KEY_HERE="
+    allowed_ips: "192.168.100.10/32"
+    persistent_keepalive: 25
+  - name: "Example Phone"
+    public_key: "PEER_PUBLIC_KEY_HERE="
+    allowed_ips: "192.168.100.11/32"
+    persistent_keepalive: 25
