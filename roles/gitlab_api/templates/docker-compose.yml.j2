@@ -1,0 +1,50 @@
+services:
+  gitlab:
+    image: gitlab/gitlab-ce:{{ gitlab_version }}
+    container_name: gitlab
+    restart: unless-stopped
+    hostname: {{ gitlab_hostname }}.{{ gitlab_external_domain }}
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url '{{ gitlab_external_url }}'
+        gitlab_rails['time_zone'] = '{{ gitlab_time_zone }}'
+
+        # Database
+        gitlab_rails['db_adapter'] = 'postgresql'
+        gitlab_rails['db_encoding'] = 'unicode'
+        gitlab_rails['db_host'] = '{{ gitlab_db_host }}'
+        gitlab_rails['db_port'] = {{ gitlab_db_port }}
+        gitlab_rails['db_database'] = '{{ gitlab_db_name }}'
+        gitlab_rails['db_username'] = '{{ gitlab_db_user }}'
+        gitlab_rails['db_password'] = '{{ gitlab_db_password }}'
+
+        # Redis
+        gitlab_rails['redis_host'] = '{{ gitlab_redis_host }}'
+        gitlab_rails['redis_port'] = {{ gitlab_redis_port }}
+        gitlab_rails['redis_password'] = '{{ gitlab_redis_password }}'
+
+        # Email (disabled)
+        gitlab_rails['gitlab_email_enabled'] = {{ gitlab_email_enabled | lower }}
+
+        # Signup
+        gitlab_rails['gitlab_signup_enabled'] = {{ gitlab_signup_enabled | lower }}
+
+        # Root password
+        gitlab_rails['initial_root_password'] = '{{ gitlab_root_password }}'
+
+        # Disable built-in PostgreSQL and Redis
+        postgresql['enable'] = false
+        redis['enable'] = false
+
+        # Performance tuning
+        puma['worker_processes'] = 4
+        sidekiq['max_concurrency'] = 25
+    ports:
+      - '{{ gitlab_http_port }}:80'
+      - '{{ gitlab_https_port }}:443'
+      - '2222:22'  # GitLab SSH on port 2222 to avoid conflict
+    volumes:
+      - {{ gitlab_data_dir }}/config:/etc/gitlab
+      - {{ gitlab_data_dir }}/logs:/var/log/gitlab
+      - {{ gitlab_data_dir }}/data:/var/opt/gitlab
+    shm_size: '256m'

@@ -1,0 +1,64 @@
+---
+# GitLab CE DevOps Platform deployment via Proxmox API
+
+# Container configuration
+gitlab_container_id: 153
+gitlab_hostname: "gitlab"
+gitlab_template_file: "debian-13-standard_13.1-2_amd64.tar.zst"
+gitlab_external_domain: "viljo.se"
+
+# Resources
+gitlab_cores: 8
+gitlab_memory: 16384
+gitlab_swap: 4096
+gitlab_disk: "100"
+gitlab_rootfs_storage: "local-lvm"
+
+# Network
+gitlab_bridge: "vmbr3"
+gitlab_ip_address: "172.16.10.153"
+gitlab_netmask: "24"
+gitlab_gateway: "172.16.10.101"
+gitlab_dns_servers:
+  - "1.1.1.1"
+  - "8.8.8.8"
+
+# Container settings
+gitlab_unprivileged: false
+gitlab_features: "nesting=1"
+
+# GitLab configuration
+gitlab_version: "18.5.0-ce.0"
+gitlab_data_dir: "/opt/gitlab"
+gitlab_compose_file: "/opt/gitlab/docker-compose.yml"
+
+# Service ports
+gitlab_http_port: 80
+gitlab_https_port: 443
+gitlab_ssh_port: 22
+
+# External URL
+gitlab_external_url: "https://{{ gitlab_hostname }}.{{ gitlab_external_domain }}"
+
+# Database configuration (PostgreSQL)
+gitlab_db_host: "172.16.10.150"
+gitlab_db_port: 5432
+gitlab_db_name: "gitlab"
+gitlab_db_user: "gitlab"
+gitlab_db_password: "{{ vault_postgres_gitlab_password }}"
+
+# Redis configuration
+gitlab_redis_host: "172.16.10.158"
+gitlab_redis_port: 6379
+gitlab_redis_password: "{{ vault_redis_password }}"
+
+# Admin credentials
+gitlab_root_password: "{{ vault_gitlab_root_password }}"
+
+# Container root password
+gitlab_container_root_password: "{{ vault_gitlab_container_root_password }}"
+
+# GitLab settings
+gitlab_email_enabled: false
+gitlab_signup_enabled: false
+gitlab_time_zone: "Europe/Stockholm"

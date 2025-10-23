@@ -1,0 +1,97 @@
+---
+# Webtop Browser Workspace deployment via Proxmox API
+
+- name: Create webtop container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ webtop_container_id }}"
+    hostname: "{{ webtop_hostname }}"
+    ostemplate: "local:vztmpl/{{ webtop_template_file }}"
+    cores: "{{ webtop_cores }}"
+    memory: "{{ webtop_memory }}"
+    swap: "{{ webtop_swap }}"
+    disk: "{{ webtop_rootfs_storage }}:{{ webtop_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ webtop_bridge }},ip={{ webtop_ip_address }}/{{ webtop_netmask }},gw={{ webtop_gateway }},type=veth"
+    nameserver: "{{ webtop_dns_servers | join(' ') }}"
+    unprivileged: "{{ webtop_unprivileged }}"
+    onboot: true
+    password: "{{ webtop_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: webtop_container
+
+- name: Enable Docker nesting
+  ansible.builtin.command:
+    cmd: "pct set {{ webtop_container_id }} --features {{ webtop_features }}"
+  when: webtop_container.changed
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Start webtop container
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ webtop_container_id }}"
+    state: started
+
+- name: Wait for SSH
+  ansible.builtin.wait_for:
+    host: "{{ webtop_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Add to inventory
+  ansible.builtin.add_host:
+    name: webtop_container
+    ansible_host: "{{ webtop_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ webtop_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Install Docker
+  ansible.builtin.shell: |
+    curl -fsSL https://get.docker.com | sh
+  args:
+    creates: /usr/bin/docker
+  delegate_to: webtop_container
+
+- name: Create data directory
+  ansible.builtin.file:
+    path: "{{ webtop_data_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: webtop_container
+
+- name: Deploy Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ webtop_compose_file }}"
+    mode: '0644'
+  delegate_to: webtop_container
+
+- name: Start Webtop
+  community.docker.docker_compose_v2:
+    project_src: "{{ webtop_data_dir }}"
+    state: present
+  delegate_to: webtop_container
+
+- name: Display configuration
+  ansible.builtin.debug:
+    msg:
+      - "Webtop deployed successfully"
+      - "  Container ID: {{ webtop_container_id }}"
+      - "  IP: {{ webtop_ip_address }}"
+      - "  External: https://{{ webtop_hostname }}.{{ webtop_external_domain }}"
+      - "  Desktop: {{ webtop_desktop_environment }}"

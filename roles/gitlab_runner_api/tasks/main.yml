@@ -1,0 +1,91 @@
+---
+# GitLab Runner deployment via Proxmox API
+
+- name: Create gitlab-runner container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ gitlab_runner_container_id }}"
+    hostname: "{{ gitlab_runner_hostname }}"
+    ostemplate: "local:vztmpl/{{ gitlab_runner_template_file }}"
+    cores: "{{ gitlab_runner_cores }}"
+    memory: "{{ gitlab_runner_memory }}"
+    swap: "{{ gitlab_runner_swap }}"
+    disk: "{{ gitlab_runner_rootfs_storage }}:{{ gitlab_runner_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ gitlab_runner_bridge }},ip={{ gitlab_runner_ip_address }}/{{ gitlab_runner_netmask }},gw={{ gitlab_runner_gateway }},type=veth"
+    nameserver: "{{ gitlab_runner_dns_servers | join(' ') }}"
+    unprivileged: "{{ gitlab_runner_unprivileged }}"
+    onboot: true
+    password: "{{ gitlab_runner_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: gitlab_runner_container
+
+- name: Enable nesting for Docker-in-Docker
+  ansible.builtin.command:
+    cmd: "pct set {{ gitlab_runner_container_id }} --features {{ gitlab_runner_features }}"
+  when: gitlab_runner_container.changed
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Start gitlab-runner container
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ gitlab_runner_container_id }}"
+    state: started
+
+- name: Wait for SSH
+  ansible.builtin.wait_for:
+    host: "{{ gitlab_runner_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Add to inventory
+  ansible.builtin.add_host:
+    name: gitlab_runner_container
+    ansible_host: "{{ gitlab_runner_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ gitlab_runner_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Install packages
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, gnupg, locales]
+    state: present
+    update_cache: yes
+  delegate_to: gitlab_runner_container
+
+- name: Install Docker
+  ansible.builtin.shell: |
+    curl -fsSL https://get.docker.com | sh
+  args:
+    creates: /usr/bin/docker
+  delegate_to: gitlab_runner_container
+
+- name: Install GitLab Runner
+  ansible.builtin.shell: |
+    curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | bash
+    apt-get install -y gitlab-runner
+  args:
+    creates: /usr/bin/gitlab-runner
+  delegate_to: gitlab_runner_container
+
+- name: Display configuration
+  ansible.builtin.debug:
+    msg:
+      - "GitLab Runner {{ gitlab_runner_version }} deployed"
+      - "  Container ID: {{ gitlab_runner_container_id }}"
+      - "  IP: {{ gitlab_runner_ip_address }}"
+      - "  Note: Register with: gitlab-runner register --url {{ gitlab_runner_url }} --token <your-token>"

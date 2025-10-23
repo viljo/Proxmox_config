@@ -1,0 +1,96 @@
+---
+# Nextcloud File Storage deployment via Proxmox API
+
+- name: Create nextcloud container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ nextcloud_container_id }}"
+    hostname: "{{ nextcloud_hostname }}"
+    ostemplate: "local:vztmpl/{{ nextcloud_template_file }}"
+    cores: "{{ nextcloud_cores }}"
+    memory: "{{ nextcloud_memory }}"
+    swap: "{{ nextcloud_swap }}"
+    disk: "{{ nextcloud_rootfs_storage }}:{{ nextcloud_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ nextcloud_bridge }},ip={{ nextcloud_ip_address }}/{{ nextcloud_netmask }},gw={{ nextcloud_gateway }},type=veth"
+    nameserver: "{{ nextcloud_dns_servers | join(' ') }}"
+    unprivileged: "{{ nextcloud_unprivileged }}"
+    onboot: true
+    password: "{{ nextcloud_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: nextcloud_container
+
+- name: Enable Docker nesting
+  ansible.builtin.command:
+    cmd: "pct set {{ nextcloud_container_id }} --features {{ nextcloud_features }}"
+  when: nextcloud_container.changed
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Start nextcloud container
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ nextcloud_container_id }}"
+    state: started
+
+- name: Wait for SSH
+  ansible.builtin.wait_for:
+    host: "{{ nextcloud_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Add to inventory
+  ansible.builtin.add_host:
+    name: nextcloud_container
+    ansible_host: "{{ nextcloud_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ nextcloud_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Install Docker
+  ansible.builtin.shell: |
+    curl -fsSL https://get.docker.com | sh
+  args:
+    creates: /usr/bin/docker
+  delegate_to: nextcloud_container
+
+- name: Create data directory
+  ansible.builtin.file:
+    path: "{{ nextcloud_data_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: nextcloud_container
+
+- name: Deploy Docker Compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ nextcloud_compose_file }}"
+    mode: '0644'
+  delegate_to: nextcloud_container
+
+- name: Start Nextcloud
+  community.docker.docker_compose_v2:
+    project_src: "{{ nextcloud_data_dir }}"
+    state: present
+  delegate_to: nextcloud_container
+
+- name: Display configuration
+  ansible.builtin.debug:
+    msg:
+      - "Nextcloud {{ nextcloud_version }} deployed"
+      - "  Container ID: {{ nextcloud_container_id }}"
+      - "  IP: {{ nextcloud_ip_address }}"
+      - "  External: https://{{ nextcloud_hostname }}.{{ nextcloud_external_domain }}"

@@ -1,0 +1,22 @@
+services:
+  webtop:
+    image: lscr.io/linuxserver/webtop:{{ webtop_version }}-{{ webtop_desktop_environment }}
+    container_name: webtop
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Stockholm
+      - SUBFOLDER=/
+      - TITLE=Webtop
+      - PASSWORD={{ webtop_user_password }}
+    ports:
+      - "{{ webtop_service_port }}:3000"
+    volumes:
+      - webtop-data:/config
+    shm_size: "1gb"
+
+volumes:
+  webtop-data:

@@ -1,0 +1,22 @@
+services:
+  nextcloud:
+    image: nextcloud:{{ nextcloud_version }}
+    container_name: nextcloud
+    restart: unless-stopped
+    ports:
+      - "{{ nextcloud_service_port }}:80"
+    environment:
+      - POSTGRES_HOST={{ nextcloud_db_host }}
+      - POSTGRES_DB={{ nextcloud_db_name }}
+      - POSTGRES_USER={{ nextcloud_db_user }}
+      - POSTGRES_PASSWORD={{ nextcloud_db_password }}
+      - REDIS_HOST={{ nextcloud_redis_host }}
+      - REDIS_HOST_PASSWORD={{ nextcloud_redis_password }}
+      - NEXTCLOUD_ADMIN_USER={{ nextcloud_admin_user }}
+      - NEXTCLOUD_ADMIN_PASSWORD={{ nextcloud_admin_password }}
+      - NEXTCLOUD_TRUSTED_DOMAINS={{ nextcloud_hostname }}.{{ nextcloud_external_domain }} {{ nextcloud_ip_address }}
+    volumes:
+      - nextcloud-data:/var/www/html
+
+volumes:
+  nextcloud-data:

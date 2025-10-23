@@ -1,0 +1,8 @@
+---
+- name: Deploy GitLab CE DevOps Platform
+  hosts: proxmox_admin
+  gather_facts: yes
+  become: no
+
+  roles:
+    - role: gitlab_api
