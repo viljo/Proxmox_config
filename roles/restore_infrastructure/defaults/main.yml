@@ -6,25 +6,61 @@ restore_backup_timestamp: ""  # Required: timestamp of backup to restore
 restore_base_dir: "/var/backups/infrastructure"
 
 # What to restore
-restore_containers_enabled: true
 restore_postgresql_enabled: true
+restore_redis_enabled: true
 restore_docker_volumes_enabled: true
-restore_configs_enabled: false  # Dangerous - requires manual verification
-
-# Container restore options
-restore_containers: []  # Empty = restore all from backup manifest
+restore_configs_enabled: false  # Not implemented - manual process recommended
 
 # PostgreSQL restore options
 restore_postgresql_host: "172.16.10.150"
 restore_postgresql_port: 5432
 restore_postgresql_user: "postgres"
 restore_postgresql_password: "{{ vault_postgres_user_password }}"
-restore_postgresql_databases: []  # Empty = restore all from backup
+
+# Redis restore options
+restore_redis_container_id: 158
+
+# Container ID mapping (service name -> container ID)
+restore_container_id_map:
+  keycloak: 151
+  gitlab: 153
+  nextcloud: 155
+  mattermost: 163
+  webtop: 170
+
+# Volume path mapping (container -> volume_name -> path)
+restore_volume_path_map:
+  keycloak:
+    data: "/opt/keycloak"
+  gitlab:
+    config: "/opt/gitlab/config"
+    data: "/opt/gitlab/data"
+    logs: "/opt/gitlab/logs"
+  nextcloud:
+    data: "/opt/nextcloud"
+  mattermost:
+    config: "/opt/mattermost/config"
+    data: "/opt/mattermost/data"
+    logs: "/opt/mattermost/logs"
+  webtop:
+    data: "/opt/webtop"
+
+# Services to stop before PostgreSQL restore (container IDs)
+restore_services_to_stop_postgresql:
+  - 151  # Keycloak
+  - 153  # GitLab
+  - 155  # Nextcloud
+  - 163  # Mattermost
+
+# Service name mapping for systemctl commands
+restore_postgresql_service_map:
+  151: "docker"  # Keycloak uses Docker
+  153: "docker"  # GitLab uses Docker
+  155: "docker"  # Nextcloud uses Docker
+  163: "docker"  # Mattermost uses Docker
 
 # Safety checks
 restore_require_confirmation: true
 restore_dry_run: false
-
-# Restoration strategy
 restore_stop_services_first: true
 restore_verify_after_restore: true
