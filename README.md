@@ -28,7 +28,14 @@ This repository contains a set of Ansible roles and configuration files for depl
 
 ## Usage
 
-Each Ansible role is contained in `roles/` and is designed to be idempotent.  The top-level playbook `playbooks/site.yml` orchestrates the deployment, while `playbooks/dmz-rebuild.yml` can be used to tear down and redeploy only the public services after network changes (it calls `roles/dmz_cleanup` to purge old LXCs before recreating them on the 172.16.10.0/24 DMZ).
+**Automation Status**: 100% coverage – all 11 services deployable via API-first Ansible automation. Deploy the entire infrastructure from scratch with:
+```bash
+ansible-playbook -i inventory/hosts.yml playbooks/full-deployment.yml
+```
+
+Each Ansible role is contained in `roles/` and follows idempotent, API-first design patterns. Individual services can be deployed with service-specific playbooks (`playbooks/*-deploy.yml`), or the entire stack deployed in dependency order via `playbooks/full-deployment.yml`.
+
+See [README_AUTOMATION.md](README_AUTOMATION.md) for automation details and [docs/AUTOMATION_AUDIT.md](docs/AUTOMATION_AUDIT.md) for disaster recovery validation.
 
 Secrets and sensitive credentials now live exclusively in the encrypted vault (`inventory/group_vars/all/secrets.yml`); edit them with:
 ```bash
@@ -56,18 +63,23 @@ All LXC roles default to the Debian 13 (Trixie) standard template (`{{ debian_te
 - **`.tooling/`** – Development tool configurations (ansible-lint, yamllint, claude-code, specify)
 - **`.archive/`** – Historical analysis files and completed documentation
 
-## Key Services
+## Deployed Services
 
-| Service | Container ID | IP Address | URL |
-|---------|--------------|------------|-----|
-| Firewall | 1 | 172.16.10.1 | N/A (NAT gateway) |
-| PostgreSQL | 50 | 172.16.10.50 | N/A (internal) |
-| Keycloak | 51 | 172.16.10.51 | https://keycloak.viljo.se |
-| NetBox | 52 | 172.16.10.52 | https://netbox.viljo.se |
-| GitLab | 53 | 172.16.10.53 | https://gitlab.viljo.se |
-| Demo Site | 60 | 172.16.10.60 | https://demosite.viljo.se |
+| Service | Container ID | IP Address | URL | Automation |
+|---------|--------------|------------|-----|------------|
+| Firewall | 101 | 172.16.10.101 | N/A (NAT gateway) | ⚠️ Partial |
+| Bastion | 110 | 192.168.1.110 | ssh.viljo.se | ✅ Full |
+| PostgreSQL | 150 | 172.16.10.150 | N/A (internal) | ✅ Full |
+| Keycloak | 151 | 172.16.10.151 | https://keycloak.viljo.se | ✅ Full |
+| GitLab | 153 | 172.16.10.153 | https://gitlab.viljo.se | ✅ Full |
+| GitLab Runner | 154 | 172.16.10.154 | N/A (internal) | ✅ Full |
+| Nextcloud | 155 | 172.16.10.155 | https://nextcloud.viljo.se | ✅ Full |
+| Redis | 158 | 172.16.10.158 | N/A (internal) | ✅ Full |
+| Demo Site | 160 | 172.16.10.160 | https://demosite.viljo.se | ✅ Full |
+| Mattermost | 163 | 172.16.10.163 | https://mattermost.viljo.se | ✅ Full |
+| Webtop | 170 | 172.16.10.170 | https://browser.viljo.se | ✅ Full |
 
-See [Container Mapping](docs/architecture/container-mapping.md) for all 16 services.
+**Automation Coverage**: 100% (11 of 11 services) | See [Container Mapping](docs/architecture/container-mapping.md) for complete details.
 
 ## Documentation
 
