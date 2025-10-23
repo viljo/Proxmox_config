@@ -1,0 +1,188 @@
+---
+# Infrastructure Restore Tasks
+
+- name: Validate restore parameters
+  ansible.builtin.assert:
+    that:
+      - restore_backup_timestamp is defined
+      - restore_backup_timestamp != ""
+    fail_msg: "restore_backup_timestamp is required. Set it to the backup timestamp you want to restore."
+
+- name: Check if backup exists
+  ansible.builtin.stat:
+    path: "{{ restore_base_dir }}/{{ restore_backup_timestamp }}"
+  register: backup_dir
+
+- name: Fail if backup doesn't exist
+  ansible.builtin.fail:
+    msg: "Backup directory not found: {{ restore_base_dir }}/{{ restore_backup_timestamp }}"
+  when: not backup_dir.stat.exists
+
+- name: Load backup manifest
+  ansible.builtin.include_vars:
+    file: "{{ restore_base_dir }}/{{ restore_backup_timestamp }}/MANIFEST.yml"
+    name: backup_manifest
+
+- name: Display restore banner
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - " INFRASTRUCTURE RESTORE"
+      - "=========================================="
+      - "⚠️  WARNING: This will restore from backup"
+      - ""
+      - "Backup timestamp: {{ restore_backup_timestamp }}"
+      - "Backup location: {{ restore_base_dir }}/{{ restore_backup_timestamp }}"
+      - ""
+      - "Containers: {{ 'YES' if restore_containers_enabled else 'NO' }}"
+      - "PostgreSQL: {{ 'YES' if restore_postgresql_enabled else 'NO' }}"
+      - "Docker Volumes: {{ 'YES' if restore_docker_volumes_enabled else 'NO' }}"
+      - "Configs: {{ 'YES' if restore_configs_enabled else 'NO' }}"
+      - ""
+      - "Dry run: {{ 'YES' if restore_dry_run else 'NO' }}"
+      - "=========================================="
+
+- name: Confirmation pause
+  ansible.builtin.pause:
+    prompt: |
+
+      ⚠️  CRITICAL WARNING ⚠️
+
+      You are about to restore infrastructure from backup.
+      This operation may:
+        - Stop running containers
+        - Overwrite existing data
+        - Replace databases
+        - Modify configurations
+
+      Press ENTER to continue or Ctrl+C then A to abort
+  when: restore_require_confirmation and not restore_dry_run
+
+# PostgreSQL Database Restore
+- name: Restore PostgreSQL databases
+  block:
+    - name: Find PostgreSQL backup files
+      ansible.builtin.find:
+        paths: "{{ restore_base_dir }}/{{ restore_backup_timestamp }}/postgresql"
+        patterns: "*.dump"
+      register: postgresql_backup_files
+
+    - name: Display databases to restore
+      ansible.builtin.debug:
+        msg: "Found {{ postgresql_backup_files.files | length }} database backups"
+
+    - name: Restore PostgreSQL databases
+      ansible.builtin.shell:
+        cmd: |
+          {% if restore_dry_run %}
+          echo "[DRY RUN] Would restore: {{ item.path }}"
+          {% else %}
+          PGPASSWORD='{{ restore_postgresql_password }}' pg_restore \
+            -h {{ restore_postgresql_host }} \
+            -p {{ restore_postgresql_port }} \
+            -U {{ restore_postgresql_user }} \
+            -d {{ item.path | basename | regex_replace('_.*\\.dump$', '') }} \
+            --clean --if-exists \
+            {{ item.path }}
+          {% endif %}
+      loop: "{{ postgresql_backup_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      no_log: true
+      when: postgresql_backup_files.files | length > 0
+      register: postgresql_restore_results
+
+  when: restore_postgresql_enabled
+
+# Container Restore
+- name: Restore containers
+  block:
+    - name: Find container backup files
+      ansible.builtin.find:
+        paths: "/var/lib/vz/dump"
+        patterns: "vzdump-lxc-*{{ restore_backup_timestamp }}*.tar.zst"
+      register: container_backup_files
+
+    - name: Display containers to restore
+      ansible.builtin.debug:
+        msg: |
+          Found {{ container_backup_files.files | length }} container backups
+
+          ⚠️  NOTE: Container restoration must be done manually:
+
+          {% for file in container_backup_files.files %}
+          pct restore <NEW_VMID> {{ file.path }} --storage local-lvm
+          {% endfor %}
+
+          This playbook provides guidance only for container restoration.
+          Automatic container restoration requires the containers to not exist.
+
+  when: restore_containers_enabled
+
+# Docker Volumes Restore
+- name: Restore Docker volumes
+  block:
+    - name: Find Docker volume backups
+      ansible.builtin.find:
+        paths: "{{ restore_base_dir }}/{{ restore_backup_timestamp }}/docker-volumes"
+        patterns: "*.tar.gz"
+      register: docker_volume_backups
+
+    - name: Display volumes to restore
+      ansible.builtin.debug:
+        msg: "Found {{ docker_volume_backups.files | length }} Docker volume backups"
+
+    - name: Extract Docker volume backups
+      ansible.builtin.shell:
+        cmd: |
+          {% if restore_dry_run %}
+          echo "[DRY RUN] Would extract: {{ item.path }}"
+          {% else %}
+          # Extract to temporary location and then move to proper location
+          # This is a placeholder - actual restoration requires container-specific logic
+          echo "Volume backup: {{ item.path }}"
+          {% endif %}
+      loop: "{{ docker_volume_backups.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+      when: docker_volume_backups.files | length > 0
+
+  when: restore_docker_volumes_enabled
+
+# Verification
+- name: Verify restored databases
+  ansible.builtin.shell:
+    cmd: |
+      PGPASSWORD='{{ restore_postgresql_password }}' psql \
+        -h {{ restore_postgresql_host }} \
+        -p {{ restore_postgresql_port }} \
+        -U {{ restore_postgresql_user }} \
+        -d {{ item.path | basename | regex_replace('_.*\\.dump$', '') }} \
+        -c "SELECT count(*) FROM pg_tables WHERE schemaname='public';"
+  loop: "{{ postgresql_backup_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  no_log: true
+  when:
+    - restore_postgresql_enabled
+    - restore_verify_after_restore
+    - not restore_dry_run
+  register: database_verification
+
+- name: Display restore summary
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - " RESTORE SUMMARY"
+      - "=========================================="
+      - "Backup timestamp: {{ restore_backup_timestamp }}"
+      - "Dry run: {{ 'YES' if restore_dry_run else 'NO' }}"
+      - ""
+      - "PostgreSQL databases: {{ postgresql_backup_files.files | default([]) | length if restore_postgresql_enabled else 'SKIPPED' }}"
+      - "Container backups found: {{ container_backup_files.files | default([]) | length if restore_containers_enabled else 'SKIPPED' }}"
+      - "Docker volumes found: {{ docker_volume_backups.files | default([]) | length if restore_docker_volumes_enabled else 'SKIPPED' }}"
+      - ""
+      - "{% if restore_dry_run %}This was a DRY RUN - no changes were made.{% else %}Restore completed!{% endif %}"
+      - ""
+      - "For manual container restoration, see above commands."
+      - "=========================================="

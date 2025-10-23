@@ -1,0 +1,56 @@
+---
+# Infrastructure Restore Playbook
+# Restores containers, databases, and configurations from backup
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/restore-infrastructure.yml \
+#     -e restore_backup_timestamp=20250123T120000 \
+#     -e restore_dry_run=true
+
+- name: Restore Infrastructure from Backup
+  hosts: proxmox_admin
+  gather_facts: yes
+  become: no
+
+  pre_tasks:
+    - name: Check required variables
+      ansible.builtin.assert:
+        that:
+          - restore_backup_timestamp is defined
+          - vault_postgres_user_password is defined
+        fail_msg: |
+          Required variables not defined.
+
+          Usage:
+            ansible-playbook playbooks/restore-infrastructure.yml \
+              -e restore_backup_timestamp=YYYYMMDDTHHMMSS \
+              -e restore_dry_run=true  # Optional: test without making changes
+
+          Example:
+            ansible-playbook playbooks/restore-infrastructure.yml \
+              -e restore_backup_timestamp=20250123T120000
+
+    - name: Ensure restore dependencies are installed
+      ansible.builtin.apt:
+        name:
+          - postgresql-client
+        state: present
+        update_cache: no
+
+  roles:
+    - role: restore_infrastructure
+
+  post_tasks:
+    - name: Display next steps
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "Restore operation completed."
+          - ""
+          - "Next steps:"
+          - "  1. Verify database connectivity"
+          - "  2. Manually restore containers if needed"
+          - "  3. Restart affected services"
+          - "  4. Verify application functionality"
+          - ""
+          - "See: {{ restore_base_dir }}/{{ restore_backup_timestamp }}/BACKUP_SUMMARY.txt"

@@ -1,0 +1,7 @@
+---
+# Backup notification handlers (placeholder for future notifications)
+
+- name: Send backup notification
+  ansible.builtin.debug:
+    msg: "Backup notification would be sent here"
+  when: backup_notify_enabled

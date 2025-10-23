@@ -1,0 +1,30 @@
+---
+# Infrastructure Restore Configuration
+
+# Backup to restore from
+restore_backup_timestamp: ""  # Required: timestamp of backup to restore
+restore_base_dir: "/var/backups/infrastructure"
+
+# What to restore
+restore_containers_enabled: true
+restore_postgresql_enabled: true
+restore_docker_volumes_enabled: true
+restore_configs_enabled: false  # Dangerous - requires manual verification
+
+# Container restore options
+restore_containers: []  # Empty = restore all from backup manifest
+
+# PostgreSQL restore options
+restore_postgresql_host: "172.16.10.150"
+restore_postgresql_port: 5432
+restore_postgresql_user: "postgres"
+restore_postgresql_password: "{{ vault_postgres_user_password }}"
+restore_postgresql_databases: []  # Empty = restore all from backup
+
+# Safety checks
+restore_require_confirmation: true
+restore_dry_run: false
+
+# Restoration strategy
+restore_stop_services_first: true
+restore_verify_after_restore: true
