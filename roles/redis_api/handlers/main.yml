@@ -1,0 +1,6 @@
+---
+- name: Restart redis
+  ansible.builtin.systemd:
+    name: redis-server
+    state: restarted
+  delegate_to: redis_container

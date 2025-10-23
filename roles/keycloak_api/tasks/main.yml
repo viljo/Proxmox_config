@@ -1,0 +1,169 @@
+---
+# Keycloak SSO/Identity Provider deployment via Proxmox API
+
+- name: Create keycloak container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ keycloak_container_id }}"
+    hostname: "{{ keycloak_hostname }}"
+    ostemplate: "local:vztmpl/{{ keycloak_template_file }}"
+    cores: "{{ keycloak_cores }}"
+    memory: "{{ keycloak_memory }}"
+    swap: "{{ keycloak_swap }}"
+    disk: "{{ keycloak_rootfs_storage }}:{{ keycloak_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ keycloak_bridge }},ip={{ keycloak_ip_address }}/{{ keycloak_netmask }},gw={{ keycloak_gateway }},type=veth"
+    nameserver: "{{ keycloak_dns_servers | join(' ') }}"
+    unprivileged: "{{ keycloak_unprivileged }}"
+    onboot: true
+    password: "{{ keycloak_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: keycloak_container
+
+- name: Enable nesting feature for Docker support
+  ansible.builtin.command:
+    cmd: "pct set {{ keycloak_container_id }} --features {{ keycloak_features }}"
+  when: keycloak_container.changed
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Start keycloak container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ keycloak_container_id }}"
+    state: started
+
+- name: Wait for keycloak container SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ keycloak_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Add keycloak to in-memory inventory for delegation
+  ansible.builtin.add_host:
+    name: keycloak_container
+    ansible_host: "{{ keycloak_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ keycloak_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Install required system packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - locales
+    state: present
+    update_cache: yes
+  delegate_to: keycloak_container
+
+- name: Generate en_US.UTF-8 locale
+  ansible.builtin.command:
+    cmd: locale-gen en_US.UTF-8
+  delegate_to: keycloak_container
+  changed_when: false
+
+- name: Set system locale
+  ansible.builtin.copy:
+    content: |
+      LANG=en_US.UTF-8
+      LC_ALL=en_US.UTF-8
+    dest: /etc/default/locale
+  delegate_to: keycloak_container
+
+- name: Create Docker repository keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  delegate_to: keycloak_container
+
+- name: Add Docker GPG key
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    creates: /etc/apt/keyrings/docker.gpg
+  delegate_to: keycloak_container
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian bookworm stable"
+    state: present
+    filename: docker
+  delegate_to: keycloak_container
+
+- name: Install Docker and Docker Compose
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+  delegate_to: keycloak_container
+
+- name: Enable and start Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: yes
+    state: started
+  delegate_to: keycloak_container
+
+- name: Create Keycloak data directory
+  ansible.builtin.file:
+    path: "{{ keycloak_data_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  delegate_to: keycloak_container
+
+- name: Deploy Docker Compose configuration
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ keycloak_compose_file }}"
+    mode: '0644'
+  delegate_to: keycloak_container
+  notify: Restart keycloak
+
+- name: Start Keycloak via Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ keycloak_data_dir }}"
+    state: present
+  delegate_to: keycloak_container
+
+- name: Wait for Keycloak to be ready
+  ansible.builtin.command:
+    cmd: "curl -f http://localhost:{{ keycloak_service_port }}/health/ready"
+  register: keycloak_health
+  until: keycloak_health.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+  delegate_to: keycloak_container
+
+- name: Display keycloak configuration
+  ansible.builtin.debug:
+    msg:
+      - "Keycloak {{ keycloak_version }} deployed successfully"
+      - "  Container ID: {{ keycloak_container_id }}"
+      - "  IP: {{ keycloak_ip_address }}"
+      - "  Internal URL: http://{{ keycloak_ip_address }}:{{ keycloak_service_port }}/"
+      - "  External URL: https://{{ keycloak_hostname }}.{{ keycloak_external_domain }}/"
+      - "  Admin Console: https://{{ keycloak_hostname }}.{{ keycloak_external_domain }}/admin"
+      - "  Admin User: {{ keycloak_admin_user }}"
+      - "  Database: {{ keycloak_db_host }}:{{ keycloak_db_port }}/{{ keycloak_db_name }}"

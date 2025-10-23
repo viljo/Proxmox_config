@@ -1,0 +1,6 @@
+---
+- name: Restart postgresql
+  ansible.builtin.systemd:
+    name: postgresql
+    state: restarted
+  delegate_to: postgresql_container

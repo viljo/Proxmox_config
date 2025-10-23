@@ -1,0 +1,196 @@
+---
+# PostgreSQL Database Server deployment via Proxmox API
+
+- name: Create postgresql container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ postgresql_container_id }}"
+    hostname: "{{ postgresql_hostname }}"
+    ostemplate: "local:vztmpl/{{ postgresql_template_file }}"
+    cores: "{{ postgresql_cores }}"
+    memory: "{{ postgresql_memory }}"
+    swap: "{{ postgresql_swap }}"
+    disk: "{{ postgresql_rootfs_storage }}:{{ postgresql_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ postgresql_bridge }},ip={{ postgresql_ip_address }}/{{ postgresql_netmask }},gw={{ postgresql_gateway }},type=veth"
+    nameserver: "{{ postgresql_dns_servers | join(' ') }}"
+    unprivileged: "{{ postgresql_unprivileged }}"
+    onboot: true
+    password: "{{ postgresql_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: postgresql_container
+
+- name: Start postgresql container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ postgresql_container_id }}"
+    state: started
+
+- name: Wait for postgresql container SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ postgresql_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Add postgresql to in-memory inventory for delegation
+  ansible.builtin.add_host:
+    name: postgresql_container
+    ansible_host: "{{ postgresql_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ postgresql_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Install required system packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - locales
+      - lsb-release
+    state: present
+    update_cache: yes
+  delegate_to: postgresql_container
+
+- name: Generate en_US.UTF-8 locale
+  ansible.builtin.command:
+    cmd: locale-gen en_US.UTF-8
+  delegate_to: postgresql_container
+  changed_when: false
+
+- name: Set system locale
+  ansible.builtin.copy:
+    content: |
+      LANG=en_US.UTF-8
+      LC_ALL=en_US.UTF-8
+    dest: /etc/default/locale
+  delegate_to: postgresql_container
+
+- name: Create PostgreSQL repository keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  delegate_to: postgresql_container
+
+- name: Add PostgreSQL GPG key
+  ansible.builtin.shell:
+    cmd: curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /etc/apt/keyrings/pgdg.gpg
+    creates: /etc/apt/keyrings/pgdg.gpg
+  delegate_to: postgresql_container
+
+- name: Add PostgreSQL repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/pgdg.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main"
+    state: present
+    filename: pgdg
+  delegate_to: postgresql_container
+
+- name: Install PostgreSQL {{ postgresql_version }}
+  ansible.builtin.apt:
+    name:
+      - "postgresql-{{ postgresql_version }}"
+      - "postgresql-contrib-{{ postgresql_version }}"
+      - "postgresql-client-{{ postgresql_version }}"
+    state: present
+    update_cache: yes
+  delegate_to: postgresql_container
+
+- name: Stop PostgreSQL to configure
+  ansible.builtin.systemd:
+    name: postgresql
+    state: stopped
+  delegate_to: postgresql_container
+
+- name: Deploy PostgreSQL configuration
+  ansible.builtin.template:
+    src: postgresql.conf.j2
+    dest: "/etc/postgresql/{{ postgresql_version }}/main/postgresql.conf"
+    owner: postgres
+    group: postgres
+    mode: '0644'
+  delegate_to: postgresql_container
+  notify: Restart postgresql
+
+- name: Deploy pg_hba.conf
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "/etc/postgresql/{{ postgresql_version }}/main/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: '0640'
+  delegate_to: postgresql_container
+  notify: Restart postgresql
+
+- name: Enable and start PostgreSQL service
+  ansible.builtin.systemd:
+    name: postgresql
+    enabled: yes
+    state: started
+  delegate_to: postgresql_container
+
+- name: Wait for PostgreSQL to be ready
+  ansible.builtin.command:
+    cmd: "pg_isready -h localhost -p {{ postgresql_port }}"
+  register: postgresql_health
+  until: postgresql_health.rc == 0
+  retries: 10
+  delay: 3
+  changed_when: false
+  delegate_to: postgresql_container
+
+- name: Set postgres user password
+  ansible.builtin.shell:
+    cmd: |
+      sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD '{{ postgresql_postgres_password }}';"
+  delegate_to: postgresql_container
+  no_log: true
+  changed_when: true
+
+- name: Create PostgreSQL users
+  ansible.builtin.shell:
+    cmd: |
+      sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='{{ item.name }}'" | grep -q 1 || \
+      sudo -u postgres psql -c "CREATE USER {{ item.name }} WITH PASSWORD '{{ item.password }}';"
+  loop: "{{ postgresql_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: postgresql_container
+  no_log: true
+  when: postgresql_users | length > 0
+
+- name: Create PostgreSQL databases
+  ansible.builtin.shell:
+    cmd: |
+      sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='{{ item.name }}'" | grep -q 1 || \
+      sudo -u postgres psql -c "CREATE DATABASE {{ item.name }} OWNER {{ item.owner | default(item.name) }} ENCODING 'UTF8';"
+  loop: "{{ postgresql_databases }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: postgresql_container
+  when: postgresql_databases | length > 0
+
+- name: Display postgresql configuration
+  ansible.builtin.debug:
+    msg:
+      - "PostgreSQL {{ postgresql_version }} deployed successfully"
+      - "  Container ID: {{ postgresql_container_id }}"
+      - "  IP: {{ postgresql_ip_address }}"
+      - "  Port: {{ postgresql_port }}"
+      - "  Connection: postgresql://user:password@{{ postgresql_ip_address }}:{{ postgresql_port }}/database"
+      - "  Users created: {{ postgresql_users | map(attribute='name') | join(', ') }}"
+      - "  Databases created: {{ postgresql_databases | map(attribute='name') | join(', ') }}"

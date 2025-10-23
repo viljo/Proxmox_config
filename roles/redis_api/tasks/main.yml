@@ -1,0 +1,134 @@
+---
+# Redis Cache and Message Queue deployment via Proxmox API
+
+- name: Create redis container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ redis_container_id }}"
+    hostname: "{{ redis_hostname }}"
+    ostemplate: "local:vztmpl/{{ redis_template_file }}"
+    cores: "{{ redis_cores }}"
+    memory: "{{ redis_memory }}"
+    swap: "{{ redis_swap }}"
+    disk: "{{ redis_rootfs_storage }}:{{ redis_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ redis_bridge }},ip={{ redis_ip_address }}/{{ redis_netmask }},gw={{ redis_gateway }},type=veth"
+    nameserver: "{{ redis_dns_servers | join(' ') }}"
+    unprivileged: "{{ redis_unprivileged }}"
+    onboot: true
+    password: "{{ redis_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: redis_container
+
+- name: Start redis container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_token_id: "{{ proxmox_api_token_id }}"
+    api_token_secret: "{{ proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ redis_container_id }}"
+    state: started
+
+- name: Wait for redis container SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ redis_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+  delegate_to: "{{ inventory_hostname }}"
+
+- name: Add redis to in-memory inventory for delegation
+  ansible.builtin.add_host:
+    name: redis_container
+    ansible_host: "{{ redis_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ redis_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Install required system packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - locales
+    state: present
+    update_cache: yes
+  delegate_to: redis_container
+
+- name: Generate en_US.UTF-8 locale
+  ansible.builtin.command:
+    cmd: locale-gen en_US.UTF-8
+  delegate_to: redis_container
+  changed_when: false
+
+- name: Set system locale
+  ansible.builtin.copy:
+    content: |
+      LANG=en_US.UTF-8
+      LC_ALL=en_US.UTF-8
+    dest: /etc/default/locale
+  delegate_to: redis_container
+
+- name: Install Redis
+  ansible.builtin.apt:
+    name:
+      - redis-server
+      - redis-tools
+    state: present
+    update_cache: yes
+  delegate_to: redis_container
+
+- name: Stop Redis to configure
+  ansible.builtin.systemd:
+    name: redis-server
+    state: stopped
+  delegate_to: redis_container
+
+- name: Deploy Redis configuration
+  ansible.builtin.template:
+    src: redis.conf.j2
+    dest: /etc/redis/redis.conf
+    owner: redis
+    group: redis
+    mode: '0640'
+  delegate_to: redis_container
+  notify: Restart redis
+
+- name: Enable and start Redis service
+  ansible.builtin.systemd:
+    name: redis-server
+    enabled: yes
+    state: started
+  delegate_to: redis_container
+
+- name: Wait for Redis to be ready
+  ansible.builtin.command:
+    cmd: "redis-cli -h localhost -p {{ redis_port }} -a {{ redis_requirepass }} ping"
+  register: redis_health
+  until: redis_health.stdout == "PONG"
+  retries: 10
+  delay: 3
+  changed_when: false
+  delegate_to: redis_container
+  no_log: true
+
+- name: Display redis configuration
+  ansible.builtin.debug:
+    msg:
+      - "Redis deployed successfully"
+      - "  Container ID: {{ redis_container_id }}"
+      - "  IP: {{ redis_ip_address }}"
+      - "  Port: {{ redis_port }}"
+      - "  Connection: redis://:password@{{ redis_ip_address }}:{{ redis_port }}"
+      - "  Max Memory: {{ redis_maxmemory }}"
+      - "  Eviction Policy: {{ redis_maxmemory_policy }}"
