@@ -42,10 +42,9 @@
       --mode snapshot
       {% if item.compress | default(true) %}--compress zstd{% endif %}
       --notes-template "Automated backup {{ backup_timestamp }}"
-  loop: "{{ backup_containers }}"
+  loop: "{{ backup_containers | selectattr('enabled', 'equalto', true) | list }}"
   loop_control:
     label: "{{ item.name }} ({{ item.id }})"
-  when: item.enabled | default(true)
   register: container_backups
 
 - name: Record container backup results
@@ -98,24 +97,25 @@
   register: redis_save
 
 - name: Backup Redis dump file
-  ansible.builtin.command:
+  ansible.builtin.shell:
     cmd: >
-      pct exec {{ backup_redis_container_id }} --
-      cp /var/lib/redis/dump.rdb {{ backup_base_dir }}/{{ backup_timestamp }}/redis_{{ backup_timestamp }}.rdb
+      pct exec {{ backup_redis_container_id }} -- cat /var/lib/redis/dump.rdb > {{ backup_base_dir }}/{{ backup_timestamp }}/redis_{{ backup_timestamp }}.rdb
   when: backup_redis_enabled and redis_save.rc == 0
+  register: redis_backup
 
 # Docker Volumes Backup
 - name: Backup Docker volumes
-  ansible.builtin.command:
+  ansible.builtin.shell:
     cmd: >
-      pct exec {{ item.container_id }} --
-      tar czf {{ backup_base_dir }}/{{ backup_timestamp }}/docker-volumes/{{ item.name }}_{{ volume | basename }}_{{ backup_timestamp }}.tar.gz
-      -C {{ volume | dirname }} {{ volume | basename }}
+      pct exec {{ item.0.container_id }} --
+      tar czf /tmp/{{ item.0.name }}_{{ item.1 | basename }}_{{ backup_timestamp }}.tar.gz
+      -C {{ item.1 | dirname }} {{ item.1 | basename }} &&
+      pct pull {{ item.0.container_id }} /tmp/{{ item.0.name }}_{{ item.1 | basename }}_{{ backup_timestamp }}.tar.gz
+      {{ backup_base_dir }}/{{ backup_timestamp }}/docker-volumes/{{ item.0.name }}_{{ item.1 | basename }}_{{ backup_timestamp }}.tar.gz &&
+      pct exec {{ item.0.container_id }} -- rm /tmp/{{ item.0.name }}_{{ item.1 | basename }}_{{ backup_timestamp }}.tar.gz
   loop: "{{ backup_docker_containers | subelements('volumes') }}"
   loop_control:
     label: "{{ item.0.name }}: {{ item.1 }}"
-  vars:
-    volume: "{{ item.1 }}"
   when: backup_docker_volumes_enabled
   register: docker_volume_backups
 
@@ -124,9 +124,10 @@
   ansible.builtin.shell:
     cmd: >
       tar czf {{ backup_base_dir }}/{{ backup_timestamp }}/configs/proxmox-configs_{{ backup_timestamp }}.tar.gz
-      {{ backup_proxmox_configs | join(' ') }}
+      {{ backup_proxmox_configs | join(' ') }} 2>/dev/null || true
   when: backup_proxmox_configs_enabled
   register: config_backup
+  failed_when: false
 
 # Create backup summary
 - name: Create backup summary
@@ -180,8 +181,8 @@
       - "Backup size: {{ backup_size.stdout }}"
       - "Containers backed up: {{ backup_containers | selectattr('enabled', 'equalto', true) | list | length }}"
       - "PostgreSQL databases: {{ backup_postgresql_databases | length if backup_postgresql_enabled else 0 }}"
-      - "Docker volumes: {{ backup_docker_containers | sum(attribute='volumes', start=[]) | length if backup_docker_volumes_enabled else 0 }}"
-      - "Remote sync: {{ 'Completed' if backup_remote_enabled and remote_sync.rc == 0 else 'Disabled' }}"
+      - "Docker volumes: {{ docker_volume_backups.results | length if backup_docker_volumes_enabled and docker_volume_backups is defined else 0 }}"
+      - "Remote sync: {{ 'Completed' if backup_remote_enabled and remote_sync is defined and remote_sync.rc == 0 else 'Disabled' }}"
       - ""
       - "Backup manifest: {{ backup_base_dir }}/{{ backup_timestamp }}/MANIFEST.yml"
       - "Backup summary: {{ backup_base_dir }}/{{ backup_timestamp }}/BACKUP_SUMMARY.txt"
