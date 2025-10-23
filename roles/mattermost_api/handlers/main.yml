@@ -1,0 +1,8 @@
+---
+# Mattermost handlers
+
+- name: Restart mattermost
+  community.docker.docker_compose_v2:
+    project_src: "{{ mattermost_data_dir }}"
+    state: restarted
+  delegate_to: mattermost_container

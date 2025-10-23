@@ -1,0 +1,40 @@
+---
+# Mattermost role - API-based version
+mattermost_container_id: 63  # IP .63
+mattermost_hostname: mattermost
+mattermost_domain: viljo.se
+mattermost_memory: 4096
+mattermost_cores: 2
+mattermost_disk: 40
+mattermost_swap: 512
+mattermost_bridge: "{{ public_bridge | default('vmbr3') }}"
+mattermost_ip_address: 172.16.10.63
+mattermost_netmask: 24
+mattermost_gateway: "{{ dmz_gateway }}"
+mattermost_dns_servers: "{{ dmz_dns_servers }}"
+mattermost_rootfs_storage: local-lvm
+mattermost_unprivileged: false  # Privileged required for Docker nesting
+mattermost_features: "nesting=1"
+mattermost_root_password: "{{ vault_mattermost_root_password | default('changeme') }}"
+mattermost_template_url: "{{ debian_template_url }}"
+mattermost_template_file: "{{ debian_template_file }}"
+mattermost_service_port: 8065
+mattermost_external_domain: "{{ public_domain }}"
+
+# Mattermost application configuration
+mattermost_version: "latest"  # Can be pinned: "release-9.5"
+mattermost_site_url: "https://{{ mattermost_hostname }}.{{ mattermost_external_domain }}"
+
+# PostgreSQL database configuration
+mattermost_db_host: "172.16.10.50"
+mattermost_db_port: 5432
+mattermost_db_name: mattermost
+mattermost_db_user: mattermost
+mattermost_db_password: "{{ vault_postgres_mattermost_password }}"
+
+# Docker Compose configuration
+mattermost_data_dir: /opt/mattermost
+mattermost_compose_file: "{{ mattermost_data_dir }}/docker-compose.yml"
+
+# System configuration
+mattermost_timezone: "Europe/Stockholm"

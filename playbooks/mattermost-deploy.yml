@@ -1,0 +1,10 @@
+---
+- name: Deploy Mattermost Team Collaboration Platform
+  hosts: proxmox_admin
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Apply mattermost_api role
+      ansible.builtin.include_role:
+        name: mattermost_api
