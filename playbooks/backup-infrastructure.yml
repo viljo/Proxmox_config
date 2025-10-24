@@ -11,7 +11,7 @@
     - name: Check required variables
       ansible.builtin.assert:
         that:
-          - vault_postgres_user_password is defined
+          - vault_postgres_root_password is defined
         fail_msg: "Required vault variables not defined. Ensure vault is decrypted."
 
     - name: Ensure backup dependencies are installed

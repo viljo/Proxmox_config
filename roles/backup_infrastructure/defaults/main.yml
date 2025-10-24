@@ -70,7 +70,7 @@ backup_postgresql_enabled: true
 backup_postgresql_host: "172.16.10.150"
 backup_postgresql_port: 5432
 backup_postgresql_user: "postgres"
-backup_postgresql_password: "{{ vault_postgres_user_password }}"
+backup_postgresql_password: "{{ vault_postgres_root_password }}"
 backup_postgresql_databases:
   - keycloak
   - gitlab

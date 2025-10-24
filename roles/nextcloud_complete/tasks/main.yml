@@ -5,8 +5,8 @@
   community.proxmox.proxmox:
     api_host: "{{ proxmox_api_host }}"
     api_user: "{{ proxmox_api_user }}"
-    api_token_id: "{{ proxmox_api_token_id }}"
-    api_token_secret: "{{ proxmox_api_token_secret }}"
+    api_password: "{{ proxmox_api_password }}"
+    
     validate_certs: "{{ proxmox_api_validate_certs }}"
     node: "{{ proxmox_node }}"
     vmid: "{{ nextcloud_container_id }}"
@@ -36,8 +36,8 @@
   community.proxmox.proxmox:
     api_host: "{{ proxmox_api_host }}"
     api_user: "{{ proxmox_api_user }}"
-    api_token_id: "{{ proxmox_api_token_id }}"
-    api_token_secret: "{{ proxmox_api_token_secret }}"
+    api_password: "{{ proxmox_api_password }}"
+    
     validate_certs: "{{ proxmox_api_validate_certs }}"
     node: "{{ proxmox_node }}"
     vmid: "{{ nextcloud_container_id }}"
