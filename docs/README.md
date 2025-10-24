@@ -30,6 +30,33 @@ Operational procedures, runbooks, and troubleshooting guides.
 
 - **[Rollback Service](operations/rollback-service.md)** - How to rollback a failed deployment
 - **[Runbook Template](operations/runbook-template.md)** - Template for creating new runbooks
+- **[SSH Access Methods](operations/ssh-access-methods.md)** - How to access infrastructure (bastion vs direct)
+- **[External Testing Methodology](operations/external-testing-methodology.md)** - How to validate external accessibility
+
+### 🔥 Disaster Recovery
+Comprehensive DR procedures, testing reports, and recovery automation.
+
+#### Core DR Documentation
+- **[DR Runbook](DR_RUNBOOK.md)** - Complete disaster recovery procedures (44KB)
+- **[DR Test Report (2025-10-23)](DR_TEST_REPORT_2025-10-23.md)** - Latest DR test results (13KB)
+- **[DR Test Lessons Learned](DR_TEST_LESSONS_LEARNED.md)** - Action items from DR test (8.5KB)
+
+#### Backup & Restore
+- **[Backup Infrastructure Role](../roles/backup_infrastructure/)** - Automated backup system
+- **[Restore Infrastructure Role](../roles/restore_infrastructure/)** - Automated restoration system
+- **[Backup Verification Script](../scripts/verify-backup.sh)** - Test backup validity
+- **[Firewall Quick Restore Script](../scripts/restore-firewall.sh)** - Fast firewall recovery
+
+#### Production Readiness
+- **[New Service Workflow](NEW_SERVICE_WORKFLOW.md)** - 9-step TDD workflow for new services (96KB)
+- **[Service Checklist Template](SERVICE_CHECKLIST_TEMPLATE.md)** - Track TDD workflow progress
+- **[TDD Workflow Status](TDD_WORKFLOW_STATUS.md)** - Completion status for all 11 services (36KB)
+- **[Vault Variables](VAULT_VARIABLES.md)** - Required vault variables (3KB)
+- **[Vault Completion Checklist](VAULT_COMPLETION_CHECKLIST.md)** - Complete vault configuration (21KB)
+
+#### Investigations & Audits
+- **[Automation Audit](AUTOMATION_AUDIT.md)** - Automation coverage analysis (23KB)
+- **[GitLab Backup Investigation](GITLAB_BACKUP_INVESTIGATION.md)** - Resolve backup corruption (18KB)
 
 ### 📋 Architecture Decision Records (ADRs)
 Historical records of significant architectural decisions.
@@ -70,4 +97,4 @@ All documentation should follow these principles:
 
 ---
 
-**Last Updated**: 2025-10-20 during project restructure
+**Last Updated**: 2025-10-24 - Added comprehensive Disaster Recovery documentation section
