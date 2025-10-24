@@ -4,24 +4,31 @@
 
 **⚠️ IMPORTANT - Public Service Access:**
 
-- **vmbr0 (br0)** - **MANAGEMENT ONLY**: Used exclusively for administrative access to the Proxmox host. **NOT for service traffic or DNS**.
-- **vmbr2 (br2)** - **PUBLIC INTERNET**: Used for all public service access, DNS records, and WAN connectivity. The firewall container (101) WAN interface on this bridge provides the public IP address that DNS must point to.
+- **vmbr0 (br0)** - **MANAGEMENT ONLY (Starlink - CGNAT)**: Used exclusively for administrative access to the Proxmox host. **Behind CGNAT - cannot host public services**. NOT for service traffic or DNS.
+- **vmbr2 (br2)** - **PUBLIC INTERNET (Bahnhof - NOT CGNAT)**: Used for all public service access, DNS records, and WAN connectivity. The firewall container (101) WAN interface on this bridge provides the **publicly routable IP address** that DNS must point to.
 - **vmbr3 (br3)** - **DMZ**: Internal communication between services. Not directly accessible from internet.
 
-**DNS Configuration**: All DNS records (*.viljo.se) MUST point to the public IP address on vmbr2 (br2) obtained from the firewall container's WAN interface. The Loopia DDNS script automatically reads this IP from container 101 eth0 and updates DNS records accordingly.
+**ISP Details**:
+- **vmbr0 (Starlink)**: Behind Carrier-Grade NAT (CGNAT). Inbound connections from internet are NOT possible. Only suitable for outbound management traffic.
+- **vmbr2 (Bahnhof)**: Direct public IP assignment (NOT CGNAT). Fully routable from internet. **Required for hosting public services**.
 
-**Why This Matters**: The Proxmox host has different IP addresses on vmbr0 (management network) and routes traffic differently than service containers. Testing or configuring services using the vmbr0 IP will result in connectivity failures from the internet.
+**DNS Configuration**: All DNS records (*.viljo.se) MUST point to the public IP address on vmbr2 (br2) obtained from the firewall container's WAN interface (Bahnhof connection). The Loopia DDNS script automatically reads this IP from container 101 eth0 and updates DNS records accordingly.
+
+**Why This Matters**:
+1. Starlink (vmbr0) uses CGNAT - services hosted here cannot be reached from internet
+2. Bahnhof (vmbr2) provides direct public IP - services must use this connection
+3. Testing or configuring services using the Starlink/vmbr0 IP will fail from internet
 
 ## Overview
 The Proxmox host exposes three bridges that strictly separate management, WAN, and internal DMZ traffic:
 
-| Bridge | Addressing | Purpose | DNS Usage | Notes |
-|--------|------------|---------|-----------|-------|
-| `vmbr0` | 192.168.1.0/24 (Starlink DHCP) | **Management ONLY** | ❌ Never | Proxmox management IP `192.168.1.3` lives here. For administrative access only. |
-| `vmbr2` | DHCP (ISP) | **WAN/Public Internet** | ✅ Always | Carries the ISP-provided public address (firewall container 101 eth0). **All DNS records point here**. |
-| `vmbr3` | 172.16.10.0/24 (static) | **Service DMZ** | ❌ Never | Backplane for all application LXCs. Routed/NATed by the firewall LXC (101). |
+| Bridge | Addressing | Purpose | DNS Usage | ISP/CGNAT | Notes |
+|--------|------------|---------|-----------|-----------|-------|
+| `vmbr0` | 192.168.1.0/24 (Starlink DHCP) | **Management ONLY** | ❌ Never | Starlink (CGNAT) | Proxmox management IP `192.168.1.3`. **Cannot host public services** due to CGNAT. |
+| `vmbr2` | DHCP (Bahnhof) | **WAN/Public Internet** | ✅ Always | Bahnhof (Public IP) | Publicly routable IP on firewall container 101 eth0. **All DNS records point here**. |
+| `vmbr3` | 172.16.10.0/24 (static) | **Service DMZ** | ❌ Never | Internal only | Backplane for all application LXCs. Routed/NATed by firewall LXC (101). |
 
-Traefik runs on the Proxmox host but listens on vmbr2 to accept public traffic. All service containers sit on the private `vmbr3` segment and are published through Traefik routes after passing through the firewall container's NAT.
+Traefik runs on the Proxmox host and accepts traffic from vmbr2 (Bahnhof public IP) after it passes through the firewall container's DNAT rules. All service containers sit on the private `vmbr3` segment and are published through Traefik routes.
 
 ## DNS Synchronization with vmbr2 (br2)
 
