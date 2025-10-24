@@ -1,25 +1,71 @@
 # Network Topology Strategy
 
+## CRITICAL: Bridge Usage Policy
+
+**⚠️ IMPORTANT - Public Service Access:**
+
+- **vmbr0 (br0)** - **MANAGEMENT ONLY**: Used exclusively for administrative access to the Proxmox host. **NOT for service traffic or DNS**.
+- **vmbr2 (br2)** - **PUBLIC INTERNET**: Used for all public service access, DNS records, and WAN connectivity. The firewall container (101) WAN interface on this bridge provides the public IP address that DNS must point to.
+- **vmbr3 (br3)** - **DMZ**: Internal communication between services. Not directly accessible from internet.
+
+**DNS Configuration**: All DNS records (*.viljo.se) MUST point to the public IP address on vmbr2 (br2) obtained from the firewall container's WAN interface. The Loopia DDNS script automatically reads this IP from container 101 eth0 and updates DNS records accordingly.
+
+**Why This Matters**: The Proxmox host has different IP addresses on vmbr0 (management network) and routes traffic differently than service containers. Testing or configuring services using the vmbr0 IP will result in connectivity failures from the internet.
+
 ## Overview
-The Proxmox host now exposes three bridges that split management, WAN, and the internal DMZ:
+The Proxmox host exposes three bridges that strictly separate management, WAN, and internal DMZ traffic:
 
-| Bridge | Addressing | Purpose | Notes |
-|--------|------------|---------|-------|
-| `vmbr0` | 192.168.1.0/24 (Starlink DHCP) | Management + internal lab | Proxmox management IP `192.168.1.3` lives here. Provides Internet egress for the admin network. |
-| `vmbr2` | DHCP (ISP) | WAN uplink | Carries the ISP-provided public address that the Debian firewall LXC uses for NAT. |
-| `vmbr3` | 172.16.10.0/24 (static) | Service DMZ | Backplane for all application LXCs. Routed/NATed by the firewall LXC. |
+| Bridge | Addressing | Purpose | DNS Usage | Notes |
+|--------|------------|---------|-----------|-------|
+| `vmbr0` | 192.168.1.0/24 (Starlink DHCP) | **Management ONLY** | ❌ Never | Proxmox management IP `192.168.1.3` lives here. For administrative access only. |
+| `vmbr2` | DHCP (ISP) | **WAN/Public Internet** | ✅ Always | Carries the ISP-provided public address (firewall container 101 eth0). **All DNS records point here**. |
+| `vmbr3` | 172.16.10.0/24 (static) | **Service DMZ** | ❌ Never | Backplane for all application LXCs. Routed/NATed by the firewall LXC (101). |
 
-Traefik remains the only component that should be exposed to the public WAN. All other containers sit on the private `vmbr3` segment and are published through Traefik routes.
+Traefik runs on the Proxmox host but listens on vmbr2 to accept public traffic. All service containers sit on the private `vmbr3` segment and are published through Traefik routes after passing through the firewall container's NAT.
+
+## DNS Synchronization with vmbr2 (br2)
+
+The Loopia DDNS automation ensures DNS records always point to the correct public IP on vmbr2:
+
+**Script Location**: `/usr/local/lib/loopia-ddns/update.py`
+**Update Frequency**: Every 15 minutes (systemd timer)
+**IP Source**: Container 101 (firewall) eth0 interface on vmbr2
+
+**How It Works**:
+```python
+CONTAINER_ID = 101  # Firewall container
+INTERFACE = "eth0"  # WAN interface on vmbr2
+
+# Reads public IP from firewall's WAN interface
+ip_output = subprocess.check_output([
+    "pct", "exec", str(CONTAINER_ID), "--",
+    "ip", "-4", "-o", "addr", "show", "dev", INTERFACE
+])
+current_ip = ip_output.split()[3].split('/')[0]
+
+# Updates all DNS records (*.viljo.se) to this IP
+```
+
+**Why This Is Correct**: The firewall container (101) has its WAN interface (eth0) connected to vmbr2, which receives the ISP's public IP via DHCP. This is the IP address that receives all inbound traffic from the internet. The script correctly queries this interface and updates DNS records accordingly.
+
+**Verification**:
+```bash
+# Check firewall WAN IP (should match DNS)
+pct exec 101 -- ip -4 addr show eth0 | grep inet
+
+# Check DNS resolution (should match above)
+dig +short mattermost.viljo.se @1.1.1.1
+```
 
 ## Implementation Status
 ### Completed
-- `vmbr0` remains the 192.168.1.0/24 management bridge. `vmbr2` (WAN) now stays on DHCP and feeds the firewall LXC WAN interface. A new `vmbr3` static bridge `(172.16.10.2/24)` carries the DMZ.
+- `vmbr0` remains the 192.168.1.0/24 management bridge (admin access only). `vmbr2` (WAN) stays on DHCP and feeds the firewall LXC WAN interface (public internet). `vmbr3` static bridge `(172.16.10.2/24)` carries the DMZ (internal services).
 - All service inventories (`inventory/group_vars/all/*.yml`) use 172.16.10.x addresses, the firewall gateway (`172.16.10.1`), and DMZ DNS (`172.16.10.1`, `1.1.1.1`).
-- `roles/firewall` builds LXC 1: `eth0 → vmbr2 (DHCP)`, `eth1 → vmbr3 (172.16.10.1/24)`, applies nftables masquerade and forwards WAN 80/443 to Traefik.
-- `roles/dmz_cleanup`, `roles/gitlab`, `roles/traefik`, etc., recreate the GitLab stack on vmbr3; GitLab container (`53`) uses `eth0 → vmbr3` with default route via `172.16.10.1`.
-- All LXC roles reference the Debian 13 “Trixie” template (`{{ debian_template_image }}`) so new containers track the latest release.
-- `ansible-playbook playbooks/site.yml --tags loopia_ddns` installs a timer on the Proxmox host that calls the Loopia API every 5 minutes (or on WAN-IP change) using the firewall's WAN IP.
-- `loopia_ddns` state stored in `/var/lib/loopia-ddns`, script at `/usr/local/lib/loopia-ddns/update.py`, systemd timer ensures the public DNS follows the firewall’s DHCP lease.
+- `roles/firewall` builds LXC 101: `eth0 → vmbr2 (DHCP)`, `eth1 → vmbr3 (172.16.10.1/24)`, applies nftables masquerade and forwards WAN 80/443 to Traefik on vmbr2.
+- `roles/dmz_cleanup`, `roles/gitlab`, `roles/traefik`, etc., recreate service containers on vmbr3; containers use `eth0 → vmbr3` with default route via `172.16.10.1`.
+- All LXC roles reference the Debian 13 "Trixie" template (`{{ debian_template_image }}`) so new containers track the latest release.
+- `ansible-playbook playbooks/site.yml --tags loopia_ddns` installs a timer on the Proxmox host that calls the Loopia API every 15 minutes using the firewall's vmbr2 WAN IP.
+- `loopia_ddns` state stored in `/var/lib/loopia-ddns`, script at `/usr/local/lib/loopia-ddns/update.py`, systemd timer ensures public DNS follows the firewall's DHCP lease on vmbr2.
 ### Outstanding
 - Consider decommissioning the old `vmbr1` if it’s no longer needed; currently it still shows a legacy DHCP lease but is link-down.
 - Extend nftables (Firewall LXC) to allow additional inbound ports if services like SSH/SMTP are required from WAN.
