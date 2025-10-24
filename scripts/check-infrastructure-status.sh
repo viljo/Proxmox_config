@@ -210,6 +210,114 @@ else
 fi
 echo ""
 
+# Advanced service health checks
+echo -e "${BLUE}[8] Advanced Service Health Checks${NC}"
+if [ -n "$FW_WAN_IP" ]; then
+    # Mattermost API ping
+    MATTERMOST_PING=$(curl -s --connect-timeout 5 http://172.16.10.163:8065/api/v4/system/ping 2>/dev/null)
+    if [ -n "$MATTERMOST_PING" ]; then
+        print_result "Mattermost API" "PASS" "(ping successful)"
+    else
+        print_result "Mattermost API" "FAIL" "(no response)"
+    fi
+
+    # GitLab version API
+    GITLAB_VERSION=$(curl -s --connect-timeout 5 http://172.16.10.153/api/v4/version 2>/dev/null | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+    if [ -n "$GITLAB_VERSION" ]; then
+        print_result "GitLab API" "PASS" "(version: $GITLAB_VERSION)"
+    else
+        print_result "GitLab API" "FAIL" "(no response)"
+    fi
+
+    # Nextcloud status.php
+    NEXTCLOUD_STATUS=$(curl -s --connect-timeout 5 http://172.16.10.155/status.php 2>/dev/null | grep -o '"installed":true')
+    if [ -n "$NEXTCLOUD_STATUS" ]; then
+        print_result "Nextcloud Status" "PASS" "(installed and configured)"
+    else
+        print_result "Nextcloud Status" "FAIL" "(not responding)"
+    fi
+
+    # Keycloak realms endpoint
+    KEYCLOAK_REALMS=$(curl -s --connect-timeout 5 http://172.16.10.151:8080/realms/master 2>/dev/null | grep -o '"realm":"master"')
+    if [ -n "$KEYCLOAK_REALMS" ]; then
+        print_result "Keycloak Realms" "PASS" "(master realm accessible)"
+    else
+        print_result "Keycloak Realms" "FAIL" "(no response)"
+    fi
+
+    # PostgreSQL connection test
+    PG_CONNECTABLE=$(ssh root@192.168.1.3 "pct exec 150 -- su - postgres -c 'psql -c \"SELECT version()\"' 2>/dev/null | grep -c PostgreSQL" 2>/dev/null)
+    if [ "$PG_CONNECTABLE" -gt 0 ]; then
+        print_result "PostgreSQL Connection" "PASS" "(accepting connections)"
+    else
+        print_result "PostgreSQL Connection" "FAIL" "(not responding)"
+    fi
+
+    # Redis ping test
+    REDIS_PING=$(ssh root@192.168.1.3 "pct exec 158 -- redis-cli ping 2>/dev/null" 2>/dev/null)
+    if [ "$REDIS_PING" = "PONG" ]; then
+        print_result "Redis Ping" "PASS" "(PONG received)"
+    else
+        print_result "Redis Ping" "FAIL" "(no PONG)"
+    fi
+
+    # Demo Site content check
+    DEMO_CONTENT=$(curl -s --connect-timeout 5 http://172.16.10.160/ 2>/dev/null | grep -c "Links Portal\|Matrix")
+    if [ "$DEMO_CONTENT" -gt 0 ]; then
+        print_result "Demo Site Content" "PASS" "(page content loaded)"
+    else
+        print_result "Demo Site Content" "WARN" "(content not detected)"
+    fi
+else
+    print_result "Advanced Health Checks" "FAIL" "(no firewall WAN IP - skipping)"
+fi
+echo ""
+
+# Docker container health checks
+echo -e "${BLUE}[9] Docker Container Health (inside LXC)${NC}"
+for service_entry in "${SERVICES[@]}"; do
+    IFS=: read -r name id port domain <<< "$service_entry"
+    # Skip Redis as it doesn't use Docker
+    if [ "$id" != "158" ]; then
+        CONTAINER_STATUS=$(ssh root@192.168.1.3 "pct status $id 2>/dev/null" | grep -o "running")
+        if [ "$CONTAINER_STATUS" = "running" ]; then
+            DOCKER_PS=$(ssh root@192.168.1.3 "pct exec $id -- docker ps 2>/dev/null | grep -v CONTAINER" 2>/dev/null | wc -l)
+            if [ "$DOCKER_PS" -gt 0 ]; then
+                print_result "Docker in $name ($id)" "PASS" "($DOCKER_PS containers running)"
+            else
+                print_result "Docker in $name ($id)" "WARN" "(no containers found)"
+            fi
+        fi
+    fi
+done
+echo ""
+
+# SSL Certificate expiration checks
+echo -e "${BLUE}[10] SSL Certificate Expiration${NC}"
+for service_entry in "${SERVICES[@]}"; do
+    IFS=: read -r name id port domain <<< "$service_entry"
+    if [ "$domain" != "none" ]; then
+        CERT_EXPIRY=$(echo | openssl s_client -servername $domain -connect $domain:443 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+        if [ -n "$CERT_EXPIRY" ]; then
+            # Calculate days until expiration
+            EXPIRY_EPOCH=$(date -j -f "%b %d %H:%M:%S %Y %Z" "$CERT_EXPIRY" +%s 2>/dev/null || date -d "$CERT_EXPIRY" +%s 2>/dev/null)
+            NOW_EPOCH=$(date +%s)
+            DAYS_LEFT=$(( ($EXPIRY_EPOCH - $NOW_EPOCH) / 86400 ))
+
+            if [ $DAYS_LEFT -gt 30 ]; then
+                print_result "Cert: $domain" "PASS" "(expires in $DAYS_LEFT days)"
+            elif [ $DAYS_LEFT -gt 7 ]; then
+                print_result "Cert: $domain" "WARN" "(expires in $DAYS_LEFT days - renew soon)"
+            else
+                print_result "Cert: $domain" "FAIL" "(expires in $DAYS_LEFT days - URGENT)"
+            fi
+        else
+            print_result "Cert: $domain" "WARN" "(could not check expiration)"
+        fi
+    fi
+done
+echo ""
+
 # Summary
 echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}Summary${NC}"
