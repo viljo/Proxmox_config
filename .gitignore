@@ -21,3 +21,7 @@ host_vars/**/*.yml
 
 # Vault password helper (if used)
 .vault_pass.txt
+
+# Temporary test files with unencrypted passwords (NEVER commit these!)
+inventory/group_vars/all/dr_test_vars.yml
+**/dr_test_vars.yml
