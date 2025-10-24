@@ -62,6 +62,10 @@ table ip nat {
   chain postrouting {
     type nat hook postrouting priority 100;
     policy accept;
+    # Masquerade outbound traffic from DMZ to WAN
     ip saddr {{ dmz_subnet }} oifname "{{ firewall_wan_interface }}" masquerade
+    # CRITICAL: SNAT traffic from WAN to DMZ so replies route back through firewall
+    # Without this, replies from DMZ services exit via Proxmox host's default route (vmbr0/Starlink)
+    iifname "{{ firewall_wan_interface }}" oifname "{{ firewall_lan_interface }}" masquerade
   }
 }
