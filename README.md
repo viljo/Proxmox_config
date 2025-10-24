@@ -26,6 +26,8 @@ This repository contains a set of Ansible roles and configuration files for depl
 
 **Understanding the architecture?** Read the [Network Topology](docs/architecture/network-topology.md)
 
+**Disaster Recovery?** See the [DR Runbook](docs/DR_RUNBOOK.md) | [Latest DR Test](docs/DR_TEST_REPORT_2025-10-23.md)
+
 ## Usage
 
 **Automation Status**: 100% coverage – all 11 services deployable via API-first Ansible automation. Deploy the entire infrastructure from scratch with:
@@ -44,9 +46,43 @@ ansible-vault edit inventory/group_vars/all/secrets.yml
 
 Or provide a custom `--vault-password-file`.  The helper password file `.vault_pass.txt` is ignored by Git—create it locally if you want non-interactive vault operations.  See the [documentation](docs/) for details on variables, network segmentation, backup schedules, and daily maintenance jobs.
 
-Day-to-day access to the Proxmox host is via `ssh root@192.168.1.3`.  All Ansible playbooks target the `proxmox_admin` host defined in `inventory/hosts.yml`, using that SSH transport.
+Day-to-day access to the Proxmox host is via `ssh root@192.168.1.3` (admin network) or `ssh -J root@ssh.viljo.se root@192.168.1.3` (via internet through bastion). All Ansible playbooks target the `proxmox_admin` host defined in `inventory/hosts.yml`, using that SSH transport.
 
 The host now keeps its default route on the management network (`vmbr0` → gateway `192.168.1.1`); the firewall LXC handles WAN access on `vmbr2`, while the service DMZ lives on `vmbr3` (`172.16.10.0/24`).
+
+## Disaster Recovery
+
+**Status**: Validated through full wipe-and-restore test (2025-10-23)
+**RTO**: < 1 hour (10 minutes for container restore + 30 minutes for data restore)
+**RPO**: < 24 hours (daily backups)
+**Success Rate**: 90% (9/10 containers restored successfully in last DR test)
+
+### Quick Recovery
+
+```bash
+# 1. Restore firewall (required first for DMZ internet access)
+bash scripts/restore-firewall.sh
+
+# 2. Restore all containers
+for id in 110 150 151 154 155 158 160 170; do
+  pct restore $id $(pvesm list local | grep "vzdump-lxc-$id" | tail -1 | awk '{print $1}') --storage local-lvm
+  pct start $id
+done
+
+# 3. Restore data (optional if container backups are recent)
+ansible-playbook -i inventory/hosts.yml playbooks/restore-infrastructure.yml \
+  -e restore_backup_timestamp=$(ls -1 /var/backups/infrastructure/ | tail -1)
+```
+
+**Complete Procedures**: See [DR Runbook](docs/DR_RUNBOOK.md) for step-by-step recovery instructions.
+
+**Backup Verification**: Run `bash scripts/verify-backup.sh all` to test all backups can be restored.
+
+**Recent DR Test Results**:
+- ✅ Container backups: 2:45 backup time, 10 min restore time
+- ⚠️ GitLab backups: Known corruption issue (being investigated)
+- ✅ Infrastructure restored: 9 out of 10 services operational
+- See [DR Test Report](docs/DR_TEST_REPORT_2025-10-23.md) and [Lessons Learned](docs/DR_TEST_LESSONS_LEARNED.md)
 
 All LXC roles default to the Debian 13 (Trixie) standard template (`{{ debian_template_image }}`); update `inventory/group_vars/all/main.yml` if Proxmox publishes a newer filename.
 
