@@ -24,6 +24,8 @@ This repository contains a set of Ansible roles and configuration files for depl
 
 **Deploying a service?** See the [Deployment Documentation](docs/deployment/)
 
+**Adding a new service?** Follow the [Test-Driven Service Workflow](docs/NEW_SERVICE_WORKFLOW.md) (9-step validation process)
+
 **Understanding the architecture?** Read the [Network Topology](docs/architecture/network-topology.md)
 
 **Disaster Recovery?** See the [DR Runbook](docs/DR_RUNBOOK.md) | [Latest DR Test](docs/DR_TEST_REPORT_2025-10-23.md)
