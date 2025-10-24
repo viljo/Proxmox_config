@@ -26,7 +26,7 @@ mattermost_version: "latest"  # Can be pinned: "release-9.5"
 mattermost_site_url: "https://{{ mattermost_hostname }}.{{ mattermost_external_domain }}"
 
 # PostgreSQL database configuration
-mattermost_db_host: "172.16.10.50"
+mattermost_db_host: "172.16.10.150"
 mattermost_db_port: 5432
 mattermost_db_name: mattermost
 mattermost_db_user: mattermost
