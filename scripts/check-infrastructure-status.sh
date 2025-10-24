@@ -1,0 +1,232 @@
+#!/bin/bash
+# Infrastructure Status Check Script
+# Checks connectivity, DNS, external access, and service health
+# Run this after deployments or to verify infrastructure status
+
+set -o pipefail
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Counters
+TOTAL_CHECKS=0
+PASSED_CHECKS=0
+FAILED_CHECKS=0
+
+# Service definitions
+# Format: "service_name:container_id:internal_port:domain"
+SERVICES=(
+    "Keycloak:151:8080:keycloak.viljo.se"
+    "GitLab:153:80:gitlab.viljo.se"
+    "Nextcloud:155:80:nextcloud.viljo.se"
+    "Redis:158:6379:none"
+    "Demo Site:160:80:demosite.viljo.se"
+    "Mattermost:163:8065:mattermost.viljo.se"
+    "Webtop:170:3000:browser.viljo.se"
+)
+
+# Infrastructure containers (no external domain)
+INFRA_CONTAINERS=(
+    "Firewall:101"
+    "Bastion:110"
+    "PostgreSQL:150"
+    "GitLab Runner:154"
+)
+
+echo -e "${BLUE}======================================${NC}"
+echo -e "${BLUE}Infrastructure Status Check${NC}"
+echo -e "${BLUE}======================================${NC}"
+echo ""
+
+# Function to print test result
+print_result() {
+    local test_name="$1"
+    local status="$2"
+    local details="$3"
+    
+    TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
+    
+    if [ "$status" = "PASS" ]; then
+        echo -e "${GREEN}✓${NC} $test_name: ${GREEN}PASS${NC} $details"
+        PASSED_CHECKS=$((PASSED_CHECKS + 1))
+    elif [ "$status" = "WARN" ]; then
+        echo -e "${YELLOW}⚠${NC} $test_name: ${YELLOW}WARNING${NC} $details"
+        PASSED_CHECKS=$((PASSED_CHECKS + 1))
+    else
+        echo -e "${RED}✗${NC} $test_name: ${RED}FAIL${NC} $details"
+        FAILED_CHECKS=$((FAILED_CHECKS + 1))
+    fi
+}
+
+# Check if Proxmox host is reachable
+echo -e "${BLUE}[1] Checking Proxmox Host Connectivity${NC}"
+if ssh -o ConnectTimeout=5 -o BatchMode=yes root@192.168.1.3 "echo 'connected'" &>/dev/null; then
+    print_result "Proxmox SSH Access" "PASS" "(192.168.1.3)"
+else
+    print_result "Proxmox SSH Access" "FAIL" "(192.168.1.3 unreachable)"
+    echo -e "${RED}Cannot reach Proxmox host - aborting remaining checks${NC}"
+    exit 1
+fi
+echo ""
+
+# Check firewall container status
+echo -e "${BLUE}[2] Checking Firewall Container (101)${NC}"
+FW_STATUS=$(ssh root@192.168.1.3 "pct status 101" 2>/dev/null | grep -o "running\|stopped")
+if [ "$FW_STATUS" = "running" ]; then
+    print_result "Firewall Container" "PASS" "(running)"
+    
+    # Get WAN IP from firewall
+    FW_WAN_IP=$(ssh root@192.168.1.3 "pct exec 101 -- ip -4 addr show eth0 | grep 'inet ' | awk '{print \$2}' | cut -d/ -f1" 2>/dev/null)
+    if [ -n "$FW_WAN_IP" ]; then
+        print_result "Firewall WAN IP" "PASS" "($FW_WAN_IP on vmbr2/Bahnhof)"
+    else
+        print_result "Firewall WAN IP" "FAIL" "(could not determine)"
+    fi
+    
+    # Check NAT rules
+    NAT_RULES=$(ssh root@192.168.1.3 "pct exec 101 -- nft list table ip nat 2>/dev/null | grep -c dnat" 2>/dev/null)
+    if [ "$NAT_RULES" -gt 0 ]; then
+        print_result "Firewall NAT Rules" "PASS" "($NAT_RULES DNAT rules configured)"
+    else
+        print_result "Firewall NAT Rules" "FAIL" "(no DNAT rules found)"
+    fi
+else
+    print_result "Firewall Container" "FAIL" "($FW_STATUS)"
+fi
+echo ""
+
+# Check Traefik status
+echo -e "${BLUE}[3] Checking Traefik Reverse Proxy${NC}"
+TRAEFIK_STATUS=$(ssh root@192.168.1.3 "systemctl is-active traefik" 2>/dev/null)
+if [ "$TRAEFIK_STATUS" = "active" ]; then
+    print_result "Traefik Service" "PASS" "(active)"
+    
+    # Check if Traefik is listening on ports 80 and 443
+    LISTENING_80=$(ssh root@192.168.1.3 "ss -tlnp | grep traefik | grep -c ':80 '" 2>/dev/null)
+    LISTENING_443=$(ssh root@192.168.1.3 "ss -tlnp | grep traefik | grep -c ':443 '" 2>/dev/null)
+    
+    if [ "$LISTENING_80" -gt 0 ] && [ "$LISTENING_443" -gt 0 ]; then
+        print_result "Traefik Ports" "PASS" "(listening on 80 and 443)"
+    else
+        print_result "Traefik Ports" "FAIL" "(not listening on required ports)"
+    fi
+    
+    # Check dynamic configs
+    DYNAMIC_CONFIGS=$(ssh root@192.168.1.3 "ls /etc/traefik/dynamic/*.yml 2>/dev/null | wc -l" 2>/dev/null)
+    if [ "$DYNAMIC_CONFIGS" -gt 0 ]; then
+        print_result "Traefik Configs" "PASS" "($DYNAMIC_CONFIGS dynamic configs loaded)"
+    else
+        print_result "Traefik Configs" "WARN" "(no dynamic configs found)"
+    fi
+else
+    print_result "Traefik Service" "FAIL" "($TRAEFIK_STATUS)"
+fi
+echo ""
+
+# Check Loopia DDNS
+echo -e "${BLUE}[4] Checking Loopia DDNS Service${NC}"
+DDNS_STATUS=$(ssh root@192.168.1.3 "systemctl is-active loopia-ddns" 2>/dev/null)
+if [ "$DDNS_STATUS" = "active" ]; then
+    print_result "DDNS Service" "PASS" "(active)"
+    
+    # Check last run time
+    LAST_RUN=$(ssh root@192.168.1.3 "systemctl status loopia-ddns | grep 'Finished Loopia DDNS' | tail -1 | awk '{print \$1, \$2, \$3}'" 2>/dev/null)
+    if [ -n "$LAST_RUN" ]; then
+        print_result "DDNS Last Update" "PASS" "($LAST_RUN)"
+    else
+        print_result "DDNS Last Update" "WARN" "(could not determine)"
+    fi
+else
+    print_result "DDNS Service" "FAIL" "($DDNS_STATUS)"
+fi
+echo ""
+
+# Check DNS resolution
+echo -e "${BLUE}[5] Checking DNS Resolution${NC}"
+for service_entry in "${SERVICES[@]}"; do
+    IFS=: read -r name id port domain <<< "$service_entry"
+    if [ "$domain" != "none" ]; then
+        DNS_IP=$(dig +short "$domain" @1.1.1.1 2>/dev/null | head -1)
+        if [ -n "$DNS_IP" ]; then
+            if [ -n "$FW_WAN_IP" ] && [ "$DNS_IP" = "$FW_WAN_IP" ]; then
+                print_result "DNS: $domain" "PASS" "($DNS_IP matches firewall WAN)"
+            else
+                print_result "DNS: $domain" "WARN" "($DNS_IP - may not match firewall)"
+            fi
+        else
+            print_result "DNS: $domain" "FAIL" "(no resolution)"
+        fi
+    fi
+done
+echo ""
+
+# Check container status
+echo -e "${BLUE}[6] Checking Container Status${NC}"
+for service_entry in "${SERVICES[@]}"; do
+    IFS=: read -r name id port domain <<< "$service_entry"
+    CONTAINER_STATUS=$(ssh root@192.168.1.3 "pct status $id 2>/dev/null" | grep -o "running\|stopped")
+    if [ "$CONTAINER_STATUS" = "running" ]; then
+        print_result "Container $id ($name)" "PASS" "(running)"
+    else
+        print_result "Container $id ($name)" "FAIL" "($CONTAINER_STATUS or not found)"
+    fi
+done
+
+# Check infrastructure containers
+for infra_entry in "${INFRA_CONTAINERS[@]}"; do
+    IFS=: read -r name id <<< "$infra_entry"
+    CONTAINER_STATUS=$(ssh root@192.168.1.3 "pct status $id 2>/dev/null" | grep -o "running\|stopped")
+    if [ "$CONTAINER_STATUS" = "running" ]; then
+        print_result "Container $id ($name)" "PASS" "(running)"
+    else
+        print_result "Container $id ($name)" "FAIL" "($CONTAINER_STATUS or not found)"
+    fi
+done
+echo ""
+
+# Check external HTTP/HTTPS access
+echo -e "${BLUE}[7] Checking External Service Access${NC}"
+if [ -n "$FW_WAN_IP" ]; then
+    for service_entry in "${SERVICES[@]}"; do
+        IFS=: read -r name id port domain <<< "$service_entry"
+        if [ "$domain" != "none" ]; then
+            # Test HTTP access (should redirect to HTTPS)
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $domain" --connect-timeout 5 --max-time 10 http://$FW_WAN_IP/ 2>/dev/null)
+            if [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "308" ] || [ "$HTTP_CODE" = "200" ]; then
+                print_result "HTTP: $name" "PASS" "(HTTP $HTTP_CODE)"
+            elif [ "$HTTP_CODE" = "000" ]; then
+                print_result "HTTP: $name" "FAIL" "(connection timeout)"
+            else
+                print_result "HTTP: $name" "WARN" "(HTTP $HTTP_CODE - unexpected)"
+            fi
+        fi
+    done
+else
+    print_result "External Access Tests" "FAIL" "(no firewall WAN IP - skipping)"
+fi
+echo ""
+
+# Summary
+echo -e "${BLUE}======================================${NC}"
+echo -e "${BLUE}Summary${NC}"
+echo -e "${BLUE}======================================${NC}"
+echo -e "Total checks: $TOTAL_CHECKS"
+echo -e "${GREEN}Passed: $PASSED_CHECKS${NC}"
+echo -e "${RED}Failed: $FAILED_CHECKS${NC}"
+echo ""
+
+SUCCESS_RATE=$((PASSED_CHECKS * 100 / TOTAL_CHECKS))
+if [ $SUCCESS_RATE -ge 90 ]; then
+    echo -e "${GREEN}✓ Infrastructure Status: HEALTHY ($SUCCESS_RATE%)${NC}"
+    exit 0
+elif [ $SUCCESS_RATE -ge 70 ]; then
+    echo -e "${YELLOW}⚠ Infrastructure Status: DEGRADED ($SUCCESS_RATE%)${NC}"
+    exit 0
+else
+    echo -e "${RED}✗ Infrastructure Status: CRITICAL ($SUCCESS_RATE%)${NC}"
+    exit 1
+fi
