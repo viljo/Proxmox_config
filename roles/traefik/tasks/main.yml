@@ -215,6 +215,15 @@
     mode: "0640"
   notify: Restart Traefik
 
+- name: Deploy Traefik middleware configuration (oauth2-proxy forward auth)
+  ansible.builtin.copy:
+    src: middlewares.yml
+    dest: "{{ traefik_dynamic_dir }}/middlewares.yml"
+    owner: root
+    group: "{{ traefik_group }}"
+    mode: "0640"
+  notify: Restart Traefik
+
 - name: Deploy Traefik dynamic configuration (data blocks)
   ansible.builtin.copy:
     dest: "{{ traefik_dynamic_dir }}/{{ item.filename }}"
