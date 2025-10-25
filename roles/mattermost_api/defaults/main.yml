@@ -38,3 +38,12 @@ mattermost_compose_file: "{{ mattermost_data_dir }}/docker-compose.yml"
 
 # System configuration
 mattermost_timezone: "Europe/Stockholm"
+
+# Keycloak OIDC configuration
+mattermost_oidc_enabled: true
+mattermost_oidc_client_id: "mattermost"
+mattermost_oidc_client_secret: "{{ vault_mattermost_oidc_client_secret }}"
+mattermost_oidc_discovery_endpoint: "https://keycloak.{{ mattermost_external_domain }}/realms/master/.well-known/openid-configuration"
+mattermost_oidc_auth_endpoint: "https://keycloak.{{ mattermost_external_domain }}/realms/master/protocol/openid-connect/auth"
+mattermost_oidc_token_endpoint: "https://keycloak.{{ mattermost_external_domain }}/realms/master/protocol/openid-connect/token"
+mattermost_oidc_userinfo_endpoint: "https://keycloak.{{ mattermost_external_domain }}/realms/master/protocol/openid-connect/userinfo"

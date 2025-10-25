@@ -29,6 +29,17 @@ services:
 
       # Timezone
       TZ: "{{ mattermost_timezone }}"
+
+      # Keycloak OIDC Authentication (via GitLab OAuth settings)
+{% if mattermost_oidc_enabled | default(false) %}
+      MM_GITLABSETTINGS_ENABLE: "true"
+      MM_GITLABSETTINGS_ID: "{{ mattermost_oidc_client_id }}"
+      MM_GITLABSETTINGS_SECRET: "{{ mattermost_oidc_client_secret }}"
+      MM_GITLABSETTINGS_SCOPE: "openid profile email"
+      MM_GITLABSETTINGS_AUTHENDPOINT: "{{ mattermost_oidc_auth_endpoint }}"
+      MM_GITLABSETTINGS_TOKENENDPOINT: "{{ mattermost_oidc_token_endpoint }}"
+      MM_GITLABSETTINGS_USERAPIENDPOINT: "{{ mattermost_oidc_userinfo_endpoint }}"
+{% endif %}
     volumes:
       - {{ mattermost_data_dir }}/config:/mattermost/config:rw
       - {{ mattermost_data_dir }}/data:/mattermost/data:rw
