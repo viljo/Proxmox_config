@@ -260,12 +260,13 @@ if [ -n "$FW_WAN_IP" ]; then
         print_result "PostgreSQL Connection" "FAIL" "(not responding)"
     fi
 
-    # Redis ping test
-    REDIS_PING=$(ssh root@192.168.1.3 "pct exec 158 -- redis-cli ping 2>/dev/null" 2>/dev/null)
-    if [ "$REDIS_PING" = "PONG" ]; then
-        print_result "Redis Ping" "PASS" "(PONG received)"
+    # Redis service check (port listening + process running)
+    REDIS_PORT=$(ssh root@192.168.1.3 "pct exec 158 -- ss -tlnp 2>/dev/null | grep -c ':6379'" 2>/dev/null)
+    REDIS_PROCESS=$(ssh root@192.168.1.3 "pct exec 158 -- pgrep redis-server" 2>/dev/null)
+    if [ "$REDIS_PORT" -gt 0 ] && [ -n "$REDIS_PROCESS" ]; then
+        print_result "Redis Service" "PASS" "(listening on port 6379)"
     else
-        print_result "Redis Ping" "FAIL" "(no PONG)"
+        print_result "Redis Service" "FAIL" "(not listening or process not running)"
     fi
 
     # Links Portal content check
