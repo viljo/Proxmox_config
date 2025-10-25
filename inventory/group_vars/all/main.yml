@@ -16,7 +16,8 @@ loopia_dns_records:
   - host: nextcloud
   - host: jellyfin
   - host: homeassistant
-  - host: cosmos
+  - host: coolify
+  - host: zabbix
   - host: qbittorrent
   - host: wazuh
   - host: openmediavault
@@ -54,10 +55,14 @@ traefik_services:
     host: "homeassistant.{{ public_domain }}"
     container_id: "{{ homeassistant_container_id }}"
     port: 8123
-  - name: cosmos
-    host: "cosmos.{{ public_domain }}"
-    container_id: "{{ cosmos_container_id }}"
-    port: 9000
+  - name: coolify
+    host: "coolify.{{ public_domain }}"
+    container_id: "{{ coolify_container_id }}"
+    port: 3000
+  - name: zabbix
+    host: "zabbix.{{ public_domain }}"
+    container_id: "{{ zabbix_container_id }}"
+    port: 80
   - name: qbittorrent
     host: "qbittorrent.{{ public_domain }}"
     container_id: "{{ qbittorrent_container_id }}"

@@ -1,0 +1,11 @@
+---
+coolify_container_id: 161
+coolify_hostname: coolify
+coolify_bridge: "{{ public_bridge }}"
+coolify_ip_address: 172.16.10.161
+coolify_ip_config: "{{ coolify_ip_address }}/{{ dmz_prefix }}"
+coolify_gateway: "{{ dmz_gateway }}"
+coolify_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
+coolify_root_password: "{{ vault_coolify_root_password }}"

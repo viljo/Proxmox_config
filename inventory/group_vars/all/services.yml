@@ -144,15 +144,24 @@ infrastructure_services:
     spec: specs/planned/009-bittorrent-client
     priority: P1
 
-  - name: Cosmos
-    slug: cosmos
+  - name: Coolify
+    slug: coolify
     icon: "🚀"
-    description: Self-service Docker platform
-    subdomain: cosmos
-    container_id: "{{ cosmos_container_id }}"
+    description: Self-hosted Heroku/Netlify alternative for Docker deployments
+    subdomain: coolify
+    container_id: "{{ coolify_container_id }}"
     status: planned
     spec: specs/planned/002-docker-platform-selfservice
     priority: P1
+
+  - name: Zabbix
+    slug: zabbix
+    icon: "📊"
+    description: Enterprise infrastructure monitoring and alerting
+    subdomain: zabbix
+    container_id: "{{ zabbix_container_id }}"
+    status: planned
+    priority: P2
 
   - name: WireGuard VPN
     slug: wireguard
@@ -183,10 +192,11 @@ infrastructure_services_internal:
     container_id: "{{ firewall_container_id }}"
     status: deployed_working
 
-  - name: Bastion
-    slug: bastion
+  - name: SSH Server
+    slug: ssh-server
     container_id: 110
     status: deployed_working
+    note: "Internal SSH bastion/jump host"
 
   - name: GitLab Runner
     slug: gitlab-runner
