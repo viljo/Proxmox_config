@@ -50,18 +50,14 @@
       ansible.builtin.fail:
         msg:
           - "❌ GitLab verification FAILED"
-          - "  HTTP Internal: {{ gitlab_http.status | default('ERROR') }}"
           - "  HTTPS External: {{ gitlab_https.status | default('ERROR') }}"
           - ""
           - "Troubleshooting:"
           - "  1. Check GitLab logs: ssh root@{{ ansible_host }} 'pct exec {{ gitlab_container_id }} -- docker logs gitlab'"
           - "  2. Check Docker status: ssh root@{{ ansible_host }} 'pct exec {{ gitlab_container_id }} -- docker ps -a'"
-          - "  3. Check GitLab response: curl -I http://{{ gitlab_ip_address }}/"
-          - "  4. Check Traefik routing for {{ gitlab_external_url }}"
-          - "  5. Note: GitLab startup takes 5-10 minutes - container may be initializing"
+          - "  3. Check Traefik routing for {{ gitlab_external_url }}"
+          - "  4. Note: GitLab startup takes 5-10 minutes - container may be initializing"
       when: >
-        gitlab_http.status is not defined or
-        gitlab_http.status not in [200, 302] or
         gitlab_https.status is not defined or
         gitlab_https.status not in [200, 302]
 
