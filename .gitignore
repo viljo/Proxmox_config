@@ -2,27 +2,52 @@
 .ansible/
 *.retry
 
-# Local inventories and group vars often contain unencrypted credentials.
-# Keep example files under version control, ignore real copies.
+# =============================================================================
+# CONFIGURATION MANAGEMENT STRATEGY
+# =============================================================================
+# We track infrastructure TOPOLOGY in git (IPs, ports, container IDs)
+# We keep SECRETS in Ansible Vault only (passwords, tokens, keys)
+#
+# Rule: If it references {{ vault_* }} variables, it's safe to track.
+# See: docs/deployment/configuration-management.md for detailed guidance
+# =============================================================================
+
+# Legacy group_vars (not used in this project)
 group_vars/**/*.yml
 !group_vars/**/secrets.yml
 group_vars/**/secrets.yml.*
 !group_vars/**/*.example.yml
 !group_vars/all/vault.yml
 
+# =============================================================================
+# TRACK: Infrastructure topology files (service definitions)
+# =============================================================================
+# All files in inventory/group_vars/all/*.yml define infrastructure topology
+# and reference vault variables for secrets. These are SAFE and SHOULD be
+# tracked to provide audit trail, rollback capability, and disaster recovery.
+#
+# Examples: main.yml, gitlab.yml, postgresql.yml, network.yml, etc.
+# =============================================================================
 inventory/group_vars/**/*.yml
 !inventory/group_vars/**/*.example.yml
-!inventory/group_vars/all/*.yml
-!inventory/group_vars/proxmox_hosts/*.yml
+!inventory/group_vars/all/*.yml           # ✅ Track all service definitions
+!inventory/group_vars/proxmox_hosts/*.yml # ✅ Track Proxmox API config
 
+# =============================================================================
+# TRACK: Ansible inventory (hosts and connection details)
+# =============================================================================
 inventory/*.yml
 !inventory/*.example.yml
-!inventory/hosts.yml
+!inventory/hosts.yml  # ✅ Track inventory (contains no secrets)
 
+# Host-specific variables (not currently used)
 host_vars/**/*.yml
 !host_vars/**/*.example.yml
 
-# Vault password helper (if used)
+# =============================================================================
+# NEVER COMMIT: Vault password and test files
+# =============================================================================
+# Vault password helper (contains vault encryption password)
 .vault_pass.txt
 
 # Temporary test files with unencrypted passwords (NEVER commit these!)

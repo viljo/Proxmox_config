@@ -24,6 +24,25 @@ This workflow enforces a test-driven development approach for infrastructure ser
 
 ---
 
+## Prerequisites: Configuration Management
+
+**IMPORTANT**: Before starting, understand how to properly manage configuration and secrets:
+
+- 📖 **Read**: [Configuration Management Guide](deployment/configuration-management.md)
+- ✅ **Track topology in git**: Container IDs, IPs, ports → commit to git
+- 🔐 **Secrets in Vault**: Passwords, tokens, keys → `ansible-vault edit inventory/group_vars/all/secrets.yml`
+- 🔒 **Use vault references**: Always use `{{ vault_service_password }}` pattern
+- ❌ **Never commit**: Hardcoded passwords, `.vault_pass.txt`, test files with secrets
+
+**Quick Check Before Committing:**
+```bash
+# Verify no hardcoded secrets
+grep -E "(password|secret|api_key|token):" inventory/group_vars/all/yourservice.yml | grep -v "vault_"
+# If this returns anything, those lines need vault references!
+```
+
+---
+
 ## Step 1: Implement Service (Initial Deployment)
 
 **Objective**: Create working Ansible automation for the service
@@ -89,6 +108,8 @@ This workflow enforces a test-driven development approach for infrastructure ser
 - [ ] Required vault variables documented
 - [ ] Service dependencies listed
 - [ ] Port mappings documented
+- [ ] **Service configuration committed to git** (`inventory/group_vars/all/<service>.yml`)
+- [ ] **Secrets added to Vault** (no hardcoded credentials in tracked files)
 
 ---
 

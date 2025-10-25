@@ -22,6 +22,8 @@ This repository contains a set of Ansible roles and configuration files for depl
 
 **New to this project?** Start with the [Getting Started Guide](docs/getting-started.md)
 
+**Managing configuration?** Read the [Configuration Management Guide](docs/deployment/configuration-management.md) (what to commit vs what to vault)
+
 **Deploying a service?** See the [Deployment Documentation](docs/deployment/)
 
 **Adding a new service?** Follow the [Test-Driven Service Workflow](docs/NEW_SERVICE_WORKFLOW.md) (9-step validation process)
