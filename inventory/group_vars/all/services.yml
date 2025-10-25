@@ -1,0 +1,195 @@
+---
+# Single Source of Truth for Infrastructure Services
+# This file defines ALL services (deployed, working, non-working, and planned)
+# Used by: links portal, monitoring, documentation
+
+infrastructure_services:
+
+  # ==================================================================
+  # DEPLOYED & WORKING - Services that are running and accessible
+  # ==================================================================
+
+  - name: GitLab
+    slug: gitlab
+    icon: "🦊"
+    description: Repository management and CI/CD platform
+    subdomain: gitlab
+    container_id: "{{ gitlab_container_id }}"
+    status: deployed_working
+    spec: specs/planned/008-gitlab-cicd
+    has_api: true
+    api_note: "API may not respond until fully initialized"
+
+  - name: Nextcloud
+    slug: nextcloud
+    icon: "☁️"
+    description: File storage and collaboration platform
+    subdomain: nextcloud
+    container_id: "{{ nextcloud_container_id }}"
+    status: deployed_working
+    has_api: true
+    api_note: "Status API may not respond until fully configured"
+
+  - name: Keycloak
+    slug: keycloak
+    icon: "🔐"
+    description: Identity and access management (SSO/OIDC)
+    subdomain: keycloak
+    container_id: "{{ keycloak_container_id }}"
+    status: deployed_working
+    spec: specs/planned/001-gitlab-oauth-keycloak
+    has_api: true
+    api_note: "Realms API requires authentication"
+
+  - name: Mattermost
+    slug: mattermost
+    icon: "💬"
+    description: Team collaboration and chat platform
+    subdomain: mattermost
+    container_id: 163
+    status: deployed_working
+    has_api: true
+    api_note: "API may not respond until fully initialized"
+
+  - name: Webtop
+    slug: webtop
+    icon: "🌐"
+    description: Browser-based desktop environment
+    subdomain: browser
+    container_id: 170
+    status: deployed_working
+    spec: specs/planned/005-webtop-browser
+
+  - name: Links Portal
+    slug: links
+    icon: "🔗"
+    description: Service directory and landing page
+    subdomain: links
+    container_id: "{{ demo_site_container_id }}"
+    status: deployed_working
+    spec: specs/completed/010-links-portal
+
+  # ==================================================================
+  # DEPLOYED BUT NON-WORKING - Running but not accessible/functional
+  # ==================================================================
+
+  # Currently none - Redis is infrastructure, not a user-facing service
+
+  # ==================================================================
+  # PLANNED - Not yet deployed
+  # ==================================================================
+
+  - name: Jellyfin
+    slug: jellyfin
+    icon: "🎬"
+    description: Media streaming and management server
+    subdomain: jellyfin
+    container_id: "{{ jellyfin_container_id }}"
+    status: planned
+    spec: specs/planned/009-jellyfin-media-server
+    priority: P1
+
+  - name: Home Assistant
+    slug: homeassistant
+    icon: "🏠"
+    description: IoT and home automation platform
+    subdomain: homeassistant
+    container_id: "{{ homeassistant_container_id }}"
+    status: planned
+    priority: P2
+
+  - name: NetBox
+    slug: netbox
+    icon: "📦"
+    description: Infrastructure documentation and IPAM
+    subdomain: netbox
+    container_id: "{{ netbox_container_id }}"
+    status: planned
+    priority: P2
+
+  - name: Wazuh
+    slug: wazuh
+    icon: "🛡️"
+    description: Security monitoring and threat detection
+    subdomain: wazuh
+    container_id: "{{ wazuh_container_id }}"
+    status: planned
+    priority: P2
+
+  - name: OpenMediaVault
+    slug: openmediavault
+    icon: "💾"
+    description: Network-attached storage (NAS) solution
+    subdomain: openmediavault
+    container_id: "{{ openmediavault_container_id }}"
+    status: planned
+    priority: P3
+
+  - name: Zipline
+    slug: zipline
+    icon: "📸"
+    description: Screenshot sharing and image hosting
+    subdomain: zipline
+    container_id: "{{ zipline_container_id }}"
+    status: planned
+    priority: P3
+
+  - name: qBittorrent
+    slug: qbittorrent
+    icon: "🌊"
+    description: Torrent client and download manager
+    subdomain: qbittorrent
+    container_id: "{{ qbittorrent_container_id }}"
+    status: planned
+    spec: specs/planned/009-bittorrent-client
+    priority: P1
+
+  - name: Cosmos
+    slug: cosmos
+    icon: "🚀"
+    description: Self-service Docker platform
+    subdomain: cosmos
+    container_id: "{{ cosmos_container_id }}"
+    status: planned
+    spec: specs/planned/002-docker-platform-selfservice
+    priority: P1
+
+  - name: WireGuard VPN
+    slug: wireguard
+    icon: "🔒"
+    description: Secure VPN for remote infrastructure access
+    subdomain: vpn
+    container_id: "{{ wireguard_container_id }}"
+    status: planned
+    spec: specs/planned/006-wireguard-vpn
+    priority: P1
+    note: "No web interface - VPN service only"
+
+# Infrastructure services (not shown on links page)
+infrastructure_services_internal:
+  - name: PostgreSQL
+    slug: postgres
+    container_id: "{{ postgres_container_id }}"
+    status: deployed_working
+
+  - name: Redis
+    slug: redis
+    container_id: 158
+    status: deployed_nonworking
+    issue: "No PONG response from redis-cli"
+
+  - name: Firewall
+    slug: firewall
+    container_id: "{{ firewall_container_id }}"
+    status: deployed_working
+
+  - name: Bastion
+    slug: bastion
+    container_id: 110
+    status: deployed_working
+
+  - name: GitLab Runner
+    slug: gitlab-runner
+    container_id: "{{ gitlab_runner_container_id }}"
+    status: deployed_working
+    spec: specs/planned/007-gitlab-ci-runner
