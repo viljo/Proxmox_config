@@ -87,17 +87,6 @@
     dest: /etc/default/locale
   delegate_to: redis_container
 
-- name: Create Redis log file
-  ansible.builtin.file:
-    path: /var/log/redis/redis-server.log
-    state: touch
-    owner: redis
-    group: redis
-    mode: '0644'
-    modification_time: preserve
-    access_time: preserve
-  delegate_to: redis_container
-
 - name: Install Redis
   ansible.builtin.apt:
     name:
@@ -152,6 +141,17 @@
     mode: '0755'
   delegate_to: redis_container
 
+- name: Create Redis log file
+  ansible.builtin.file:
+    path: /var/log/redis/redis-server.log
+    state: touch
+    owner: redis
+    group: redis
+    mode: '0644'
+    modification_time: preserve
+    access_time: preserve
+  delegate_to: redis_container
+
 - name: Deploy Redis configuration
   ansible.builtin.template:
     src: redis.conf.j2
@@ -161,6 +161,35 @@
     mode: '0640'
   delegate_to: redis_container
   notify: Restart redis
+
+- name: Create systemd drop-in directory for Redis
+  ansible.builtin.file:
+    path: /etc/systemd/system/redis-server.service.d
+    state: directory
+    mode: '0755'
+  delegate_to: redis_container
+
+- name: Create systemd drop-in to disable PrivateUsers in containers
+  ansible.builtin.copy:
+    content: |
+      # Override for unprivileged LXC container
+      [Service]
+      PrivateUsers=no
+    dest: /etc/systemd/system/redis-server.service.d/override.conf
+    mode: '0644'
+  delegate_to: redis_container
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: yes
+  delegate_to: redis_container
+
+- name: Reset Redis service failed state
+  ansible.builtin.command:
+    cmd: systemctl reset-failed redis-server.service
+  delegate_to: redis_container
+  failed_when: false
+  changed_when: false
 
 - name: Enable and start Redis service
   ansible.builtin.systemd:
