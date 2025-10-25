@@ -30,4 +30,4 @@ keycloak_gitlab_oauth_client_secret: "{{ vault_keycloak_gitlab_oauth_client_secr
 keycloak_gitlab_oauth_redirect_uri: "https://{{ keycloak_hostname_url }}/realms/master/broker/gitlab/endpoint"
 keycloak_gitlab_oauth_auth_url: "https://gitlab.com/oauth/authorize"
 keycloak_gitlab_oauth_token_url: "https://gitlab.com/oauth/token"
-keycloak_gitlab_oauth_userinfo_url: "https://gitlab.com/api/v4/user"
+keycloak_gitlab_oauth_userinfo_url: "https://gitlab.com/oauth/userinfo"

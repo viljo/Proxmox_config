@@ -303,7 +303,7 @@ Custom websites and services that lack native OIDC support are protected by Trae
 2. Configure OAuth endpoints:
    - Authorization URL: `https://gitlab.com/oauth/authorize`
    - Token URL: `https://gitlab.com/oauth/token`
-   - User Info URL: `https://gitlab.com/api/v4/user`
+   - User Info URL: `https://gitlab.com/oauth/userinfo`
 3. Enable user account creation on first login
 4. Configure attribute mapping (username, email, groups)
 5. Set up LDAP sync federation (if using LDAP)

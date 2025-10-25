@@ -52,7 +52,7 @@
             -s config.clientSecret="{{ keycloak_gitlab_oauth_client_secret }}" \
             -s config.authorizationUrl="{{ keycloak_gitlab_oauth_auth_url }}" \
             -s config.tokenUrl="{{ keycloak_gitlab_oauth_token_url }}" \
-            -s config.userInfoUrl="{{ keycloak_gitlab_oauth_userinfo_url }}" \
+            -s config.userInfoUrl="https://gitlab.com/oauth/userinfo" \
             -s config.issuer="https://gitlab.com" \
             -s config.jwksUrl="https://gitlab.com/oauth/discovery/keys" \
             -s config.defaultScope="openid profile email read_user" \
@@ -75,7 +75,7 @@
             -s config.clientSecret="{{ keycloak_gitlab_oauth_client_secret }}" \
             -s config.authorizationUrl="{{ keycloak_gitlab_oauth_auth_url }}" \
             -s config.tokenUrl="{{ keycloak_gitlab_oauth_token_url }}" \
-            -s config.userInfoUrl="{{ keycloak_gitlab_oauth_userinfo_url }}" \
+            -s config.userInfoUrl="https://gitlab.com/oauth/userinfo" \
             -s config.defaultScope="openid profile email read_user"
       delegate_to: keycloak_container
       when: gitlab_idp_check.rc == 0
