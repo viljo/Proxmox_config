@@ -152,16 +152,6 @@
     state: present
   delegate_to: gitlab_container
 
-- name: Wait for GitLab to be ready (this may take 5-10 minutes)
-  ansible.builtin.command:
-    cmd: "curl -f http://localhost/-/health"
-  register: gitlab_health
-  until: gitlab_health.rc == 0
-  retries: 60
-  delay: 10
-  changed_when: false
-  delegate_to: gitlab_container
-
 - name: Display gitlab configuration
   ansible.builtin.debug:
     msg:

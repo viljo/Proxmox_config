@@ -36,6 +36,10 @@ services:
         postgresql['enable'] = false
         redis['enable'] = false
 
+        # Nginx configuration for reverse proxy (Traefik)
+        nginx['listen_port'] = 80
+        nginx['listen_https'] = false
+
         # Performance tuning
         puma['worker_processes'] = 4
         sidekiq['max_concurrency'] = 25
