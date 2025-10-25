@@ -17,6 +17,7 @@ inventory/group_vars/**/*.yml
 
 inventory/*.yml
 !inventory/*.example.yml
+!inventory/hosts.yml
 
 host_vars/**/*.yml
 !host_vars/**/*.example.yml
