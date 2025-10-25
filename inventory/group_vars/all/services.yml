@@ -184,8 +184,8 @@ infrastructure_services_internal:
   - name: Redis
     slug: redis
     container_id: 158
-    status: deployed_nonworking
-    issue: "No PONG response from redis-cli"
+    status: deployed_working
+    note: "Key-value cache for services"
 
   - name: Firewall
     slug: firewall
