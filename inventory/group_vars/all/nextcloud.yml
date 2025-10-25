@@ -1,0 +1,19 @@
+---
+nextcloud_container_id: 155
+nextcloud_hostname: nextcloud
+nextcloud_bridge: "{{ public_bridge }}"
+nextcloud_ip_address: 172.16.10.155
+nextcloud_ip_config: "{{ nextcloud_ip_address }}/{{ dmz_prefix }}"
+nextcloud_gateway: "{{ dmz_gateway }}"
+nextcloud_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
+nextcloud_root_password: "{{ vault_nextcloud_root_password }}"
+nextcloud_db_host: "172.16.10.50"
+nextcloud_db_name: nextcloud
+nextcloud_db_user: nextcloud
+nextcloud_db_password: "{{ vault_nextcloud_db_password }}"
+nextcloud_domain: "{{ public_domain }}"
+nextcloud_trusted_domains:
+  - "nextcloud.{{ public_domain }}"
+  - "nextcloud.infra.local"

@@ -1,0 +1,13 @@
+---
+jellyfin_domain: "{{ public_domain }}"
+jellyfin_container_id: 156
+jellyfin_hostname: jellyfin
+jellyfin_bridge: "{{ public_bridge }}"
+jellyfin_ip_address: 172.16.10.156
+jellyfin_ip_config: "{{ jellyfin_ip_address }}/{{ dmz_prefix }}"
+jellyfin_gateway: "{{ dmz_gateway }}"
+jellyfin_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
+jellyfin_root_password: "{{ vault_jellyfin_root_password }}"
+jellyfin_repo_release: bookworm

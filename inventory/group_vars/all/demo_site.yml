@@ -1,0 +1,12 @@
+---
+demo_site_container_id: 160
+demo_site_hostname: demosite
+demo_site_domain: viljo.se
+demo_site_ip_address: 172.16.10.160
+demo_site_gateway: "{{ dmz_gateway }}"
+demo_site_dns_servers: "{{ dmz_dns_servers }}"
+demo_site_service_port: 80
+demo_site_root_password: "{{ vault_demo_site_root_password }}"
+demo_site_title: "Demo Site - Viljo Infrastructure"
+demo_site_message: "Welcome! This placeholder site confirms that TLS termination via Traefik works end to end."
+demo_site_external_domain: viljo.se

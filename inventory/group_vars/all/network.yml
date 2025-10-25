@@ -1,0 +1,38 @@
+---
+network_resolvconf_nameservers:
+  - "{{ management_gateway }}"
+  - 1.1.1.1
+network_interfaces:
+  - name: "{{ management_bridge }}"
+    method: static
+    comment: Management bridge for admin network
+    address: "{{ management_ip }}"
+    netmask: "{{ management_netmask }}"
+    dns_nameservers:
+      - "{{ management_gateway }}"
+      - 1.1.1.1
+    gateway: "{{ management_gateway }}"
+    options:
+      - "bridge_ports enp0s31f6"
+      - "bridge_stp off"
+      - "bridge_fd 0"
+  - name: enp1s0f1
+    method: manual
+    comment: Physical uplink for WAN bridge
+    allow_hotplug: false
+  - name: "{{ wan_bridge }}"
+    method: manual
+    comment: WAN bridge (uplink to ISP for firewall LXC)
+    options:
+      - "bridge_ports enp1s0f1"
+      - "bridge_stp off"
+      - "bridge_fd 0"
+  - name: "{{ public_bridge }}"
+    method: static
+    comment: DMZ bridge for 172.16.10.0/24 services behind the firewall VM
+    address: "{{ dmz_host_ip }}"
+    netmask: "{{ dmz_netmask }}"
+    options:
+      - "bridge_ports none"
+      - "bridge_stp off"
+      - "bridge_fd 0"

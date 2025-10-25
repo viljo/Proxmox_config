@@ -12,7 +12,8 @@ group_vars/**/secrets.yml.*
 
 inventory/group_vars/**/*.yml
 !inventory/group_vars/**/*.example.yml
-!inventory/group_vars/all/main.yml
+!inventory/group_vars/all/*.yml
+!inventory/group_vars/proxmox_hosts/*.yml
 
 inventory/*.yml
 !inventory/*.example.yml

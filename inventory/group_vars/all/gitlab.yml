@@ -1,0 +1,12 @@
+---
+gitlab_container_id: 153
+gitlab_hostname: gitlab
+gitlab_bridge: "{{ public_bridge }}"
+gitlab_ip_address: 172.16.10.153
+gitlab_ip_config: "{{ gitlab_ip_address }}/{{ dmz_prefix }}"
+gitlab_gateway: "{{ dmz_gateway }}"
+gitlab_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
+gitlab_root_password: "{{ vault_gitlab_root_password }}"
+gitlab_external_url: "https://gitlab.{{ public_domain }}"

@@ -1,0 +1,8 @@
+---
+wireguard_container_id: 190
+wireguard_hostname: wireguard
+wireguard_bridge: "{{ public_bridge }}"
+wireguard_ip_config: dhcp
+wireguard_root_password: "{{ vault_wireguard_root_password }}"
+wireguard_peer_configs: []
+wireguard_private_key: "{{ vault_wireguard_private_key }}"

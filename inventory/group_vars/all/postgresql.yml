@@ -1,0 +1,31 @@
+---
+postgres_container_id: 150
+postgres_hostname: postgres
+postgres_bridge: "{{ public_bridge }}"
+postgres_ip_address: 172.16.10.150
+postgres_ip_config: "{{ postgres_ip_address }}/{{ dmz_prefix }}"
+postgres_gateway: "{{ dmz_gateway }}"
+postgres_dns_servers:
+  - 172.16.10.1
+  - 1.1.1.1
+postgres_root_password: "{{ vault_postgres_root_password }}"
+postgres_users:
+  - name: keycloak
+    password: "{{ vault_postgres_keycloak_password }}"
+    role_attrs: CREATEDB
+  - name: nextcloud
+    password: "{{ vault_postgres_nextcloud_password }}"
+    role_attrs: CREATEDB
+  - name: gitlab
+    password: "{{ vault_postgres_gitlab_password }}"
+    role_attrs: CREATEDB
+postgres_databases:
+  - name: keycloak
+    owner: keycloak
+  - name: nextcloud
+    owner: nextcloud
+  - name: gitlab
+    owner: gitlab
+    encoding: UTF8
+postgres_hba_extra:
+  - "host    all             all             0.0.0.0/0            md5"

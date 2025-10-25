@@ -1,0 +1,25 @@
+---
+firewall_container_id: 101
+firewall_hostname: firewall
+firewall_domain: infra.local
+firewall_bridge_wan: "{{ wan_bridge }}"
+firewall_bridge_lan: "{{ public_bridge }}"
+firewall_wan_ip_config: dhcp
+firewall_lan_ip_address: "{{ dmz_gateway }}"
+firewall_lan_prefix: "{{ dmz_prefix }}"
+firewall_dns_servers:
+  - 1.1.1.1
+  - 8.8.8.8
+firewall_root_password: "{{ vault_firewall_root_password | default('') }}"
+firewall_forward_services:
+  - name: traefik_https
+    proto: tcp
+    ports:
+      - 80
+      - 443
+    target: "{{ dmz_host_ip }}"
+  - name: proxmox_ssh
+    proto: tcp
+    ports:
+      - 22
+    target: "{{ dmz_host_ip }}"
