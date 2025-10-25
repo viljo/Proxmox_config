@@ -129,19 +129,26 @@ echo ""
 
 # Check Loopia DDNS
 echo -e "${BLUE}[4] Checking Loopia DDNS Service${NC}"
-DDNS_STATUS=$(ssh root@192.168.1.3 "systemctl is-active loopia-ddns" 2>/dev/null)
-if [ "$DDNS_STATUS" = "active" ]; then
-    print_result "DDNS Service" "PASS" "(active)"
-    
-    # Check last run time
-    LAST_RUN=$(ssh root@192.168.1.3 "systemctl status loopia-ddns | grep 'Finished Loopia DDNS' | tail -1 | awk '{print \$1, \$2, \$3}'" 2>/dev/null)
+# Check the timer, not the service (it's a oneshot service triggered by timer)
+DDNS_TIMER_STATUS=$(ssh root@192.168.1.3 "systemctl is-active loopia-ddns.timer" 2>/dev/null)
+if [ "$DDNS_TIMER_STATUS" = "active" ]; then
+    print_result "DDNS Timer" "PASS" "(active)"
+
+    # Check last successful run
+    LAST_RUN=$(ssh root@192.168.1.3 "systemctl status loopia-ddns.service | grep 'Finished' | tail -1 | awk '{print \$1, \$2, \$3}'" 2>/dev/null)
     if [ -n "$LAST_RUN" ]; then
         print_result "DDNS Last Update" "PASS" "($LAST_RUN)"
     else
         print_result "DDNS Last Update" "WARN" "(could not determine)"
     fi
+
+    # Check next scheduled run
+    NEXT_RUN=$(ssh root@192.168.1.3 "systemctl list-timers loopia-ddns.timer --no-pager | grep loopia-ddns | awk '{print \$1, \$2, \$3, \$4}'" 2>/dev/null)
+    if [ -n "$NEXT_RUN" ]; then
+        print_result "DDNS Next Run" "PASS" "($NEXT_RUN)"
+    fi
 else
-    print_result "DDNS Service" "FAIL" "($DDNS_STATUS)"
+    print_result "DDNS Timer" "FAIL" "($DDNS_TIMER_STATUS)"
 fi
 echo ""
 
