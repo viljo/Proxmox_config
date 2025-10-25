@@ -24,7 +24,7 @@ SERVICES=(
     "GitLab:153:80:gitlab.viljo.se"
     "Nextcloud:155:80:nextcloud.viljo.se"
     "Redis:158:6379:none"
-    "Demo Site:160:80:demosite.viljo.se"
+    "Links Portal:160:80:links.viljo.se"
     "Mattermost:163:8065:mattermost.viljo.se"
     "Webtop:170:3000:browser.viljo.se"
 )
@@ -268,12 +268,12 @@ if [ -n "$FW_WAN_IP" ]; then
         print_result "Redis Ping" "FAIL" "(no PONG)"
     fi
 
-    # Demo Site content check
-    DEMO_CONTENT=$(curl -s --connect-timeout 5 http://172.16.10.160/ 2>/dev/null | grep -c "Links Portal\|Matrix")
-    if [ "$DEMO_CONTENT" -gt 0 ]; then
-        print_result "Demo Site Content" "PASS" "(page content loaded)"
+    # Links Portal content check
+    LINKS_CONTENT=$(curl -s --connect-timeout 5 http://172.16.10.160/ 2>/dev/null | grep -c "Viljo\|matrix\|canvas")
+    if [ "$LINKS_CONTENT" -gt 0 ]; then
+        print_result "Links Portal Content" "PASS" "(page content loaded)"
     else
-        print_result "Demo Site Content" "WARN" "(content not detected)"
+        print_result "Links Portal Content" "WARN" "(content not detected)"
     fi
 else
     print_result "Advanced Health Checks" "FAIL" "(no firewall WAN IP - skipping)"

@@ -1,13 +1,15 @@
 ---
-demo_site_container_id: 60
-demo_site_hostname: demosite
+# Links Portal Container Configuration
+# Minimum VMID in Proxmox is 100
+demo_site_container_id: 160
+demo_site_hostname: links
 demo_site_domain: viljo.se
 demo_site_memory: 1024
 demo_site_cores: 1
 demo_site_disk: 8
 demo_site_swap: 512
 demo_site_bridge: "{{ public_bridge | default('vmbr3') }}"
-demo_site_ip_address: 172.16.10.60
+demo_site_ip_address: 172.16.10.160
 demo_site_netmask: 24
 demo_site_ip_config: "{{ demo_site_ip_address }}/{{ demo_site_netmask }}"
 demo_site_vlan_tag: null

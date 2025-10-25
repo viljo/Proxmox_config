@@ -24,19 +24,6 @@ server {
     }
 }
 
-# demo.viljo.se - Original demo page
-server {
-    listen 80;
-    server_name demo.{{ demo_site_external_domain }} demosite.{{ demo_site_external_domain }};
-
-    root {{ demo_site_web_root }};
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-}
-
 # Default fallback server (for IP access or unknown domains)
 server {
     listen 80 default_server;
