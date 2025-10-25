@@ -34,7 +34,7 @@ traefik_services:
     port: "{{ demo_site_service_port }}"
   - name: auth
     host: "auth.{{ public_domain }}"
-    url: "http://127.0.0.1:4180"  # oauth2-proxy on firewall (localhost)
+    url: "http://172.16.10.167:4180"  # oauth2-proxy on firewall (localhost)
   - name: gitlab
     host: "gitlab.{{ public_domain }}"
     container_id: "{{ gitlab_container_id }}"

@@ -9,8 +9,8 @@ oauth2_proxy_hostname: auth
 oauth2_proxy_domain: "{{ public_domain }}"
 oauth2_proxy_external_url: "https://{{ oauth2_proxy_hostname }}.{{ oauth2_proxy_domain }}"
 
-# Deployment location: Firewall container (CT 101) where Traefik runs
-oauth2_proxy_container_id: 101
+# Deployment location: Dedicated container (CT 167) for security isolation
+oauth2_proxy_container_id: 167
 oauth2_proxy_data_dir: /opt/oauth2-proxy
 
 # Keycloak OIDC Configuration
