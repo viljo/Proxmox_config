@@ -65,6 +65,14 @@
     update_cache: yes
   delegate_to: redis_container
 
+- name: Enable en_US.UTF-8 locale in locale.gen
+  ansible.builtin.lineinfile:
+    path: /etc/locale.gen
+    line: 'en_US.UTF-8 UTF-8'
+    state: present
+    create: yes
+  delegate_to: redis_container
+
 - name: Generate en_US.UTF-8 locale
   ansible.builtin.command:
     cmd: locale-gen en_US.UTF-8
@@ -77,6 +85,17 @@
       LANG=en_US.UTF-8
       LC_ALL=en_US.UTF-8
     dest: /etc/default/locale
+  delegate_to: redis_container
+
+- name: Create Redis log file
+  ansible.builtin.file:
+    path: /var/log/redis/redis-server.log
+    state: touch
+    owner: redis
+    group: redis
+    mode: '0644'
+    modification_time: preserve
+    access_time: preserve
   delegate_to: redis_container
 
 - name: Install Redis
