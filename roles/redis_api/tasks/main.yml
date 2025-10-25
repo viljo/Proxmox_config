@@ -94,6 +94,45 @@
     state: stopped
   delegate_to: redis_container
 
+- name: Create Redis runtime directory
+  ansible.builtin.file:
+    path: /run/redis
+    state: directory
+    owner: redis
+    group: redis
+    mode: '0755'
+  delegate_to: redis_container
+
+- name: Create tmpfiles.d configuration for Redis runtime directory
+  ansible.builtin.copy:
+    content: |
+      # Redis runtime directory
+      d /run/redis 0755 redis redis -
+    dest: /etc/tmpfiles.d/redis.conf
+    owner: root
+    group: root
+    mode: '0644'
+  delegate_to: redis_container
+
+- name: Ensure Redis data directory has correct ownership
+  ansible.builtin.file:
+    path: /var/lib/redis
+    state: directory
+    owner: redis
+    group: redis
+    mode: '0755'
+    recurse: yes
+  delegate_to: redis_container
+
+- name: Ensure Redis log directory has correct ownership
+  ansible.builtin.file:
+    path: /var/log/redis
+    state: directory
+    owner: redis
+    group: redis
+    mode: '0755'
+  delegate_to: redis_container
+
 - name: Deploy Redis configuration
   ansible.builtin.template:
     src: redis.conf.j2
