@@ -28,7 +28,11 @@ http:
         passHostHeader: true
 {% endif %}
         servers:
+{% if svc.url is defined %}
+          - url: "{{ svc.url }}"
+{% else %}
           - url: "{{ svc.scheme | default('http') }}://{{ svc.backend_ip }}:{{ svc.port }}"
+{% endif %}
 {% if svc.sticky is defined %}
         sticky:
 {{ svc.sticky | to_nice_yaml(indent=10, sort_keys=False) }}

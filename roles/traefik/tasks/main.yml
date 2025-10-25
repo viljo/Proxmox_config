@@ -119,6 +119,7 @@
     label: "{{ item.name }}"
   when:
     - traefik_services | default([]) | length > 0
+    - item.url is not defined  # Skip services with direct URL (e.g. localhost services)
 
 - name: Build list of existing Traefik services
   ansible.builtin.set_fact:
@@ -129,6 +130,8 @@
     label: "{{ item.0.name }}"
   when:
     - traefik_services | default([]) | length > 0
+    - item.0.url is not defined  # Skip URL-based services
+    - item.1.stat is defined
     - item.1.stat.exists
 
 - name: Warn about missing Traefik services
@@ -139,6 +142,8 @@
     label: "{{ item.0.name }}"
   when:
     - traefik_services | default([]) | length > 0
+    - item.0.url is not defined  # Skip URL-based services
+    - item.1.stat is defined
     - not item.1.stat.exists
 
 - name: Collect backend addresses for Traefik services
@@ -161,6 +166,17 @@
     label: "{{ item.0.name }}"
   when:
     - traefik_services_existing | default([]) | length > 0
+
+- name: Add URL-based services to Traefik rendered list (e.g. localhost services)
+  ansible.builtin.set_fact:
+    traefik_services_render: >-
+      {{ (traefik_services_render | default([])) + [ item ] }}
+  loop: "{{ traefik_services | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - traefik_services | default([]) | length > 0
+    - item.url is defined
 
 - name: Render Traefik services routing manifest
   ansible.builtin.template:

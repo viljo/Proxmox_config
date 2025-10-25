@@ -1,0 +1,77 @@
+---
+- name: Deploy oauth2-proxy for Traefik Forward Auth SSO
+  hosts: proxmox_admin
+  gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all/oauth2_proxy.yml
+
+  tasks:
+    - name: Load oauth2-proxy variables
+      ansible.builtin.include_vars:
+        file: ../inventory/group_vars/all/oauth2_proxy.yml
+      tags: always
+
+    - name: Apply oauth2-proxy role
+      ansible.builtin.include_role:
+        name: oauth2_proxy_api
+        public: yes
+
+    # ================================================================================
+    # SERVICE VERIFICATION
+    # ================================================================================
+
+    - name: "VERIFY: Test oauth2-proxy health endpoint (from firewall container)"
+      ansible.builtin.uri:
+        url: "http://localhost:{{ oauth2_proxy_service_port }}/ping"
+        method: GET
+        status_code: 200
+      delegate_to: "{{ oauth2_proxy_container_id }}"
+      register: oauth2_proxy_ping
+      failed_when: false
+
+    - name: "VERIFY: Test oauth2-proxy HTTPS external (from localhost)"
+      ansible.builtin.uri:
+        url: "{{ oauth2_proxy_external_url }}/ping"
+        method: GET
+        status_code: [200, 401, 403]  # 401/403 acceptable (auth required)
+        validate_certs: yes
+      delegate_to: localhost
+      register: oauth2_proxy_https
+      failed_when: false
+
+    - name: "VERIFY: Display verification results"
+      ansible.builtin.debug:
+        msg:
+          - "=== oauth2-proxy Verification Results ==="
+          - "Health Internal (localhost:{{ oauth2_proxy_service_port }}/ping): {% if oauth2_proxy_ping.status == 200 %}PASS ✅{% else %}FAIL ❌ ({{ oauth2_proxy_ping.status | default('ERROR') }}){% endif %}"
+          - "HTTPS External ({{ oauth2_proxy_external_url }}/ping): {% if oauth2_proxy_https.status in [200, 401, 403] %}PASS ✅{% else %}FAIL ❌ ({{ oauth2_proxy_https.status | default('ERROR') }}){% endif %}"
+
+    - name: "VERIFY: Fail if critical checks failed"
+      ansible.builtin.fail:
+        msg:
+          - "❌ oauth2-proxy verification FAILED"
+          - "  Health Internal: {{ oauth2_proxy_ping.status | default('ERROR') }}"
+          - "  HTTPS External: {{ oauth2_proxy_https.status | default('ERROR') }}"
+          - ""
+          - "Troubleshooting:"
+          - "  1. Check oauth2-proxy logs: pct exec {{ oauth2_proxy_container_id }} -- docker logs oauth2-proxy"
+          - "  2. Check oauth2-proxy status: pct exec {{ oauth2_proxy_container_id }} -- docker ps | grep oauth2-proxy"
+          - "  3. Check Traefik routing for auth.{{ public_domain }}"
+      when: >
+        oauth2_proxy_ping.status is not defined or
+        oauth2_proxy_ping.status != 200
+
+    - name: "VERIFY: Display success message"
+      ansible.builtin.debug:
+        msg:
+          - "✅ oauth2-proxy deployed and verified successfully"
+          - "  Container: {{ oauth2_proxy_container_id }} (Firewall)"
+          - "  Internal Port: {{ oauth2_proxy_service_port }}"
+          - "  External URL: {{ oauth2_proxy_external_url }}"
+          - "  Keycloak OIDC: {{ oauth2_proxy_oidc_issuer_url }}"
+          - "  Status: FUNCTIONAL ✅"
+          - ""
+          - "Next Steps:"
+          - "  1. Configure Traefik middleware for forward auth"
+          - "  2. Apply middleware to services (Mattermost, etc.)"
+          - "  3. Test SSO login flow"

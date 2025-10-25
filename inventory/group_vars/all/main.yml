@@ -10,6 +10,7 @@ loopia_dns_records:
   - host: "@"
     ttl: 600
   - host: links
+  - host: auth  # oauth2-proxy for Traefik Forward Auth
   - host: gitlab
   - host: netbox
   - host: keycloak
@@ -31,6 +32,9 @@ traefik_services:
     host: "links.{{ public_domain }}"
     container_id: "{{ demo_site_container_id }}"
     port: "{{ demo_site_service_port }}"
+  - name: auth
+    host: "auth.{{ public_domain }}"
+    url: "http://127.0.0.1:4180"  # oauth2-proxy on firewall (localhost)
   - name: gitlab
     host: "gitlab.{{ public_domain }}"
     container_id: "{{ gitlab_container_id }}"
