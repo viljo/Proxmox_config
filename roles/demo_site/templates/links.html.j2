@@ -267,6 +267,84 @@
       letter-spacing: 0.05em;
     }
 
+    .features-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .feature-card {
+      background: linear-gradient(135deg, var(--bg-secondary) 0%, rgba(99, 102, 241, 0.05) 100%);
+      border: 1px solid var(--planned);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .feature-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: var(--bg-card);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .feature-title-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex: 1;
+    }
+
+    .feature-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin: 0;
+    }
+
+    .feature-priority {
+      padding: 0.25rem 0.5rem;
+      background: rgba(99, 102, 241, 0.2);
+      color: var(--planned);
+      border: 1px solid var(--planned);
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+
+    .feature-description {
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 1rem;
+    }
+
+    .feature-benefits {
+      margin: 0;
+      padding-left: 1.5rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .feature-benefits li {
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+
+    .feature-benefits li::marker {
+      color: var(--planned);
+    }
+
     @media (max-width: 768px) {
       h1 {
         font-size: 2rem;
@@ -373,11 +451,45 @@
     </section>
     {% endif %}
 
+    <!-- Planned Features -->
+    {% if planned_features is defined and planned_features | length > 0 %}
+    <section class="section">
+      <div class="section-header">
+        <h2 class="section-title">Planned Infrastructure Features</h2>
+        <span class="section-badge badge-planned">
+          <span class="status-dot dot-planned"></span>
+          {{ planned_features | length }} In Development
+        </span>
+      </div>
+      <div class="features-list">
+        {% for feature in planned_features %}
+        <div class="feature-card">
+          <div class="feature-header">
+            <span class="feature-icon">{{ feature.icon }}</span>
+            <div class="feature-title-group">
+              <h3 class="feature-name">{{ feature.name }}</h3>
+              <span class="feature-priority">{{ feature.priority }}</span>
+            </div>
+          </div>
+          <p class="feature-description">{{ feature.description }}</p>
+          {% if feature.benefits is defined and feature.benefits | length > 0 %}
+          <ul class="feature-benefits">
+            {% for benefit in feature.benefits %}
+            <li>{{ benefit }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
     <footer>
       <div class="footer-stats">
         <div class="stat">
           <div class="stat-value">{{ working_services | length }}</div>
-          <div class="stat-label">Online</div>
+          <div class="stat-label">Services Online</div>
         </div>
         <div class="stat">
           <div class="stat-value">{{ nonworking_services | length }}</div>
@@ -385,11 +497,17 @@
         </div>
         <div class="stat">
           <div class="stat-value">{{ planned_services | length }}</div>
-          <div class="stat-label">Planned</div>
+          <div class="stat-label">Services Planned</div>
         </div>
+        {% if planned_features is defined %}
+        <div class="stat">
+          <div class="stat-value">{{ planned_features | length }}</div>
+          <div class="stat-label">Features Planned</div>
+        </div>
+        {% endif %}
         <div class="stat">
           <div class="stat-value">{{ (working_services | length + nonworking_services | length + planned_services | length) }}</div>
-          <div class="stat-label">Total</div>
+          <div class="stat-label">Total Services</div>
         </div>
       </div>
       <p>Proxmox Infrastructure - Managed with Ansible</p>

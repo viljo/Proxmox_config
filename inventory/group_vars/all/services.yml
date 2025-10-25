@@ -203,3 +203,28 @@ infrastructure_services_internal:
     container_id: "{{ gitlab_runner_container_id }}"
     status: deployed_working
     spec: specs/planned/007-gitlab-ci-runner
+
+# Planned infrastructure features (not services, but enhancements)
+# These are cross-cutting features that enhance existing services
+planned_features:
+  - name: GitLab.com OAuth SSO
+    icon: "🔐"
+    description: Single sign-on across all services using GitLab.com authentication via Keycloak
+    status: planned
+    priority: P1
+    spec: specs/planned/001-gitlab-oauth-keycloak
+    benefits:
+      - "One login for all infrastructure services"
+      - "No separate password management"
+      - "Developer-focused with GitLab.com accounts"
+
+  - name: External SSH Access
+    icon: "🔑"
+    description: Secure SSH access to Proxmox infrastructure via ssh://viljo.se
+    status: planned
+    priority: P1
+    spec: specs/planned/003-external-ssh-admin
+    benefits:
+      - "Remote administration from anywhere"
+      - "Friendly domain name instead of IP"
+      - "Port forwarding through firewall"
