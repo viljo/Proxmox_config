@@ -9,7 +9,7 @@
 
 - name: Check if Traefik network exists
   ansible.builtin.command:
-    cmd: "pct exec {{ oauth2_proxy_container_id }} -- docker network ls --format '{{ '{{' }}.Name{{ '}}' }}' | grep -x traefik"
+    cmd: "pct exec {{ oauth2_proxy_container_id }} -- docker network inspect traefik"
   register: traefik_network_check
   failed_when: false
   changed_when: false
@@ -18,6 +18,8 @@
   ansible.builtin.command:
     cmd: "pct exec {{ oauth2_proxy_container_id }} -- docker network create traefik"
   when: traefik_network_check.rc != 0
+  failed_when: false
+  changed_when: traefik_network_check.rc != 0
 
 - name: Deploy oauth2-proxy Docker Compose configuration
   ansible.builtin.copy:

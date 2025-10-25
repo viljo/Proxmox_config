@@ -20,46 +20,41 @@
     # SERVICE VERIFICATION
     # ================================================================================
 
-    - name: "VERIFY: Test oauth2-proxy health endpoint (from firewall container)"
-      ansible.builtin.uri:
-        url: "http://localhost:{{ oauth2_proxy_service_port }}/ping"
-        method: GET
-        status_code: 200
-      delegate_to: "{{ oauth2_proxy_container_id }}"
+    - name: "VERIFY: Test oauth2-proxy health endpoint (from container)"
+      ansible.builtin.command:
+        cmd: "pct exec {{ oauth2_proxy_container_id }} -- curl -sf http://localhost:{{ oauth2_proxy_service_port }}/ping"
       register: oauth2_proxy_ping
       failed_when: false
+      changed_when: false
 
-    - name: "VERIFY: Test oauth2-proxy HTTPS external (from localhost)"
-      ansible.builtin.uri:
-        url: "{{ oauth2_proxy_external_url }}/ping"
-        method: GET
-        status_code: [200, 401, 403]  # 401/403 acceptable (auth required)
-        validate_certs: yes
-      delegate_to: localhost
+    - name: "VERIFY: Test oauth2-proxy HTTPS external (from Proxmox host)"
+      ansible.builtin.command:
+        cmd: "curl -sfI {{ oauth2_proxy_external_url }}/ping"
       register: oauth2_proxy_https
       failed_when: false
+      changed_when: false
 
     - name: "VERIFY: Display verification results"
       ansible.builtin.debug:
         msg:
           - "=== oauth2-proxy Verification Results ==="
-          - "Health Internal (localhost:{{ oauth2_proxy_service_port }}/ping): {% if oauth2_proxy_ping.status == 200 %}PASS ✅{% else %}FAIL ❌ ({{ oauth2_proxy_ping.status | default('ERROR') }}){% endif %}"
-          - "HTTPS External ({{ oauth2_proxy_external_url }}/ping): {% if oauth2_proxy_https.status in [200, 401, 403] %}PASS ✅{% else %}FAIL ❌ ({{ oauth2_proxy_https.status | default('ERROR') }}){% endif %}"
+          - "Health Internal (localhost:{{ oauth2_proxy_service_port }}/ping): {% if oauth2_proxy_ping.rc == 0 %}PASS ✅{% else %}FAIL ❌ (rc={{ oauth2_proxy_ping.rc }}){% endif %}"
+          - "HTTPS External ({{ oauth2_proxy_external_url }}/ping): {% if oauth2_proxy_https.rc == 0 %}PASS ✅{% else %}FAIL ❌ (rc={{ oauth2_proxy_https.rc }}){% endif %}"
 
     - name: "VERIFY: Fail if critical checks failed"
       ansible.builtin.fail:
         msg:
           - "❌ oauth2-proxy verification FAILED"
-          - "  Health Internal: {{ oauth2_proxy_ping.status | default('ERROR') }}"
-          - "  HTTPS External: {{ oauth2_proxy_https.status | default('ERROR') }}"
+          - "  Health Internal: rc={{ oauth2_proxy_ping.rc | default('ERROR') }}"
+          - "  HTTPS External: rc={{ oauth2_proxy_https.rc | default('ERROR') }}"
           - ""
           - "Troubleshooting:"
           - "  1. Check oauth2-proxy logs: pct exec {{ oauth2_proxy_container_id }} -- docker logs oauth2-proxy"
           - "  2. Check oauth2-proxy status: pct exec {{ oauth2_proxy_container_id }} -- docker ps | grep oauth2-proxy"
           - "  3. Check Traefik routing for auth.{{ public_domain }}"
       when: >
-        oauth2_proxy_ping.status is not defined or
-        oauth2_proxy_ping.status != 200
+        oauth2_proxy_ping.rc is not defined or
+        oauth2_proxy_ping.rc != 0
 
     - name: "VERIFY: Display success message"
       ansible.builtin.debug:

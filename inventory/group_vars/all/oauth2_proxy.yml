@@ -19,12 +19,14 @@ oauth2_proxy_client_id: "{{ vault_oauth2_proxy_client_id }}"
 oauth2_proxy_client_secret: "{{ vault_oauth2_proxy_client_secret }}"
 oauth2_proxy_cookie_secret: "{{ vault_oauth2_proxy_cookie_secret }}"
 
-oauth2_proxy_oidc_issuer_url: "https://keycloak.{{ public_domain }}/realms/master"
-oauth2_proxy_redirect_url: "{{ oauth2_proxy_external_url }}/oauth2/callback"
-oauth2_proxy_login_url: "https://keycloak.{{ public_domain }}/realms/master/protocol/openid-connect/auth"
-oauth2_proxy_redeem_url: "https://keycloak.{{ public_domain }}/realms/master/protocol/openid-connect/token"
-oauth2_proxy_profile_url: "https://keycloak.{{ public_domain }}/realms/master/protocol/openid-connect/userinfo"
-oauth2_proxy_validate_url: "https://keycloak.{{ public_domain }}/realms/master/protocol/openid-connect/userinfo"
+# Split-horizon DNS: Use internal IPs for oauth2-proxy→Keycloak, public URLs for browser→Keycloak
+oauth2_proxy_oidc_issuer_url: "http://172.16.10.151:8080/realms/master"  # Internal: for token verification
+oauth2_proxy_redirect_url: "{{ oauth2_proxy_external_url }}/oauth2/callback"  # External: user browser callback
+oauth2_proxy_login_url: "https://keycloak.{{ public_domain }}/realms/master/protocol/openid-connect/auth"  # External: user browser
+oauth2_proxy_redeem_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/token"  # Internal: oauth2-proxy backend
+oauth2_proxy_profile_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/userinfo"  # Internal: oauth2-proxy backend
+oauth2_proxy_validate_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/userinfo"  # Internal: oauth2-proxy backend
+oauth2_proxy_jwks_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/certs"  # Internal: JWKS endpoint for token validation
 
 # Session configuration
 oauth2_proxy_cookie_domain: ".{{ public_domain }}"  # Wildcard for all subdomains
@@ -59,7 +61,7 @@ oauth2_proxy_standard_logging: true
 oauth2_proxy_scope: "openid profile email"
 oauth2_proxy_insecure_oidc_allow_unverified_email: false
 oauth2_proxy_oidc_groups_claim: "groups"
-oauth2_proxy_skip_oidc_discovery: false
+oauth2_proxy_skip_oidc_discovery: true  # Skip discovery to use manual endpoint configuration (split-horizon DNS)
 
 # Reverse proxy settings (oauth2-proxy behind Traefik)
 oauth2_proxy_reverse_proxy: true

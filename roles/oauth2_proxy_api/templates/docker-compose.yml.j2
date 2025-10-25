@@ -4,7 +4,7 @@ services:
     container_name: oauth2-proxy
     restart: unless-stopped
     ports:
-      - "127.0.0.1:{{ oauth2_proxy_service_port }}:4180"  # Only expose to localhost (Traefik access only)
+      - "{{ oauth2_proxy_service_port }}:4180"  # Expose on all interfaces for Traefik access from DMZ network
     environment:
       # Provider configuration
       OAUTH2_PROXY_PROVIDER: "{{ oauth2_proxy_provider }}"
@@ -21,6 +21,7 @@ services:
       OAUTH2_PROXY_VALIDATE_URL: "{{ oauth2_proxy_validate_url }}"
       OAUTH2_PROXY_SCOPE: "{{ oauth2_proxy_scope }}"
       OAUTH2_PROXY_SKIP_OIDC_DISCOVERY: "{{ oauth2_proxy_skip_oidc_discovery | lower }}"
+      OAUTH2_PROXY_OIDC_JWKS_URL: "{{ oauth2_proxy_jwks_url }}"
 
       # Cookie configuration
       OAUTH2_PROXY_COOKIE_DOMAINS: "{{ oauth2_proxy_cookie_domain }}"
