@@ -1,0 +1,116 @@
+---
+# oauth2-proxy Container deployment via Proxmox API
+# Creates dedicated container for oauth2-proxy with Docker support
+
+- name: Create oauth2-proxy container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ oauth2_proxy_container_id }}"
+    hostname: "{{ oauth2_proxy_container_hostname }}"
+    ostemplate: "local:vztmpl/{{ oauth2_proxy_container_template_file | basename }}"
+    cores: "{{ oauth2_proxy_container_cores }}"
+    memory: "{{ oauth2_proxy_container_memory }}"
+    swap: "{{ oauth2_proxy_container_swap }}"
+    disk: "{{ oauth2_proxy_container_rootfs_storage }}:{{ oauth2_proxy_container_disk }}"
+    netif:
+      net0: "name=eth0,bridge={{ oauth2_proxy_container_bridge }},ip={{ oauth2_proxy_container_ip_address }}/{{ oauth2_proxy_container_netmask }},gw={{ oauth2_proxy_container_gateway }},type=veth"
+    nameserver: "{{ oauth2_proxy_container_dns_servers | join(' ') }}"
+    unprivileged: "{{ oauth2_proxy_container_unprivileged }}"
+    onboot: true
+    password: "{{ oauth2_proxy_container_root_password }}"
+    pubkey: "{{ proxmox_root_authorized_keys | join('\n') }}"
+    state: present
+  register: oauth2_proxy_container
+
+- name: Enable nesting feature for Docker support
+  ansible.builtin.command:
+    cmd: "pct set {{ oauth2_proxy_container_id }} --features {{ oauth2_proxy_container_features }}"
+  when: oauth2_proxy_container.changed
+
+- name: Start oauth2-proxy container via Proxmox API
+  community.proxmox.proxmox:
+    api_host: "{{ proxmox_api_host }}"
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    validate_certs: "{{ proxmox_api_validate_certs }}"
+    node: "{{ proxmox_node }}"
+    vmid: "{{ oauth2_proxy_container_id }}"
+    state: started
+
+- name: Wait for oauth2-proxy container SSH to be available
+  ansible.builtin.wait_for:
+    host: "{{ oauth2_proxy_container_ip_address }}"
+    port: 22
+    delay: 5
+    timeout: 60
+
+- name: Add oauth2-proxy container to in-memory inventory
+  ansible.builtin.add_host:
+    name: oauth2_proxy_container
+    ansible_host: "{{ oauth2_proxy_container_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ oauth2_proxy_container_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Install required system packages
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: yes
+  delegate_to: oauth2_proxy_container
+
+- name: Create Docker repository keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  delegate_to: oauth2_proxy_container
+
+- name: Add Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+  delegate_to: oauth2_proxy_container
+
+- name: Add Docker repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+    state: present
+  delegate_to: oauth2_proxy_container
+
+- name: Install Docker and Docker Compose
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+    update_cache: yes
+  delegate_to: oauth2_proxy_container
+
+- name: Enable and start Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: yes
+    state: started
+  delegate_to: oauth2_proxy_container
+
+- name: Display oauth2-proxy container information
+  ansible.builtin.debug:
+    msg:
+      - "oauth2-proxy container deployed successfully"
+      - "  Container ID: {{ oauth2_proxy_container_id }}"
+      - "  IP Address: {{ oauth2_proxy_container_ip_address }}"
+      - "  Hostname: {{ oauth2_proxy_container_hostname }}"
+      - "  Docker installed and running"
+      - "  Ready for oauth2-proxy application deployment"

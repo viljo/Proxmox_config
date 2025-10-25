@@ -1,0 +1,71 @@
+---
+- name: Deploy oauth2-proxy dedicated container (CT 167)
+  hosts: proxmox_admin
+  gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all/oauth2_proxy_container.yml
+
+  tasks:
+    - name: Load oauth2-proxy container variables
+      ansible.builtin.include_vars:
+        file: ../inventory/group_vars/all/oauth2_proxy_container.yml
+      tags: always
+
+    - name: Apply oauth2-proxy container deployment role
+      ansible.builtin.include_role:
+        name: oauth2_proxy_container_api
+        public: yes
+
+    # ================================================================================
+    # CONTAINER VERIFICATION
+    # ================================================================================
+
+    - name: "VERIFY: Check container status"
+      ansible.builtin.command:
+        cmd: "pct status {{ oauth2_proxy_container_id }}"
+      register: container_status
+      changed_when: false
+
+    - name: "VERIFY: Check Docker service status"
+      ansible.builtin.command:
+        cmd: "pct exec {{ oauth2_proxy_container_id }} -- systemctl is-active docker"
+      register: docker_status
+      changed_when: false
+      failed_when: false
+
+    - name: "VERIFY: Display verification results"
+      ansible.builtin.debug:
+        msg:
+          - "=== oauth2-proxy Container Verification Results ==="
+          - "Container Status: {% if 'running' in container_status.stdout %}RUNNING ✅{% else %}STOPPED ❌{% endif %}"
+          - "Docker Status: {% if docker_status.stdout == 'active' %}ACTIVE ✅{% else %}INACTIVE ❌{% endif %}"
+
+    - name: "VERIFY: Fail if critical checks failed"
+      ansible.builtin.fail:
+        msg:
+          - "❌ oauth2-proxy container verification FAILED"
+          - "  Container Status: {{ container_status.stdout }}"
+          - "  Docker Status: {{ docker_status.stdout }}"
+          - ""
+          - "Troubleshooting:"
+          - "  1. Check container logs: pct enter {{ oauth2_proxy_container_id }}"
+          - "  2. Check Docker installation: pct exec {{ oauth2_proxy_container_id }} -- docker --version"
+          - "  3. Check systemd status: pct exec {{ oauth2_proxy_container_id }} -- systemctl status docker"
+      when: >
+        'running' not in container_status.stdout or
+        docker_status.stdout != 'active'
+
+    - name: "VERIFY: Display success message"
+      ansible.builtin.debug:
+        msg:
+          - "✅ oauth2-proxy container deployed and verified successfully"
+          - "  Container ID: {{ oauth2_proxy_container_id }}"
+          - "  IP Address: {{ oauth2_proxy_container_ip_address }}"
+          - "  Hostname: {{ oauth2_proxy_container_hostname }}"
+          - "  Docker: ACTIVE ✅"
+          - "  Status: READY FOR APPLICATION DEPLOYMENT ✅"
+          - ""
+          - "Next Steps:"
+          - "  1. Deploy oauth2-proxy application: ansible-playbook -i inventory/hosts.yml playbooks/oauth2-proxy-deploy.yml"
+          - "  2. Configure Traefik middleware for forward auth"
+          - "  3. Apply middleware to services (Mattermost, etc.)"
