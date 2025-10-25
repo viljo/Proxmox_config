@@ -34,6 +34,11 @@
         name: keycloak_api
         tasks_from: configure_gitlab_oauth
 
+    - name: Configure Keycloak groups
+      ansible.builtin.include_role:
+        name: keycloak_api
+        tasks_from: configure_groups
+
     - name: Display success message
       ansible.builtin.debug:
         msg:
@@ -48,6 +53,11 @@
           - "  - Alias: gitlab"
           - "  - Provider: OpenID Connect (GitLab.com)"
           - "  - Redirect URI: {{ keycloak_gitlab_oauth_redirect_uri }}"
+          - ""
+          - "Groups Configured:"
+          - "  - admin (administrative users)"
+          - "  - user (standard users)"
+          - "  - guest (limited access users)"
           - ""
           - "Testing Instructions:"
           - "  1. Open: https://{{ keycloak_hostname_url }}/realms/master/account"

@@ -1,0 +1,75 @@
+---
+# Configure Keycloak Groups for Authorization
+
+- name: Check if Keycloak groups should be configured
+  ansible.builtin.debug:
+    msg: "Configuring Keycloak groups: guest, user, admin"
+
+- name: Login to Keycloak Admin CLI
+  ansible.builtin.shell:
+    cmd: |
+      docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:{{ keycloak_service_port }} \
+        --realm master \
+        --user {{ keycloak_admin_user }} \
+        --password '{{ keycloak_admin_password }}'
+  delegate_to: keycloak_container
+  no_log: true
+  changed_when: false
+
+- name: Get existing groups
+  ansible.builtin.shell:
+    cmd: |
+      docker exec keycloak /opt/keycloak/bin/kcadm.sh get groups \
+        --server http://localhost:{{ keycloak_service_port }} \
+        --realm master
+  delegate_to: keycloak_container
+  register: existing_groups
+  changed_when: false
+
+- name: Create guest group if not exists
+  ansible.builtin.shell:
+    cmd: |
+      docker exec keycloak /opt/keycloak/bin/kcadm.sh create groups \
+        --server http://localhost:{{ keycloak_service_port }} \
+        --realm master \
+        -s name=guest
+  delegate_to: keycloak_container
+  when: "'\"name\" : \"guest\"' not in existing_groups.stdout"
+  register: guest_group_created
+
+- name: Create user group if not exists
+  ansible.builtin.shell:
+    cmd: |
+      docker exec keycloak /opt/keycloak/bin/kcadm.sh create groups \
+        --server http://localhost:{{ keycloak_service_port }} \
+        --realm master \
+        -s name=user
+  delegate_to: keycloak_container
+  when: "'\"name\" : \"user\"' not in existing_groups.stdout"
+  register: user_group_created
+
+- name: Create admin group if not exists
+  ansible.builtin.shell:
+    cmd: |
+      docker exec keycloak /opt/keycloak/bin/kcadm.sh create groups \
+        --server http://localhost:{{ keycloak_service_port }} \
+        --realm master \
+        -s name=admin
+  delegate_to: keycloak_container
+  when: "'\"name\" : \"admin\"' not in existing_groups.stdout"
+  register: admin_group_created
+
+- name: Display group creation results
+  ansible.builtin.debug:
+    msg:
+      - "✅ Keycloak groups configured successfully"
+      - "  Groups available:"
+      - "    - guest (limited access users)"
+      - "    - user (standard users)"
+      - "    - admin (administrative users)"
+      - ""
+      - "Created in this run:"
+      - "  guest: {{ 'Yes ✅' if guest_group_created.changed else 'Already exists' }}"
+      - "  user: {{ 'Yes ✅' if user_group_created.changed else 'Already exists' }}"
+      - "  admin: {{ 'Yes ✅' if admin_group_created.changed else 'Already exists' }}"
