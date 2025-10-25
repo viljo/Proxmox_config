@@ -293,7 +293,7 @@ Custom websites and services that lack native OIDC support are protected by Trae
 2. Navigate to User Settings → Applications
 3. Create new OAuth application for Keycloak:
    - Name: "Keycloak - Viljo Infrastructure"
-   - Redirect URI: `https://keycloak.viljo.se/auth/realms/master/broker/gitlab/endpoint`
+   - Redirect URI: `https://keycloak.viljo.se/realms/master/broker/gitlab/endpoint`
    - Scopes: `read_user`, `openid`, `profile`, `email`
 4. Save application ID and secret to Ansible Vault
 
