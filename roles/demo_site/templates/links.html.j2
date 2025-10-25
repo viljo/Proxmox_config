@@ -218,6 +218,11 @@
       line-height: 1.4;
     }
 
+    .info-note {
+      background: rgba(99, 102, 241, 0.1);
+      color: var(--planned);
+    }
+
     .planned-badge {
       position: absolute;
       top: 1rem;
@@ -389,9 +394,6 @@
           <div class="service-name">{{ service.name }}</div>
           <div class="service-description">{{ service.description }}</div>
           <div class="service-url">{{ service.subdomain }}.{{ demo_site_external_domain }}</div>
-          {% if service.api_note is defined and service.api_note %}
-          <div class="service-note">⚠️ {{ service.api_note }}</div>
-          {% endif %}
         </a>
         {% endfor %}
       </div>
@@ -443,7 +445,7 @@
           <div class="service-description">{{ service.description }}</div>
           <div class="service-url">{{ service.subdomain }}.{{ demo_site_external_domain }}</div>
           {% if service.note is defined and service.note %}
-          <div class="service-note">ℹ️ {{ service.note }}</div>
+          <div class="service-note info-note">ℹ️ {{ service.note }}</div>
           {% endif %}
         </div>
         {% endfor %}
