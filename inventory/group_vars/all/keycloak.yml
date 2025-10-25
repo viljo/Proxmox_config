@@ -22,3 +22,12 @@ keycloak_db_host: "172.16.10.150"
 keycloak_db_username: keycloak
 keycloak_db_database: keycloak
 keycloak_db_password: "{{ vault_postgres_keycloak_password }}"
+
+# GitLab.com OAuth Identity Provider
+keycloak_gitlab_oauth_enabled: true
+keycloak_gitlab_oauth_client_id: "{{ vault_keycloak_gitlab_oauth_client_id }}"
+keycloak_gitlab_oauth_client_secret: "{{ vault_keycloak_gitlab_oauth_client_secret }}"
+keycloak_gitlab_oauth_redirect_uri: "https://{{ keycloak_hostname_url }}/auth/realms/master/broker/gitlab/endpoint"
+keycloak_gitlab_oauth_auth_url: "https://gitlab.com/oauth/authorize"
+keycloak_gitlab_oauth_token_url: "https://gitlab.com/oauth/token"
+keycloak_gitlab_oauth_userinfo_url: "https://gitlab.com/api/v4/user"

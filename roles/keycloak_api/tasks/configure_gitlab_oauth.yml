@@ -1,0 +1,98 @@
+---
+# Configure GitLab.com OAuth Identity Provider in Keycloak
+
+- name: Check if GitLab OAuth is enabled
+  ansible.builtin.debug:
+    msg: "GitLab OAuth configuration is {{ 'enabled' if keycloak_gitlab_oauth_enabled else 'disabled' }}"
+
+- name: Configure GitLab.com identity provider
+  when: keycloak_gitlab_oauth_enabled
+  block:
+    - name: Login to Keycloak Admin CLI
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            --user {{ keycloak_admin_user }} \
+            --password '{{ keycloak_admin_password }}'
+      delegate_to: keycloak_container
+      no_log: true
+      register: kcadm_login
+      changed_when: false
+
+    - name: Check if GitLab identity provider already exists
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh get identity-provider/instances/gitlab \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master
+      delegate_to: keycloak_container
+      register: gitlab_idp_check
+      failed_when: false
+      changed_when: false
+
+    - name: Create GitLab.com identity provider
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh create identity-provider/instances \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            -s alias=gitlab \
+            -s providerId=oidc \
+            -s enabled=true \
+            -s trustEmail=true \
+            -s storeToken=false \
+            -s addReadTokenRoleOnCreate=false \
+            -s authenticateByDefault=false \
+            -s linkOnly=false \
+            -s firstBrokerLoginFlowAlias=first broker login \
+            -s config.useJwksUrl="true" \
+            -s config.clientId="{{ keycloak_gitlab_oauth_client_id }}" \
+            -s config.clientSecret="{{ keycloak_gitlab_oauth_client_secret }}" \
+            -s config.authorizationUrl="{{ keycloak_gitlab_oauth_auth_url }}" \
+            -s config.tokenUrl="{{ keycloak_gitlab_oauth_token_url }}" \
+            -s config.userInfoUrl="{{ keycloak_gitlab_oauth_userinfo_url }}" \
+            -s config.issuer="https://gitlab.com" \
+            -s config.jwksUrl="https://gitlab.com/oauth/discovery/keys" \
+            -s config.defaultScope="openid profile email read_user" \
+            -s config.syncMode="IMPORT"
+      delegate_to: keycloak_container
+      when: gitlab_idp_check.rc != 0
+      no_log: true
+      register: gitlab_idp_created
+
+    - name: Update existing GitLab.com identity provider
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh update identity-provider/instances/gitlab \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            -s enabled=true \
+            -s trustEmail=true \
+            -s storeToken=false \
+            -s config.clientId="{{ keycloak_gitlab_oauth_client_id }}" \
+            -s config.clientSecret="{{ keycloak_gitlab_oauth_client_secret }}" \
+            -s config.authorizationUrl="{{ keycloak_gitlab_oauth_auth_url }}" \
+            -s config.tokenUrl="{{ keycloak_gitlab_oauth_token_url }}" \
+            -s config.userInfoUrl="{{ keycloak_gitlab_oauth_userinfo_url }}" \
+            -s config.defaultScope="openid profile email read_user"
+      delegate_to: keycloak_container
+      when: gitlab_idp_check.rc == 0
+      no_log: true
+      register: gitlab_idp_updated
+
+    - name: Display GitLab OAuth configuration result
+      ansible.builtin.debug:
+        msg:
+          - "✅ GitLab.com OAuth identity provider configured successfully"
+          - "  Provider Alias: gitlab"
+          - "  Authorization URL: {{ keycloak_gitlab_oauth_auth_url }}"
+          - "  Token URL: {{ keycloak_gitlab_oauth_token_url }}"
+          - "  User Info URL: {{ keycloak_gitlab_oauth_userinfo_url }}"
+          - "  Redirect URI: {{ keycloak_gitlab_oauth_redirect_uri }}"
+          - ""
+          - "Next Steps:"
+          - "  1. Users can now click 'Sign in with GitLab' on Keycloak login page"
+          - "  2. Configure services (Nextcloud, Mattermost, etc.) to use Keycloak OIDC"
+          - "  3. Test login flow with GitLab.com account: anders@viljo.se"

@@ -1,0 +1,62 @@
+---
+- name: Configure Keycloak with GitLab.com OAuth
+  hosts: proxmox_admin
+  gather_facts: false
+  become: false
+
+  tasks:
+    - name: Load Keycloak variables
+      ansible.builtin.include_vars:
+        file: ../inventory/group_vars/all/keycloak.yml
+
+    - name: Ensure Keycloak is running
+      ansible.builtin.uri:
+        url: "https://{{ keycloak_hostname_url }}/health/ready"
+        method: GET
+        status_code: [200]
+        validate_certs: yes
+        timeout: 10
+      register: keycloak_health_check
+      retries: 3
+      delay: 5
+
+    - name: Add keycloak container to in-memory inventory
+      ansible.builtin.add_host:
+        name: keycloak_container
+        ansible_host: "{{ keycloak_ip_address }}"
+        ansible_user: root
+        ansible_password: "{{ keycloak_root_password }}"
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+        groups: containers
+
+    - name: Configure GitLab OAuth identity provider
+      ansible.builtin.include_role:
+        name: keycloak_api
+        tasks_from: configure_gitlab_oauth
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg:
+          - "========================================="
+          - "GitLab.com OAuth Configuration Complete"
+          - "========================================="
+          - ""
+          - "Keycloak Admin Console: https://{{ keycloak_hostname_url }}/admin"
+          - "Admin User: {{ keycloak_admin_user }}"
+          - ""
+          - "GitLab Identity Provider Details:"
+          - "  - Alias: gitlab"
+          - "  - Provider: OpenID Connect (GitLab.com)"
+          - "  - Redirect URI: {{ keycloak_gitlab_oauth_redirect_uri }}"
+          - ""
+          - "Testing Instructions:"
+          - "  1. Open: https://{{ keycloak_hostname_url }}/realms/master/account"
+          - "  2. Click 'Sign in with GitLab'"
+          - "  3. Authenticate with: anders@viljo.se"
+          - "  4. Grant OAuth permissions"
+          - "  5. Verify successful login"
+          - ""
+          - "Next Steps:"
+          - "  - Configure services to use Keycloak OIDC"
+          - "  - Set up LDAP sync (optional)"
+          - "  - Configure Traefik forward auth (optional)"
