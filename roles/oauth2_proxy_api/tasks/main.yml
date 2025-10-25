@@ -5,13 +5,11 @@
 - name: Create oauth2-proxy data directory on firewall container
   ansible.builtin.command:
     cmd: "pct exec {{ oauth2_proxy_container_id }} -- mkdir -p {{ oauth2_proxy_data_dir }}"
-  delegate_to: localhost
   changed_when: false
 
 - name: Check if Traefik network exists
   ansible.builtin.command:
     cmd: "pct exec {{ oauth2_proxy_container_id }} -- docker network ls --format '{{ '{{' }}.Name{{ '}}' }}' | grep -x traefik"
-  delegate_to: localhost
   register: traefik_network_check
   failed_when: false
   changed_when: false
@@ -19,7 +17,6 @@
 - name: Create Traefik network if not exists
   ansible.builtin.command:
     cmd: "pct exec {{ oauth2_proxy_container_id }} -- docker network create traefik"
-  delegate_to: localhost
   when: traefik_network_check.rc != 0
 
 - name: Deploy oauth2-proxy Docker Compose configuration
@@ -27,25 +24,21 @@
     content: "{{ lookup('template', 'docker-compose.yml.j2') }}"
     dest: "/tmp/oauth2-proxy-docker-compose.yml"
     mode: '0644'
-  delegate_to: localhost
 
 - name: Copy Docker Compose config to firewall container
   ansible.builtin.command:
     cmd: "pct push {{ oauth2_proxy_container_id }} /tmp/oauth2-proxy-docker-compose.yml {{ oauth2_proxy_data_dir }}/docker-compose.yml"
-  delegate_to: localhost
   notify: Restart oauth2-proxy
 
 - name: Start oauth2-proxy via Docker Compose
   ansible.builtin.command:
     cmd: "pct exec {{ oauth2_proxy_container_id }} -- bash -c 'cd {{ oauth2_proxy_data_dir }} && docker compose -f docker-compose.yml up -d'"
-  delegate_to: localhost
   register: oauth2_proxy_start
   changed_when: "'Started' in oauth2_proxy_start.stdout or 'Created' in oauth2_proxy_start.stdout or 'Running' in oauth2_proxy_start.stdout"
 
 - name: Wait for oauth2-proxy to be ready
   ansible.builtin.command:
     cmd: "pct exec {{ oauth2_proxy_container_id }} -- curl -f http://localhost:{{ oauth2_proxy_service_port }}/ping"
-  delegate_to: localhost
   register: oauth2_proxy_health
   until: oauth2_proxy_health.rc == 0
   retries: 30
