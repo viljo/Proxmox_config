@@ -19,14 +19,16 @@ oauth2_proxy_client_id: "{{ vault_oauth2_proxy_client_id }}"
 oauth2_proxy_client_secret: "{{ vault_oauth2_proxy_client_secret }}"
 oauth2_proxy_cookie_secret: "{{ vault_oauth2_proxy_cookie_secret }}"
 
-# Split-horizon DNS: Use internal IPs for oauth2-proxy→Keycloak, public URLs for browser→Keycloak
-oauth2_proxy_oidc_issuer_url: "http://172.16.10.151:8080/realms/master"  # Internal: for token verification
+# OIDC Configuration - Minimal config to avoid profile URL issues
+oauth2_proxy_oidc_issuer_url: "http://172.16.10.151:8080/realms/master"  # Internal HTTP for backend
 oauth2_proxy_redirect_url: "{{ oauth2_proxy_external_url }}/oauth2/callback"  # External: user browser callback
 oauth2_proxy_login_url: "https://keycloak.{{ public_domain }}/realms/master/protocol/openid-connect/auth"  # External: user browser
-oauth2_proxy_redeem_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/token"  # Internal: oauth2-proxy backend
-oauth2_proxy_profile_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/userinfo"  # Internal: oauth2-proxy backend
-oauth2_proxy_validate_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/userinfo"  # Internal: oauth2-proxy backend
-oauth2_proxy_jwks_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/certs"  # Internal: JWKS endpoint for token validation
+oauth2_proxy_redeem_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/token"  # Internal: token exchange
+oauth2_proxy_profile_url: ""  # Disabled: causes 401 errors with groups claim
+oauth2_proxy_validate_url: ""  # Disabled: not needed for basic SSO
+oauth2_proxy_jwks_url: "http://172.16.10.151:8080/realms/master/protocol/openid-connect/certs"  # Internal: JWKS
+oauth2_proxy_insecure_oidc_skip_issuer_verification: true  # Skip issuer check (allows mismatch)
+oauth2_proxy_skip_claims_from_profile_url: true  # Skip fetching extra claims from profile URL
 
 # Session configuration
 oauth2_proxy_cookie_domain: ".{{ public_domain }}"  # Wildcard for all subdomains
@@ -41,8 +43,9 @@ oauth2_proxy_cookie_refresh: "1h"
 oauth2_proxy_email_domains: "*"  # Allow any email domain
 oauth2_proxy_whitelist_domains: "{{ public_domain }},.{{ public_domain }}"
 
-# Upstream configuration (not used in forward auth mode)
-oauth2_proxy_upstreams: "static://202"  # Dummy upstream for forward auth mode
+# Upstream configuration (reverse proxy mode)
+# oauth2-proxy acts as reverse proxy, forwarding authenticated requests to backend
+oauth2_proxy_upstreams: "http://172.16.10.163:8065"  # Mattermost backend
 
 # Security settings
 oauth2_proxy_skip_provider_button: false  # Show "Sign in with Keycloak" button
@@ -60,7 +63,7 @@ oauth2_proxy_standard_logging: true
 # OIDC specific settings
 oauth2_proxy_scope: "openid profile email"
 oauth2_proxy_insecure_oidc_allow_unverified_email: false
-oauth2_proxy_oidc_groups_claim: "groups"
+oauth2_proxy_oidc_groups_claim: ""  # Disabled: groups not needed for basic SSO
 oauth2_proxy_skip_oidc_discovery: true  # Skip discovery to use manual endpoint configuration (split-horizon DNS)
 
 # Reverse proxy settings (oauth2-proxy behind Traefik)
