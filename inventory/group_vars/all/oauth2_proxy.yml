@@ -62,7 +62,7 @@ oauth2_proxy_standard_logging: true
 
 # OIDC specific settings
 oauth2_proxy_scope: "openid profile email"
-oauth2_proxy_insecure_oidc_allow_unverified_email: false
+oauth2_proxy_insecure_oidc_allow_unverified_email: true  # GitLab.com OAuth doesn't mark emails as verified
 oauth2_proxy_oidc_groups_claim: ""  # Disabled: groups not needed for basic SSO
 oauth2_proxy_skip_oidc_discovery: true  # Skip discovery to use manual endpoint configuration (split-horizon DNS)
 
