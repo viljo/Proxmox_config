@@ -65,6 +65,7 @@ oauth2_proxy_scope: "openid profile email"
 oauth2_proxy_insecure_oidc_allow_unverified_email: true  # GitLab.com OAuth doesn't mark emails as verified
 oauth2_proxy_oidc_groups_claim: ""  # Disabled: groups not needed for basic SSO
 oauth2_proxy_skip_oidc_discovery: true  # Skip discovery to use manual endpoint configuration (split-horizon DNS)
+oauth2_proxy_oidc_extra_audiences: "master-realm,account"  # Allow Keycloak default audiences for master realm
 
 # Reverse proxy settings (oauth2-proxy behind Traefik)
 oauth2_proxy_reverse_proxy: true

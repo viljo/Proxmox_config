@@ -60,6 +60,9 @@ services:
       OAUTH2_PROXY_INSECURE_OIDC_ALLOW_UNVERIFIED_EMAIL: "{{ oauth2_proxy_insecure_oidc_allow_unverified_email | lower }}"
       OAUTH2_PROXY_INSECURE_OIDC_SKIP_ISSUER_VERIFICATION: "{{ oauth2_proxy_insecure_oidc_skip_issuer_verification | default(false) | lower }}"
       OAUTH2_PROXY_SKIP_CLAIMS_FROM_PROFILE_URL: "{{ oauth2_proxy_skip_claims_from_profile_url | default(false) | lower }}"
+{% if oauth2_proxy_oidc_extra_audiences | default('') | length > 0 %}
+      OAUTH2_PROXY_OIDC_EXTRA_AUDIENCES: "{{ oauth2_proxy_oidc_extra_audiences }}"
+{% endif %}
 {% if oauth2_proxy_oidc_groups_claim | default('') | length > 0 %}
       OAUTH2_PROXY_OIDC_GROUPS_CLAIM: "{{ oauth2_proxy_oidc_groups_claim }}"
 {% endif %}

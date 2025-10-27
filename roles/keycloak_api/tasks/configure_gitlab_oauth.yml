@@ -58,7 +58,8 @@
             -s config.defaultScope="openid profile email read_user" \
             -s config.syncMode="IMPORT" \
             -s config.userIdClaim="sub" \
-            -s config.usernameClaim="preferred_username"
+            -s config.usernameClaim="nickname" \
+            -s config.emailClaim="email"
       delegate_to: keycloak_container
       when: gitlab_idp_check.rc != 0
       no_log: true
@@ -81,7 +82,8 @@
             -s config.defaultScope="openid profile email read_user" \
             -s config.syncMode="IMPORT" \
             -s config.userIdClaim="sub" \
-            -s config.usernameClaim="preferred_username"
+            -s config.usernameClaim="nickname" \
+            -s config.emailClaim="email"
       delegate_to: keycloak_container
       when: gitlab_idp_check.rc == 0
       no_log: true

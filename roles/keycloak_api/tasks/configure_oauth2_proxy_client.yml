@@ -1,0 +1,146 @@
+---
+# Configure oauth2-proxy OIDC client in Keycloak with proper audience mapping
+
+- name: Configure oauth2-proxy client in Keycloak
+  block:
+    - name: Login to Keycloak Admin CLI
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            --user {{ keycloak_admin_user }} \
+            --password '{{ keycloak_admin_password }}'
+      delegate_to: keycloak_container
+      no_log: true
+      register: kcadm_login
+      changed_when: false
+
+    - name: Check if oauth2-proxy client already exists
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            --fields clientId \
+            | grep -q '"clientId" : "oauth2-proxy"'
+      delegate_to: keycloak_container
+      register: oauth2_proxy_client_exists
+      failed_when: false
+      changed_when: false
+
+    - name: Create oauth2-proxy client
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh create clients \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            -s clientId=oauth2-proxy \
+            -s enabled=true \
+            -s protocol=openid-connect \
+            -s publicClient=false \
+            -s standardFlowEnabled=true \
+            -s directAccessGrantsEnabled=false \
+            -s serviceAccountsEnabled=false \
+            -s secret="{{ vault_oauth2_proxy_client_secret }}" \
+            -s 'redirectUris=["https://auth.{{ public_domain }}/oauth2/callback"]' \
+            -s 'webOrigins=["https://auth.{{ public_domain }}"]' \
+            -s fullScopeAllowed=true
+      delegate_to: keycloak_container
+      when: oauth2_proxy_client_exists.rc != 0
+      register: oauth2_proxy_client_created
+
+    - name: Get oauth2-proxy client ID
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh get clients \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            --fields id,clientId \
+            | grep -B1 '"clientId" : "oauth2-proxy"' \
+            | grep '"id"' \
+            | sed 's/.*"id" : "\([^"]*\)".*/\1/'
+      delegate_to: keycloak_container
+      register: oauth2_proxy_client_id
+      changed_when: false
+
+    - name: Check if oauth2-proxy-audience scope already exists
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh get client-scopes \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            --fields name \
+            | grep -q '"name" : "oauth2-proxy-audience"'
+      delegate_to: keycloak_container
+      register: oauth2_proxy_scope_exists
+      failed_when: false
+      changed_when: false
+
+    - name: Create oauth2-proxy-audience client scope
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh create client-scopes \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            -s name=oauth2-proxy-audience \
+            -s protocol=openid-connect \
+            -s description='Audience mapper for oauth2-proxy client'
+      delegate_to: keycloak_container
+      when: oauth2_proxy_scope_exists.rc != 0
+      register: oauth2_proxy_scope_created
+
+    - name: Get oauth2-proxy-audience scope ID
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh get client-scopes \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            --fields id,name \
+            | grep -B1 '"name" : "oauth2-proxy-audience"' \
+            | grep '"id"' \
+            | sed 's/.*"id" : "\([^"]*\)".*/\1/'
+      delegate_to: keycloak_container
+      register: oauth2_proxy_scope_id
+      changed_when: false
+
+    - name: Add audience mapper to client scope
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh create \
+            client-scopes/{{ oauth2_proxy_scope_id.stdout }}/protocol-mappers/models \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master \
+            -s name=oauth2-proxy-audience \
+            -s protocol=openid-connect \
+            -s protocolMapper=oidc-audience-mapper \
+            -s 'config."included.client.audience"=oauth2-proxy' \
+            -s 'config."id.token.claim"=true' \
+            -s 'config."access.token.claim"=true' \
+            -s 'config."lightweight.claim"=false' \
+            -s 'config."introspection.token.claim"=true'
+      delegate_to: keycloak_container
+      when: oauth2_proxy_scope_created is changed
+
+    - name: Add oauth2-proxy-audience scope to client default scopes
+      ansible.builtin.shell:
+        cmd: |
+          docker exec keycloak /opt/keycloak/bin/kcadm.sh update \
+            clients/{{ oauth2_proxy_client_id.stdout }}/default-client-scopes/{{ oauth2_proxy_scope_id.stdout }} \
+            --server http://localhost:{{ keycloak_service_port }} \
+            --realm master
+      delegate_to: keycloak_container
+      when: oauth2_proxy_client_id.stdout | length > 0 and oauth2_proxy_scope_id.stdout | length > 0
+
+    - name: Display oauth2-proxy client configuration result
+      ansible.builtin.debug:
+        msg:
+          - "✅ oauth2-proxy OIDC client configured successfully"
+          - "  Client ID: oauth2-proxy"
+          - "  Redirect URI: https://auth.{{ public_domain }}/oauth2/callback"
+          - "  Audience Scope: oauth2-proxy-audience (includes 'oauth2-proxy' in aud claim)"
+          - ""
+          - "Note: The client is configured with:"
+          - "  - Audience mapper to include 'oauth2-proxy' in JWT tokens"
+          - "  - Extra audiences configured in oauth2-proxy to accept 'master-realm' and 'account'"
+          - "  - This dual configuration ensures compatibility with Keycloak's default token format"
