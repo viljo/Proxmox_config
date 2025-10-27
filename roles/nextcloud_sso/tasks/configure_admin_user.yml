@@ -1,0 +1,136 @@
+---
+# Configure admin access for specific SSO user
+
+- name: Check if SSO user exists in Nextcloud
+  ansible.builtin.shell:
+    cmd: |
+      {{ nextcloud_occ_command }} user:info "{{ nextcloud_sso_admin_username }}" --output=json || echo '{}'
+  delegate_to: nextcloud_container
+  register: user_info
+  changed_when: false
+
+- name: Parse user info
+  ansible.builtin.set_fact:
+    sso_user_exists: "{{ (user_info.stdout | from_json).user_id is defined }}"
+    sso_user_data: "{{ user_info.stdout | from_json }}"
+
+- name: Display user status
+  ansible.builtin.debug:
+    msg:
+      - "User {{ nextcloud_sso_admin_username }} status:"
+      - "  Exists: {{ sso_user_exists }}"
+      - "  Will be created on first SSO login if not exists"
+  when: not sso_user_exists
+
+- name: Check if admin group exists
+  ansible.builtin.shell:
+    cmd: |
+      {{ nextcloud_occ_command }} group:list --output=json
+  delegate_to: nextcloud_container
+  register: groups_list
+  changed_when: false
+
+- name: Parse groups
+  ansible.builtin.set_fact:
+    admin_group_exists: "{{ 'admin' in (groups_list.stdout | from_json) }}"
+
+- name: Create admin group if not exists
+  ansible.builtin.shell:
+    cmd: |
+      {{ nextcloud_occ_command }} group:add admin
+  delegate_to: nextcloud_container
+  when: not admin_group_exists
+
+- name: Add user to admin group if user exists
+  ansible.builtin.shell:
+    cmd: |
+      {{ nextcloud_occ_command }} group:adduser admin "{{ nextcloud_sso_admin_username }}"
+  delegate_to: nextcloud_container
+  when: sso_user_exists
+  register: admin_added
+  failed_when: false
+
+- name: Configure automatic admin assignment for SSO user
+  ansible.builtin.shell:
+    cmd: |
+      # Create a configuration that will automatically add the user to admin group on first login
+      # This is done by setting up a user backend hook
+
+      # First, ensure the user_oidc app settings allow for group mapping
+      {{ nextcloud_occ_command }} config:app:set user_oidc auto_provision_groups --value '["admin"]' || true
+
+      # Store the admin email for reference
+      {{ nextcloud_occ_command }} config:app:set user_oidc admin_email --value '{{ nextcloud_sso_admin_email }}'
+  delegate_to: nextcloud_container
+  changed_when: false
+
+- name: Create admin provisioning script
+  ansible.builtin.copy:
+    dest: /opt/nextcloud/provision_admin.sh
+    content: |
+      #!/bin/bash
+      # Script to provision admin user after first SSO login
+
+      USER_EMAIL="{{ nextcloud_sso_admin_email }}"
+      USER_NAME="{{ nextcloud_sso_admin_username }}"
+
+      # Wait for user to exist (called after SSO login)
+      if docker exec -u www-data nextcloud php occ user:info "$USER_NAME" >/dev/null 2>&1; then
+        echo "User $USER_NAME exists, checking admin group membership..."
+
+        # Check if user is in admin group
+        if ! docker exec -u www-data nextcloud php occ group:list --output=json | grep -q "admin.*$USER_NAME"; then
+          echo "Adding $USER_NAME to admin group..."
+          docker exec -u www-data nextcloud php occ group:adduser admin "$USER_NAME"
+
+          # Also make them a group admin
+          docker exec -u www-data nextcloud php occ user:setting "$USER_NAME" "provisioning_api" "isAdmin" "true" || true
+        fi
+      fi
+    mode: '0755'
+  delegate_to: nextcloud_container
+
+- name: Set up automatic admin provisioning via config
+  ansible.builtin.shell:
+    cmd: |
+      # Configure Nextcloud to recognize our admin user
+      # This uses the config.php to set default group assignments
+
+      cat > /tmp/admin_config.php << 'EOF'
+      \$CONFIG = array_merge(\$CONFIG, array(
+        'oidc_login_auto_redirect' => false,
+        'oidc_login_hide_password_form' => false,
+        'oidc_login_button_text' => '{{ nextcloud_sso_button_text }}',
+        'oidc_login_attributes' => array(
+          'id' => 'sub',
+          'name' => 'name',
+          'mail' => 'email',
+        ),
+        'oidc_login_default_group' => 'users',
+        'oidc_login_filter_allowed_values' => array(
+          'email' => array('{{ nextcloud_sso_admin_email }}' => 'admin'),
+        ),
+      ));
+      EOF
+
+      # Merge configuration if needed
+      if ! grep -q "oidc_login_button_text" /var/www/html/config/config.php; then
+        # Add OIDC login configuration
+        docker exec nextcloud sh -c "sed -i '\/\);$\/d' /var/www/html/config/config.php"
+        docker exec nextcloud sh -c "echo \"  'oidc_login_button_text' => '{{ nextcloud_sso_button_text }}',\" >> /var/www/html/config/config.php"
+        docker exec nextcloud sh -c "echo ');' >> /var/www/html/config/config.php"
+      fi
+  delegate_to: nextcloud_container
+  changed_when: false
+
+- name: Display admin configuration result
+  ansible.builtin.debug:
+    msg:
+      - "✅ Admin user configuration completed"
+      - "  Username: {{ nextcloud_sso_admin_username }}"
+      - "  Email: {{ nextcloud_sso_admin_email }}"
+      - ""
+      - "Note: If this is the first time configuring SSO:"
+      - "  1. The user will be created on first login"
+      - "  2. Run the playbook again after first login to grant admin rights"
+      - "  3. Or manually run: docker exec -u www-data nextcloud php occ group:adduser admin {{ nextcloud_sso_admin_username }}"

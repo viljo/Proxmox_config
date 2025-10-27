@@ -1,0 +1,100 @@
+---
+# Verify SSO configuration
+
+- name: Verify user_oidc app is enabled
+  ansible.builtin.shell:
+    cmd: |
+      {{ nextcloud_occ_command }} app:list --output=json | grep -q '"user_oidc"' && echo "OK" || echo "FAILED"
+  delegate_to: nextcloud_container
+  register: app_check
+  changed_when: false
+
+- name: Get OIDC provider configuration
+  ansible.builtin.shell:
+    cmd: |
+      {{ nextcloud_occ_command }} config:app:get user_oidc providers
+  delegate_to: nextcloud_container
+  register: provider_check
+  changed_when: false
+
+- name: Verify Keycloak connectivity
+  ansible.builtin.uri:
+    url: "{{ nextcloud_sso_discovery_uri }}"
+    method: GET
+    validate_certs: yes
+    status_code: 200
+  delegate_to: localhost
+  register: keycloak_check
+  failed_when: false
+
+- name: Check OIDC discovery endpoint from Nextcloud container
+  ansible.builtin.shell:
+    cmd: |
+      curl -s -o /dev/null -w "%{http_code}" "{{ nextcloud_sso_keycloak_internal_url }}/realms/{{ nextcloud_sso_keycloak_realm }}/.well-known/openid-configuration"
+  delegate_to: nextcloud_container
+  register: internal_check
+  changed_when: false
+
+- name: Compile verification results
+  ansible.builtin.set_fact:
+    verification_results:
+      app_enabled: "{{ app_check.stdout == 'OK' }}"
+      provider_configured: "{{ nextcloud_sso_provider_identifier in provider_check.stdout }}"
+      keycloak_reachable_external: "{{ keycloak_check.status | default(0) == 200 }}"
+      keycloak_reachable_internal: "{{ internal_check.stdout == '200' }}"
+
+- name: Display verification results
+  ansible.builtin.debug:
+    msg:
+      - "SSO Configuration Verification:"
+      - "  ✅ user_oidc app enabled: {{ verification_results.app_enabled }}"
+      - "  ✅ Provider configured: {{ verification_results.provider_configured }}"
+      - "  ✅ Keycloak reachable (external): {{ verification_results.keycloak_reachable_external }}"
+      - "  ✅ Keycloak reachable (internal): {{ verification_results.keycloak_reachable_internal }}"
+
+- name: Test authentication URLs
+  ansible.builtin.debug:
+    msg:
+      - "Authentication URLs:"
+      - "  Nextcloud: {{ nextcloud_sso_public_url }}"
+      - "  Login button: '{{ nextcloud_sso_button_text }}'"
+      - "  Keycloak: {{ nextcloud_sso_keycloak_public_url }}"
+      - "  Discovery: {{ nextcloud_sso_discovery_uri }}"
+
+- name: Generate test instructions
+  ansible.builtin.debug:
+    msg:
+      - ""
+      - "🧪 Manual Testing Instructions:"
+      - "────────────────────────────────"
+      - "1. Open browser in incognito/private mode"
+      - "2. Navigate to: {{ nextcloud_sso_public_url }}"
+      - "3. Click '{{ nextcloud_sso_button_text }}' button"
+      - "4. You should be redirected to Keycloak login"
+      - "5. Click 'Sign in with GitLab' on Keycloak"
+      - "6. Authenticate with GitLab.com credentials"
+      - "7. You should be redirected back to Nextcloud (logged in)"
+      - ""
+      - "Expected user after login:"
+      - "  Username: {{ nextcloud_sso_admin_username }}"
+      - "  Email: {{ nextcloud_sso_admin_email }}"
+      - ""
+      - "To grant admin rights after first login:"
+      - "  ssh root@{{ hostvars[inventory_hostname].ansible_host }}"
+      - "  pct exec {{ nextcloud_sso_container_id }} -- docker exec -u www-data nextcloud php occ group:adduser admin {{ nextcloud_sso_admin_username }}"
+
+- name: Check for common issues
+  ansible.builtin.debug:
+    msg:
+      - ""
+      - "⚠️  Troubleshooting Tips:"
+      - "────────────────────────────"
+      - "If login fails:"
+      - "  1. Check Traefik is routing correctly to Nextcloud"
+      - "  2. Verify HTTPS certificates are valid"
+      - "  3. Check Keycloak client redirect URIs"
+      - "  4. Review logs:"
+      - "     - Nextcloud: docker logs nextcloud"
+      - "     - Keycloak: docker logs keycloak"
+      - "  5. Ensure GitLab OAuth is working in Keycloak"
+    when: not (verification_results.app_enabled and verification_results.provider_configured and verification_results.keycloak_reachable_external)

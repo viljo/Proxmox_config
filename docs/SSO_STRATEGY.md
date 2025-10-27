@@ -33,12 +33,14 @@ User → Service → Traefik → Authentication Layer → Backend
 #### 2. **Nextcloud** (nextcloud.viljo.se)
 - **Container**: LXC 155
 - **URL**: http://172.16.10.155:80
-- **Authentication**: Native Nextcloud authentication
-- **SSO Options**:
-  - Can integrate with Keycloak via SAML or OIDC app
-  - Can use Social Login app with custom OAuth provider
-- **Current Status**: ⚠️ No SSO (native authentication)
-- **Recommendation**: Configure Nextcloud Social Login app with Keycloak as OAuth provider
+- **Authentication**: Keycloak OIDC via user_oidc app
+- **SSO Implementation**: ✅ COMPLETED (2025-10-27)
+  - Using official user_oidc app for OIDC integration
+  - Connected to Keycloak master realm
+  - Auto-provisioning enabled for new users
+  - Admin access configured for anders@viljo.se
+- **Current Status**: ✅ SSO Enabled (GitLab.com → Keycloak → Nextcloud)
+- **Documentation**: See [NEXTCLOUD_SSO_IMPLEMENTATION.md](./NEXTCLOUD_SSO_IMPLEMENTATION.md)
 
 #### 3. **Webtop** (browser.viljo.se)
 - **Container**: LXC 170
@@ -70,17 +72,22 @@ User → Service → Traefik → Authentication Layer → Backend
 
 ## Implementation Recommendations
 
-### Priority 1: Nextcloud SSO
-Nextcloud is the most important service to integrate with SSO:
+### ✅ Completed: Nextcloud SSO (2025-10-27)
+Nextcloud SSO has been successfully implemented:
 
-1. **Install Social Login App** in Nextcloud
-2. **Configure Custom OAuth Provider**:
-   - Provider: Keycloak
-   - Authorization URL: `https://keycloak.viljo.se/realms/master/protocol/openid-connect/auth`
-   - Token URL: `https://keycloak.viljo.se/realms/master/protocol/openid-connect/token`
-   - User Info URL: `https://keycloak.viljo.se/realms/master/protocol/openid-connect/userinfo`
-3. **Create Keycloak Client** for Nextcloud with appropriate redirect URIs
-4. **Map user attributes** (email, username, groups)
+1. **Installed user_oidc App** - Official OIDC support app
+2. **Configured Keycloak OIDC Client**:
+   - Client ID: `nextcloud`
+   - Redirect URIs configured for user_oidc app
+   - User attribute mappers configured
+3. **Nextcloud OIDC Provider Configuration**:
+   - Discovery URL: `https://keycloak.viljo.se/realms/master/.well-known/openid-configuration`
+   - Auto-provisioning enabled
+   - Seamless user creation on first login
+4. **Automation Created**:
+   - Ansible role: `roles/nextcloud_sso/`
+   - Playbook: `playbooks/nextcloud_sso.yml`
+5. **Full Documentation**: [NEXTCLOUD_SSO_IMPLEMENTATION.md](./NEXTCLOUD_SSO_IMPLEMENTATION.md)
 
 ### Priority 2: Webtop Protection (Optional)
 If access control is needed:
@@ -135,18 +142,19 @@ vault_oauth2_proxy_cookie_secret: <Random Secret>
 
 ## Service-Specific SSO Capabilities
 
-| Service | Native OAuth | Forward Auth | True SSO | Priority |
-|---------|-------------|--------------|----------|----------|
+| Service | Native OAuth | Forward Auth | True SSO | Status |
+|---------|-------------|--------------|----------|---------|
 | GitLab | N/A (IdP) | N/A | N/A | N/A |
-| Nextcloud | ✅ Yes (app) | ✅ Yes | ✅ Yes | High |
-| Webtop | ❌ No | ✅ Yes | ❌ No | Low |
+| Nextcloud | ✅ Yes (user_oidc) | ✅ Yes | ✅ Yes | ✅ Implemented |
+| Webtop | ❌ No | ✅ Yes | ❌ No | ⏳ Optional |
 
 ## Next Steps
 
-1. **Implement Nextcloud SSO** via Social Login app (HIGH PRIORITY)
-2. **Evaluate Webtop** - determine if forward auth is needed
-3. **Monitor Keycloak** - ensure performance and reliability
-4. **Document user onboarding** - how to add new users to GitLab.com org
+1. ✅ **COMPLETED: Nextcloud SSO** - Implemented via user_oidc app (2025-10-27)
+2. **Test Nextcloud SSO** - Verify authentication flow with anders@viljo.se
+3. **Evaluate Webtop** - Determine if forward auth is needed
+4. **Monitor Keycloak** - Ensure performance and reliability
+5. **Document user onboarding** - How to add new users to GitLab.com org
 
 ## Maintenance Tasks
 

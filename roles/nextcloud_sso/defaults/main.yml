@@ -1,0 +1,72 @@
+---
+# Nextcloud SSO Configuration via Keycloak OIDC
+
+# Nextcloud container configuration
+nextcloud_sso_container_id: 155
+nextcloud_sso_hostname: "nextcloud"
+nextcloud_sso_ip_address: "172.16.10.155"
+nextcloud_sso_external_domain: "viljo.se"
+nextcloud_sso_public_url: "https://nextcloud.viljo.se"
+
+# Keycloak configuration
+nextcloud_sso_keycloak_container_id: 151
+nextcloud_sso_keycloak_hostname: "keycloak"
+nextcloud_sso_keycloak_ip_address: "172.16.10.151"
+nextcloud_sso_keycloak_port: 8080
+nextcloud_sso_keycloak_realm: "master"
+nextcloud_sso_keycloak_public_url: "https://keycloak.viljo.se"
+nextcloud_sso_keycloak_internal_url: "http://172.16.10.151:8080"
+
+# Keycloak admin credentials
+nextcloud_sso_keycloak_admin_user: "admin"
+nextcloud_sso_keycloak_admin_password: "{{ vault_keycloak_admin_password }}"
+
+# Nextcloud OIDC client configuration
+nextcloud_sso_client_id: "nextcloud"
+nextcloud_sso_client_secret: "{{ vault_nextcloud_oidc_client_secret | default('generated_at_runtime') }}"
+nextcloud_sso_client_description: "Nextcloud File Storage OIDC Client"
+
+# OIDC provider configuration for Nextcloud
+nextcloud_sso_provider_identifier: "keycloak"
+nextcloud_sso_provider_display_name: "Sign in with Keycloak (GitLab SSO)"
+nextcloud_sso_provider_icon: "keycloak"
+
+# OIDC discovery endpoint
+nextcloud_sso_discovery_uri: "{{ nextcloud_sso_keycloak_public_url }}/realms/{{ nextcloud_sso_keycloak_realm }}/.well-known/openid-configuration"
+
+# OIDC scopes
+nextcloud_sso_scopes: "openid profile email"
+
+# User attribute mapping
+nextcloud_sso_user_id_claim: "sub"
+nextcloud_sso_username_claim: "preferred_username"
+nextcloud_sso_email_claim: "email"
+nextcloud_sso_display_name_claim: "name"
+nextcloud_sso_groups_claim: "groups"
+
+# Auto-provisioning settings
+nextcloud_sso_auto_provision: true
+nextcloud_sso_auto_update: true
+nextcloud_sso_restrict_users_to_groups: false
+
+# Admin user configuration
+nextcloud_sso_admin_email: "anders@viljo.se"
+nextcloud_sso_admin_username: "anders"
+nextcloud_sso_ensure_admin: true
+
+# Nextcloud admin credentials for configuration
+nextcloud_admin_user: "admin"
+nextcloud_admin_password: "{{ vault_nextcloud_admin_password }}"
+
+# Docker configuration
+nextcloud_docker_container: "nextcloud"
+nextcloud_occ_command: "docker exec -u www-data nextcloud php occ"
+
+# OIDC app configuration
+nextcloud_sso_disable_password_login: false
+nextcloud_sso_button_text: "Sign in with GitLab SSO"
+nextcloud_sso_allow_multiple_providers: true
+
+# Session settings
+nextcloud_sso_session_lifetime: 86400  # 24 hours
+nextcloud_sso_token_lifetime: 3600     # 1 hour

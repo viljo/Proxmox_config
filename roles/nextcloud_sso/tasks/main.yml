@@ -1,0 +1,41 @@
+---
+# Configure Nextcloud SSO via Keycloak OIDC
+
+- name: Display SSO configuration plan
+  ansible.builtin.debug:
+    msg:
+      - "Configuring Nextcloud SSO with Keycloak OIDC"
+      - "  Nextcloud: {{ nextcloud_sso_ip_address }} ({{ nextcloud_sso_public_url }})"
+      - "  Keycloak: {{ nextcloud_sso_keycloak_ip_address }} ({{ nextcloud_sso_keycloak_public_url }})"
+      - "  Client ID: {{ nextcloud_sso_client_id }}"
+      - "  Provider: {{ nextcloud_sso_provider_identifier }}"
+
+# Step 1: Configure Keycloak client for Nextcloud
+- name: Configure Keycloak OIDC client for Nextcloud
+  include_tasks: configure_keycloak_client.yml
+
+# Step 2: Install and configure user_oidc app in Nextcloud
+- name: Configure Nextcloud OIDC integration
+  include_tasks: configure_nextcloud_oidc.yml
+
+# Step 3: Set up admin access for specific user
+- name: Configure admin user access
+  include_tasks: configure_admin_user.yml
+  when: nextcloud_sso_ensure_admin | bool
+
+# Step 4: Verify SSO configuration
+- name: Verify SSO configuration
+  include_tasks: verify_sso.yml
+
+- name: Display completion message
+  ansible.builtin.debug:
+    msg:
+      - "✅ Nextcloud SSO configuration completed!"
+      - ""
+      - "Test the SSO flow:"
+      - "  1. Visit: {{ nextcloud_sso_public_url }}"
+      - "  2. Click '{{ nextcloud_sso_button_text }}'"
+      - "  3. Authenticate with GitLab.com"
+      - "  4. You should be logged into Nextcloud"
+      - ""
+      - "Admin user: {{ nextcloud_sso_admin_email }}"

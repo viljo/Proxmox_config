@@ -17,3 +17,12 @@ nextcloud_domain: "{{ public_domain }}"
 nextcloud_trusted_domains:
   - "nextcloud.{{ public_domain }}"
   - "nextcloud.infra.local"
+
+# Nextcloud SSO Configuration
+nextcloud_sso_enabled: true
+nextcloud_sso_provider: keycloak
+nextcloud_sso_client_id: nextcloud
+nextcloud_sso_client_secret: "{{ vault_nextcloud_oidc_client_secret | default('will_be_generated') }}"
+nextcloud_sso_button_text: "Sign in with GitLab SSO"
+nextcloud_sso_admin_email: "anders@viljo.se"
+nextcloud_sso_admin_username: "anders"

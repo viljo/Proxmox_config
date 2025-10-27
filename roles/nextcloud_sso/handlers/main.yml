@@ -1,0 +1,16 @@
+---
+# Handlers for Nextcloud SSO configuration
+
+- name: restart nextcloud
+  ansible.builtin.shell:
+    cmd: docker restart nextcloud
+  delegate_to: nextcloud_container
+  listen: "restart nextcloud"
+
+- name: clear nextcloud cache
+  ansible.builtin.shell:
+    cmd: |
+      docker exec -u www-data nextcloud php occ maintenance:mimetype:update-js
+      docker exec -u www-data nextcloud php occ maintenance:update:htaccess || true
+  delegate_to: nextcloud_container
+  listen: "clear nextcloud cache"
