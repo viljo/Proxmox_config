@@ -24,6 +24,7 @@ loopia_dns_records:
   - host: wazuh
   - host: openmediavault
   - host: zipline
+  - host: meet  # Jitsi Meet video conferencing
 traefik_services:
   - name: viljo
     host: "{{ public_domain }}"
@@ -67,7 +68,7 @@ traefik_services:
   - name: coolify
     host: "coolify.{{ public_domain }}"
     container_id: "{{ coolify_container_id }}"
-    port: 3000
+    port: 8000
   - name: zabbix
     host: "zabbix.{{ public_domain }}"
     container_id: "{{ zabbix_container_id }}"
@@ -92,6 +93,10 @@ traefik_services:
     host: "zipline.{{ public_domain }}"
     container_id: "{{ zipline_container_id }}"
     port: 3000
+  - name: jitsi
+    host: "meet.{{ public_domain }}"
+    container_id: "{{ jitsi_container_id }}"
+    port: 8000
 management_bridge: vmbr0
 wan_bridge: vmbr2
 public_bridge: vmbr3

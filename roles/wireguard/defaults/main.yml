@@ -1,6 +1,6 @@
 ---
 # Container configuration
-wireguard_container_id: 90
+wireguard_container_id: 190
 wireguard_hostname: wireguard
 wireguard_domain: infra.local
 wireguard_memory: 1024
@@ -10,7 +10,7 @@ wireguard_swap: 512
 
 # Network configuration - deployed on management network (vmbr0) with static IP
 wireguard_bridge: "{{ management_bridge | default('vmbr0') }}"
-wireguard_ip_config: "192.168.1.90/24"
+wireguard_ip_config: "192.168.1.190/24"
 wireguard_gateway: "192.168.1.1"
 wireguard_vlan_tag: null
 wireguard_dns_servers:

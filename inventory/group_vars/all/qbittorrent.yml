@@ -1,14 +1,27 @@
 ---
-qbittorrent_container_id: 159
+qbittorrent_container_id: 59
 qbittorrent_hostname: qbittorrent
+qbittorrent_domain: "{{ public_domain }}"
 qbittorrent_bridge: "{{ public_bridge }}"
-qbittorrent_ip_address: 172.16.10.159
+qbittorrent_ip_address: 172.16.10.59
 qbittorrent_ip_config: "{{ qbittorrent_ip_address }}/{{ dmz_prefix }}"
 qbittorrent_gateway: "{{ dmz_gateway }}"
 qbittorrent_dns_servers:
-  - 172.16.10.1
+  - "{{ dmz_gateway }}"
   - 1.1.1.1
 qbittorrent_root_password: "{{ vault_qbittorrent_root_password }}"
 qbittorrent_download_dir: /srv/downloads
+qbittorrent_incomplete_dir: /srv/downloads/incomplete
+qbittorrent_complete_dir: /srv/downloads/complete
 qbittorrent_config_dir: /etc/qbittorrent
 qbittorrent_web_port: 8080
+# Mount point for download storage on Proxmox host
+qbittorrent_host_download_path: /srv/media/downloads
+# Configure download directories
+qbittorrent_categories:
+  - name: movies
+    save_path: /srv/downloads/complete/movies
+  - name: tv
+    save_path: /srv/downloads/complete/tv
+  - name: music
+    save_path: /srv/downloads/complete/music

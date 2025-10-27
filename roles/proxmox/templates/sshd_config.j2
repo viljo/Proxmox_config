@@ -1,0 +1,95 @@
+# OpenSSH Server Configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# Feature: 003-external-ssh-admin
+# Last updated: {{ ansible_date_time.iso8601 }}
+#
+# This configuration implements security hardening for external SSH access
+# to the Proxmox host via viljo.se domain through firewall DNAT.
+
+# Network Configuration
+Port {{ proxmox_ssh_port | default(22) }}
+AddressFamily {{ proxmox_ssh_address_family | default('any') }}
+ListenAddress {{ proxmox_ssh_listen_address | default('0.0.0.0') }}
+{% if proxmox_ssh_listen_ipv6 | default(false) %}
+ListenAddress ::
+{% endif %}
+
+# Protocol Configuration
+Protocol 2
+
+# Host Key Configuration
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+
+# Cryptographic Configuration
+# Modern, secure ciphers only
+Ciphers {{ proxmox_ssh_ciphers | default('chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr') }}
+
+# Secure MACs only
+MACs {{ proxmox_ssh_macs | default('hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256') }}
+
+# Secure key exchange algorithms
+KexAlgorithms {{ proxmox_ssh_kex_algorithms | default('curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256') }}
+
+# Authentication Configuration
+PubkeyAuthentication {{ 'yes' if proxmox_ssh_pubkey_auth | default(true) else 'no' }}
+PasswordAuthentication {{ 'yes' if proxmox_ssh_password_auth | default(false) else 'no' }}
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+UsePAM yes
+
+# Root Login Configuration
+PermitRootLogin {{ proxmox_ssh_permit_root_login | default('without-password') }}
+
+# User Access Control
+{% if proxmox_ssh_allowed_users | default([]) | length > 0 %}
+AllowUsers {{ proxmox_ssh_allowed_users | join(' ') }}
+{% endif %}
+{% if proxmox_ssh_denied_users | default([]) | length > 0 %}
+DenyUsers {{ proxmox_ssh_denied_users | join(' ') }}
+{% endif %}
+
+# Security Hardening
+StrictModes yes
+MaxAuthTries {{ proxmox_ssh_max_auth_tries | default(3) }}
+MaxSessions {{ proxmox_ssh_max_sessions | default(10) }}
+MaxStartups {{ proxmox_ssh_max_startups | default('10:30:60') }}
+LoginGraceTime {{ proxmox_ssh_login_grace_time | default('60') }}
+
+# Session Keep-Alive Configuration
+ClientAliveInterval {{ proxmox_ssh_client_alive_interval | default(300) }}
+ClientAliveCountMax {{ proxmox_ssh_client_alive_count_max | default(3) }}
+TCPKeepAlive yes
+
+# Logging Configuration
+SyslogFacility AUTH
+LogLevel {{ proxmox_ssh_log_level | default('VERBOSE') }}
+
+# Feature Disabling (Security)
+X11Forwarding {{ 'yes' if proxmox_ssh_x11_forwarding | default(false) else 'no' }}
+PermitTunnel {{ 'yes' if proxmox_ssh_permit_tunnel | default(false) else 'no' }}
+AllowAgentForwarding {{ 'yes' if proxmox_ssh_allow_agent_forwarding | default(true) else 'no' }}
+AllowTcpForwarding {{ 'yes' if proxmox_ssh_allow_tcp_forwarding | default(true) else 'no' }}
+GatewayPorts no
+PermitUserEnvironment no
+
+# Banner Configuration
+{% if proxmox_ssh_banner_file | default('') | length > 0 %}
+Banner {{ proxmox_ssh_banner_file }}
+{% else %}
+Banner none
+{% endif %}
+
+# Subsystems
+Subsystem sftp {{ proxmox_ssh_sftp_path | default('/usr/lib/openssh/sftp-server') }}
+
+# Accept locale-related environment variables
+AcceptEnv LANG LC_*
+
+# Override configuration for internal network access (less restrictive)
+{% if proxmox_ssh_internal_network_rules | default(false) %}
+# Allow password authentication from internal networks only
+Match Address 192.168.0.0/16,172.16.0.0/12,10.0.0.0/8
+    PasswordAuthentication yes
+    PermitRootLogin yes
+{% endif %}

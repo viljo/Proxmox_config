@@ -28,3 +28,54 @@ proxmox_debian_security_uris:
 proxmox_debian_security_suites:
   - trixie-security
 proxmox_root_authorized_keys: []
+
+# SSH Hardening Configuration (Feature: 003-external-ssh-admin)
+proxmox_ssh_port: 22
+proxmox_ssh_address_family: any
+proxmox_ssh_listen_address: 0.0.0.0
+proxmox_ssh_listen_ipv6: false
+proxmox_ssh_permit_root_login: without-password
+proxmox_ssh_password_auth: false
+proxmox_ssh_pubkey_auth: true
+proxmox_ssh_allowed_users: []
+proxmox_ssh_denied_users: []
+proxmox_ssh_max_auth_tries: 3
+proxmox_ssh_max_sessions: 10
+proxmox_ssh_max_startups: "10:30:60"
+proxmox_ssh_login_grace_time: 60
+proxmox_ssh_client_alive_interval: 300
+proxmox_ssh_client_alive_count_max: 3
+proxmox_ssh_log_level: VERBOSE
+proxmox_ssh_x11_forwarding: false
+proxmox_ssh_permit_tunnel: false
+proxmox_ssh_allow_agent_forwarding: true
+proxmox_ssh_allow_tcp_forwarding: true
+proxmox_ssh_banner_file: ""
+proxmox_ssh_sftp_path: /usr/lib/openssh/sftp-server
+proxmox_ssh_internal_network_rules: true
+proxmox_ssh_ciphers: chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
+proxmox_ssh_macs: hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+proxmox_ssh_kex_algorithms: curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256
+
+# Fail2ban Configuration (Feature: 003-external-ssh-admin)
+proxmox_fail2ban_enabled: false
+proxmox_fail2ban_maxretry: 5
+proxmox_fail2ban_findtime: 600
+proxmox_fail2ban_bantime: 3600
+proxmox_fail2ban_backend: systemd
+proxmox_fail2ban_destemail: root@localhost
+proxmox_fail2ban_sender: "fail2ban@{{ ansible_fqdn | default('localhost') }}"
+proxmox_fail2ban_mta: sendmail
+proxmox_fail2ban_action: "%(action_)s"
+proxmox_fail2ban_ignoreip:
+  - 127.0.0.1/8
+  - ::1
+  - 192.168.0.0/16
+  - 172.16.0.0/12
+  - 10.0.0.0/8
+proxmox_fail2ban_loglevel: INFO
+proxmox_fail2ban_logtarget: /var/log/fail2ban.log
+proxmox_fail2ban_sshd_maxretry: 5
+proxmox_fail2ban_sshd_findtime: 600
+proxmox_fail2ban_sshd_bantime: 3600
+proxmox_fail2ban_sshd_ignoreip: []

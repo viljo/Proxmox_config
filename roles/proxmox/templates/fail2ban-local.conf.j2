@@ -1,0 +1,34 @@
+# Fail2ban Local Configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# Feature: 003-external-ssh-admin
+# Last updated: {{ ansible_date_time.iso8601 }}
+
+[DEFAULT]
+# Ban hosts for configured duration
+bantime  = {{ proxmox_fail2ban_bantime | default(3600) }}
+
+# Host is banned if it has generated maxretry during the last findtime seconds
+findtime  = {{ proxmox_fail2ban_findtime | default(600) }}
+
+# Number of failures before a host gets banned
+maxretry = {{ proxmox_fail2ban_maxretry | default(5) }}
+
+# Backend for monitoring log files (systemd for journald, auto for auto-detection)
+backend = {{ proxmox_fail2ban_backend | default('systemd') }}
+
+# Email notifications (disabled by default)
+destemail = {{ proxmox_fail2ban_destemail | default('root@localhost') }}
+sender = {{ proxmox_fail2ban_sender | default('fail2ban@' + ansible_fqdn) }}
+mta = {{ proxmox_fail2ban_mta | default('sendmail') }}
+
+# Action to take when banning (ban only, no email by default)
+action = {{ proxmox_fail2ban_action | default('%(action_)s') }}
+
+# Whitelist - IPs that should never be banned
+ignoreip = {{ proxmox_fail2ban_ignoreip | default(['127.0.0.1/8', '::1', '192.168.0.0/16', '172.16.0.0/12', '10.0.0.0/8']) | join(' ') }}
+
+# Log level
+loglevel = {{ proxmox_fail2ban_loglevel | default('INFO') }}
+
+# Log target
+logtarget = {{ proxmox_fail2ban_logtarget | default('/var/log/fail2ban.log') }}

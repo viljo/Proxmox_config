@@ -1,0 +1,176 @@
+version: '3.9'
+
+services:
+  # Frontend web server
+  web:
+    image: jitsi/web:stable-9882
+    container_name: jitsi-web
+    restart: unless-stopped
+    ports:
+      - '8000:80'
+      - '8443:443'
+    volumes:
+      - web_config:/config:Z
+      - web_crontabs:/var/spool/cron/crontabs:Z
+      - web_transcripts:/usr/share/jitsi-meet/transcripts:Z
+    environment:
+      - ENABLE_AUTH={{ jitsi_env.ENABLE_AUTH }}
+      - ENABLE_GUESTS={{ jitsi_env.ENABLE_GUESTS }}
+      - AUTH_TYPE={{ jitsi_env.AUTH_TYPE }}
+      - ENABLE_RECORDING={{ jitsi_env.ENABLE_RECORDING }}
+      - ENABLE_TRANSCRIPTIONS={{ jitsi_env.ENABLE_TRANSCRIPTIONS }}
+      - TZ={{ jitsi_env.TZ }}
+      - PUBLIC_URL={{ jitsi_env.PUBLIC_URL }}
+      - XMPP_DOMAIN={{ jitsi_env.XMPP_DOMAIN }}
+      - XMPP_SERVER={{ jitsi_env.XMPP_SERVER }}
+      - XMPP_BOSH_URL_BASE={{ jitsi_env.XMPP_BOSH_URL_BASE }}
+      - XMPP_AUTH_DOMAIN={{ jitsi_env.XMPP_AUTH_DOMAIN }}
+      - XMPP_MUC_DOMAIN={{ jitsi_env.XMPP_MUC_DOMAIN }}
+      - XMPP_INTERNAL_MUC_DOMAIN={{ jitsi_env.XMPP_INTERNAL_MUC_DOMAIN }}
+      - XMPP_GUEST_DOMAIN={{ jitsi_env.XMPP_GUEST_DOMAIN }}
+      - XMPP_RECORDER_DOMAIN={{ jitsi_env.XMPP_RECORDER_DOMAIN }}
+      - JICOFO_AUTH_USER={{ jitsi_env.JICOFO_AUTH_USER }}
+      - TOKEN_AUTH_URL={{ jitsi_env.TOKEN_AUTH_URL }}
+      - DEPLOYMENTINFO_USERREGION={{ jitsi_env.DEPLOYMENTINFO_USERREGION }}
+    networks:
+      jitsi:
+        aliases:
+          - {{ jitsi_external_domain }}
+
+  # XMPP server (Prosody)
+  prosody:
+    image: jitsi/prosody:stable-9882
+    container_name: jitsi-prosody
+    restart: unless-stopped
+    expose:
+      - '5222'
+      - '5347'
+      - '5280'
+    volumes:
+      - prosody_config:/config:Z
+      - prosody_plugins_custom:/prosody-plugins-custom:Z
+    environment:
+      - AUTH_TYPE={{ jitsi_env.AUTH_TYPE }}
+      - ENABLE_AUTH={{ jitsi_env.ENABLE_AUTH }}
+      - ENABLE_GUESTS={{ jitsi_env.ENABLE_GUESTS }}
+      - ENABLE_RECORDING={{ jitsi_env.ENABLE_RECORDING }}
+      - TZ={{ jitsi_env.TZ }}
+      - XMPP_DOMAIN={{ jitsi_env.XMPP_DOMAIN }}
+      - XMPP_SERVER={{ jitsi_env.XMPP_SERVER }}
+      - XMPP_AUTH_DOMAIN={{ jitsi_env.XMPP_AUTH_DOMAIN }}
+      - XMPP_MUC_DOMAIN={{ jitsi_env.XMPP_MUC_DOMAIN }}
+      - XMPP_INTERNAL_MUC_DOMAIN={{ jitsi_env.XMPP_INTERNAL_MUC_DOMAIN }}
+      - XMPP_GUEST_DOMAIN={{ jitsi_env.XMPP_GUEST_DOMAIN }}
+      - XMPP_RECORDER_DOMAIN={{ jitsi_env.XMPP_RECORDER_DOMAIN }}
+      - JICOFO_COMPONENT_SECRET={{ jitsi_env.JICOFO_COMPONENT_SECRET }}
+      - JICOFO_AUTH_USER={{ jitsi_env.JICOFO_AUTH_USER }}
+      - JICOFO_AUTH_PASSWORD={{ jitsi_env.JICOFO_AUTH_PASSWORD }}
+      - JVB_AUTH_USER={{ jitsi_env.JVB_AUTH_USER }}
+      - JVB_AUTH_PASSWORD={{ jitsi_env.JVB_AUTH_PASSWORD }}
+      - JIBRI_XMPP_USER={{ jitsi_env.JIBRI_XMPP_USER }}
+      - JIBRI_XMPP_PASSWORD={{ jitsi_env.JIBRI_XMPP_PASSWORD }}
+      - JIBRI_RECORDER_USER={{ jitsi_env.JIBRI_RECORDER_USER }}
+      - JIBRI_RECORDER_PASSWORD={{ jitsi_env.JIBRI_RECORDER_PASSWORD }}
+      - PUBLIC_URL={{ jitsi_env.PUBLIC_URL }}
+    networks:
+      jitsi:
+
+  # Conference focus component (Jicofo)
+  jicofo:
+    image: jitsi/jicofo:stable-9882
+    container_name: jitsi-jicofo
+    restart: unless-stopped
+    volumes:
+      - jicofo_config:/config:Z
+    environment:
+      - AUTH_TYPE={{ jitsi_env.AUTH_TYPE }}
+      - ENABLE_AUTH={{ jitsi_env.ENABLE_AUTH }}
+      - TZ={{ jitsi_env.TZ }}
+      - XMPP_DOMAIN={{ jitsi_env.XMPP_DOMAIN }}
+      - XMPP_SERVER={{ jitsi_env.XMPP_SERVER }}
+      - XMPP_AUTH_DOMAIN={{ jitsi_env.XMPP_AUTH_DOMAIN }}
+      - XMPP_INTERNAL_MUC_DOMAIN={{ jitsi_env.XMPP_INTERNAL_MUC_DOMAIN }}
+      - XMPP_MUC_DOMAIN={{ jitsi_env.XMPP_MUC_DOMAIN }}
+      - JICOFO_COMPONENT_SECRET={{ jitsi_env.JICOFO_COMPONENT_SECRET }}
+      - JICOFO_AUTH_USER={{ jitsi_env.JICOFO_AUTH_USER }}
+      - JICOFO_AUTH_PASSWORD={{ jitsi_env.JICOFO_AUTH_PASSWORD }}
+    depends_on:
+      - prosody
+    networks:
+      jitsi:
+
+  # Video bridge (JVB)
+  jvb:
+    image: jitsi/jvb:stable-9882
+    container_name: jitsi-jvb
+    restart: unless-stopped
+    ports:
+      - '{{ jitsi_jvb_port }}:{{ jitsi_jvb_port }}/udp'
+    volumes:
+      - jvb_config:/config:Z
+    environment:
+      - TZ={{ jitsi_env.TZ }}
+      - XMPP_DOMAIN={{ jitsi_env.XMPP_DOMAIN }}
+      - XMPP_SERVER={{ jitsi_env.XMPP_SERVER }}
+      - XMPP_AUTH_DOMAIN={{ jitsi_env.XMPP_AUTH_DOMAIN }}
+      - XMPP_INTERNAL_MUC_DOMAIN={{ jitsi_env.XMPP_INTERNAL_MUC_DOMAIN }}
+      - JVB_AUTH_USER={{ jitsi_env.JVB_AUTH_USER }}
+      - JVB_AUTH_PASSWORD={{ jitsi_env.JVB_AUTH_PASSWORD }}
+      - JVB_STUN_SERVERS={{ jitsi_env.JVB_STUN_SERVERS }}
+      - JVB_PORT={{ jitsi_env.JVB_PORT }}
+      - JVB_TCP_HARVESTER_DISABLED={{ jitsi_env.JVB_TCP_HARVESTER_DISABLED }}
+      - PUBLIC_URL={{ jitsi_env.PUBLIC_URL }}
+    depends_on:
+      - prosody
+    networks:
+      jitsi:
+
+{% if jitsi_enable_recording %}
+  # Recording service (Jibri)
+  jibri:
+    image: jitsi/jibri:stable-9882
+    container_name: jitsi-jibri
+    restart: unless-stopped
+    volumes:
+      - jibri_config:/config:Z
+      - {{ jitsi_recording_storage_container }}:{{ jitsi_recording_storage_container }}:Z
+    cap_add:
+      - SYS_ADMIN
+      - NET_BIND_SERVICE
+    devices:
+      - /dev/snd:/dev/snd
+    environment:
+      - TZ={{ jitsi_env.TZ }}
+      - XMPP_DOMAIN={{ jitsi_env.XMPP_DOMAIN }}
+      - XMPP_SERVER={{ jitsi_env.XMPP_SERVER }}
+      - XMPP_AUTH_DOMAIN={{ jitsi_env.XMPP_AUTH_DOMAIN }}
+      - XMPP_INTERNAL_MUC_DOMAIN={{ jitsi_env.XMPP_INTERNAL_MUC_DOMAIN }}
+      - XMPP_RECORDER_DOMAIN={{ jitsi_env.XMPP_RECORDER_DOMAIN }}
+      - JIBRI_RECORDER_USER={{ jitsi_env.JIBRI_RECORDER_USER }}
+      - JIBRI_RECORDER_PASSWORD={{ jitsi_env.JIBRI_RECORDER_PASSWORD }}
+      - JIBRI_RECORDING_DIR={{ jitsi_env.JIBRI_RECORDING_DIR }}
+      - JIBRI_FINALIZE_RECORDING_SCRIPT_PATH={{ jitsi_env.JIBRI_FINALIZE_RECORDING_SCRIPT_PATH }}
+      - JIBRI_XMPP_USER={{ jitsi_env.JIBRI_XMPP_USER }}
+      - JIBRI_XMPP_PASSWORD={{ jitsi_env.JIBRI_XMPP_PASSWORD }}
+      - PUBLIC_URL={{ jitsi_env.PUBLIC_URL }}
+    depends_on:
+      - jicofo
+    networks:
+      jitsi:
+{% endif %}
+
+networks:
+  jitsi:
+    driver: bridge
+
+volumes:
+  web_config:
+  web_crontabs:
+  web_transcripts:
+  prosody_config:
+  prosody_plugins_custom:
+  jicofo_config:
+  jvb_config:
+{% if jitsi_enable_recording %}
+  jibri_config:
+{% endif %}

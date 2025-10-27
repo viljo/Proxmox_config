@@ -1,0 +1,141 @@
+---
+# Playbook: WireGuard VPN Server Teardown
+# Purpose: Safely remove WireGuard VPN server and clean up all resources
+# Infrastructure: Removes LXC container (CT 190) and associated configuration
+# Specification: specs/planned/006-wireguard-vpn/spec.md
+
+- name: Teardown WireGuard VPN Server
+  hosts: proxmox
+  become: true
+  gather_facts: true
+
+  vars_prompt:
+    - name: confirm_teardown
+      prompt: "Are you sure you want to destroy the WireGuard VPN server (CT {{ wireguard_container_id }})? This action CANNOT be undone! Type 'yes' to confirm"
+      private: false
+
+  pre_tasks:
+    - name: Verify teardown confirmation
+      ansible.builtin.assert:
+        that:
+          - confirm_teardown == 'yes'
+        fail_msg: "Teardown cancelled - confirmation not received"
+        success_msg: "Teardown confirmed - proceeding with removal"
+
+    - name: Display teardown information
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "WireGuard VPN Server Teardown"
+          - "=========================================="
+          - "Container ID: {{ wireguard_container_id }}"
+          - "Hostname: {{ wireguard_hostname }}.{{ wireguard_domain }}"
+          - "IP Address: {{ wireguard_ip_config }}"
+          - ""
+          - "WARNING: All VPN tunnels will be terminated!"
+          - "WARNING: All peer connections will be lost!"
+          - "WARNING: Container and configuration will be permanently deleted!"
+          - "=========================================="
+
+    - name: Check if WireGuard container exists
+      ansible.builtin.stat:
+        path: "/etc/pve/lxc/{{ wireguard_container_id }}.conf"
+      register: wireguard_container_conf
+
+  tasks:
+    - name: Stop WireGuard service gracefully
+      ansible.builtin.command:
+        cmd: pct exec {{ wireguard_container_id }} -- systemctl stop wg-quick@{{ wireguard_interface }}
+      when: wireguard_container_conf.stat.exists
+      failed_when: false
+      changed_when: true
+
+    - name: Wait for service to stop
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: Check WireGuard container status
+      ansible.builtin.command:
+        cmd: pct status {{ wireguard_container_id }}
+      register: wireguard_status
+      changed_when: false
+      failed_when: false
+      when: wireguard_container_conf.stat.exists
+
+    - name: Stop WireGuard container
+      ansible.builtin.command:
+        cmd: pct stop {{ wireguard_container_id }}
+      when:
+        - wireguard_container_conf.stat.exists
+        - wireguard_status.rc is defined
+        - wireguard_status.rc == 0
+        - "'running' in wireguard_status.stdout | default('')"
+      changed_when: true
+
+    - name: Wait for container to stop
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Destroy WireGuard container
+      ansible.builtin.command:
+        cmd: pct destroy {{ wireguard_container_id }} --purge
+      when: wireguard_container_conf.stat.exists
+      changed_when: true
+
+    - name: Verify container is destroyed
+      ansible.builtin.stat:
+        path: "/etc/pve/lxc/{{ wireguard_container_id }}.conf"
+      register: wireguard_container_verify
+
+    - name: Assert container is removed
+      ansible.builtin.assert:
+        that:
+          - not wireguard_container_verify.stat.exists
+        fail_msg: "Container still exists after destroy command"
+        success_msg: "Container successfully destroyed"
+
+    - name: Clean up Proxmox rootfs path (if exists)
+      ansible.builtin.file:
+        path: "/var/lib/lxc/{{ wireguard_container_id }}"
+        state: absent
+
+  post_tasks:
+    - name: Display teardown completion message
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "WireGuard VPN Server Teardown Complete"
+          - "=========================================="
+          - ""
+          - "Container {{ wireguard_container_id }} has been destroyed"
+          - ""
+          - "Next Steps:"
+          - "1. Update firewall to remove UDP port 51820 forwarding rule"
+          - "2. Notify VPN users that the service is no longer available"
+          - "3. Remove wireguard_peer_configs from inventory (if desired)"
+          - "4. Consider backing up Vault secrets before removing them"
+          - ""
+          - "To redeploy:"
+          - "  ansible-playbook playbooks/wireguard-deploy.yml --ask-vault-pass"
+          - ""
+          - "=========================================="
+
+    - name: Reminder about cleanup tasks
+      ansible.builtin.debug:
+        msg:
+          - "REMINDER: Manual cleanup tasks"
+          - ""
+          - "1. Firewall Configuration:"
+          - "   - Remove UDP port 51820 forwarding rule"
+          - "   - Remove DNAT rule to {{ wireguard_ip_config.split('/')[0] }}"
+          - ""
+          - "2. Inventory Configuration:"
+          - "   - Review inventory/group_vars/all/wireguard.yml"
+          - "   - Remove peer configurations if no longer needed"
+          - ""
+          - "3. Vault Secrets:"
+          - "   - vault_wireguard_private_key can remain (for redeployment)"
+          - "   - vault_wireguard_root_password can remain (for redeployment)"
+          - ""
+          - "4. DNS/DDNS:"
+          - "   - Update DNS records if VPN endpoint was published"

@@ -7,7 +7,7 @@
 
 ## Summary
 
-Enable external SSH access to the Proxmox host (mother) via the viljo.se domain. The Proxmox host has a direct internet connection on the vmbr2 interface. This will be accomplished through DNS configuration, firewall rules on vmbr2, and SSH hardening managed via Ansible roles. The solution leverages existing Loopia DDNS infrastructure for dynamic IP updates and implements security best practices including fail2ban protection and key-based authentication.
+Enable external SSH access to the Proxmox host (mother) via the viljo.se domain. Internet connectivity is provided through the firewall container (LXC 101) which connects vmbr2 (WAN) to vmbr3 (DMZ) where the Proxmox host has IP 172.16.10.1. This will be accomplished through DNS configuration, firewall DNAT rules to forward SSH port 22 to the Proxmox host, and SSH hardening managed via Ansible roles. The solution leverages existing Loopia DDNS infrastructure for dynamic IP updates and implements security best practices including fail2ban protection and key-based authentication.
 
 ## Technical Context
 
@@ -15,7 +15,7 @@ Enable external SSH access to the Proxmox host (mother) via the viljo.se domain.
 **Primary Dependencies**: Ansible, fail2ban, openssh-server, loopia-ddns (existing), nftables/iptables
 **Storage**: Configuration files (/etc/ssh/sshd_config, /etc/fail2ban/, firewall rules), audit logs (syslog/journald)
 **Testing**: ansible-lint, yamllint, molecule (optional for role testing), manual smoke tests from external network
-**Target Platform**: Debian-based Proxmox VE host with vmbr2 interface (direct internet connection)
+**Target Platform**: Debian-based Proxmox VE host on vmbr3 (172.16.10.1), internet access via firewall container on vmbr2
 **Project Type**: Infrastructure configuration (Ansible roles)
 **Performance Goals**: SSH connection establishment <10 seconds from external networks, DNS resolution <2 seconds
 **Constraints**: Must not disrupt existing Proxmox operations, must maintain constitutional compliance (idempotent, IaC)
@@ -96,7 +96,7 @@ group_vars/all/
 └── secrets.yml          # Vault-encrypted secrets (SSH keys, Loopia credentials)
 ```
 
-**Structure Decision**: This feature extends existing Ansible roles (proxmox, loopia_ddns) rather than creating new source code. The implementation follows the Infrastructure as Code principle using Ansible's declarative YAML configuration. New tasks and templates will be added to existing roles to maintain organizational consistency. No router/port forwarding configuration needed since Proxmox has direct internet connectivity on vmbr2.
+**Structure Decision**: This feature extends existing Ansible roles (proxmox, firewall, loopia_ddns) rather than creating new source code. The implementation follows the Infrastructure as Code principle using Ansible's declarative YAML configuration. New tasks and templates will be added to existing roles to maintain organizational consistency. Firewall DNAT port forwarding (vmbr2:22 → 172.16.10.1:22) will be configured in the firewall container role to route external SSH traffic to the Proxmox host.
 
 ## Complexity Tracking
 

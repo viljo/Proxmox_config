@@ -34,5 +34,20 @@ gitlab_runner_concurrent: 4
 gitlab_runner_url: "https://gitlab.viljo.se"
 gitlab_runner_registration_token: "{{ vault_gitlab_runner_registration_token }}"
 
+# Runner executor configuration
+gitlab_runner_executor: docker
+gitlab_runner_tags:
+  - docker
+  - linux
+  - self-hosted
+
+# Docker executor configuration
+gitlab_runner_docker_image: "debian:12"
+gitlab_runner_docker_privileged: true
+gitlab_runner_docker_volumes:
+  - "/cache"
+  - "/certs/client"
+gitlab_runner_docker_pull_policy: "if-not-present"
+
 # Passwords
 gitlab_runner_root_password: "{{ vault_gitlab_runner_root_password }}"

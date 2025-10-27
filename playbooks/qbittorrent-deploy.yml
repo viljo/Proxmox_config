@@ -1,0 +1,162 @@
+---
+# Playbook: Deploy qBittorrent Client
+# Description: Deploy qBittorrent-nox BitTorrent client in LXC container with Traefik integration
+# Spec: specs/planned/009-bittorrent-client
+# Container ID: 59
+# IP Address: 172.16.10.59
+# Domain: qbittorrent.viljo.se
+
+- name: Deploy qBittorrent BitTorrent Client
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+
+  vars:
+    service_name: qBittorrent Client
+    service_description: BitTorrent download client with web interface
+    container_id: "{{ qbittorrent_container_id }}"
+    service_url: "https://qbittorrent.{{ public_domain }}"
+
+  pre_tasks:
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Deploying {{ service_name }}"
+          - "=========================================="
+          - "Container ID: {{ qbittorrent_container_id }}"
+          - "IP Address: {{ qbittorrent_ip_address }}"
+          - "Hostname: {{ qbittorrent_hostname }}"
+          - "Domain: qbittorrent.{{ public_domain }}"
+          - "Service Port: {{ qbittorrent_web_port }}"
+          - "Download Directory: {{ qbittorrent_download_dir }}"
+          - "=========================================="
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - qbittorrent_container_id is defined
+          - qbittorrent_ip_address is defined
+          - qbittorrent_hostname is defined
+          - qbittorrent_root_password is defined
+          - qbittorrent_root_password | length > 0
+        fail_msg: "Required qBittorrent configuration variables are missing"
+        success_msg: "All required qBittorrent variables are defined"
+
+    - name: Check if container already exists
+      ansible.builtin.stat:
+        path: "/etc/pve/lxc/{{ qbittorrent_container_id }}.conf"
+      register: existing_container
+
+    - name: Warning if container exists
+      ansible.builtin.debug:
+        msg:
+          - "WARNING: Container {{ qbittorrent_container_id }} already exists"
+          - "This playbook will reconfigure the existing container"
+      when: existing_container.stat.exists
+
+  roles:
+    - role: qbittorrent
+      tags: qbittorrent
+
+  post_tasks:
+    - name: Wait for qBittorrent service to be ready
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ qbittorrent_container_id }} -- bash -lc "curl -f http://localhost:{{ qbittorrent_web_port }} || true"
+      register: health_check
+      until: health_check.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Retrieve default qBittorrent credentials
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ qbittorrent_container_id }} -- bash -lc "journalctl -u qbittorrent --no-pager | grep -i 'temporary password' || echo 'Password not found in logs'"
+      register: qbit_password
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Display deployment completion
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "{{ service_name }} Deployment Complete"
+          - "=========================================="
+          - "Container ID: {{ qbittorrent_container_id }}"
+          - "IP Address: {{ qbittorrent_ip_address }}"
+          - "Internal URL: http://{{ qbittorrent_ip_address }}:{{ qbittorrent_web_port }}"
+          - "External URL: {{ service_url }}"
+          - ""
+          - "Default Credentials:"
+          - "  Username: admin"
+          - "  Password: Check container logs with:"
+          - "    pct exec {{ qbittorrent_container_id }} -- journalctl -u qbittorrent | grep password"
+          - ""
+          - "Next Steps:"
+          - "1. Configure Traefik routing (if not already done):"
+          - "   - Ensure qbittorrent service is in traefik_services list"
+          - "   - Run Traefik configuration update"
+          - "2. Access qBittorrent at {{ service_url }}"
+          - "3. Log in with default credentials"
+          - "4. Change default password immediately"
+          - "5. Configure download settings:"
+          - "   - Default save path: {{ qbittorrent_complete_dir }}"
+          - "   - Incomplete torrents: {{ qbittorrent_incomplete_dir }}"
+          - "6. Optional: Configure categories:"
+          - "{% for cat in qbittorrent_categories %}"
+          - "   - {{ cat.name }}: {{ cat.save_path }}"
+          - "{% endfor %}"
+          - "7. Configure bandwidth limits"
+          - "8. Set up RSS feeds (optional)"
+          - "9. Configure Traefik forward auth for SSO (optional)"
+          - ""
+          - "Storage Configuration:"
+          - "  Host path: {{ qbittorrent_host_download_path }}"
+          - "  Container path: {{ qbittorrent_download_dir }}"
+          - ""
+          - "Integration with Jellyfin:"
+          - "  Downloaded media in {{ qbittorrent_complete_dir }} is accessible"
+          - "  to Jellyfin at /media/downloads"
+          - "=========================================="
+
+    - name: Verify container is running
+      ansible.builtin.command:
+        cmd: pct status {{ qbittorrent_container_id }}
+      register: container_status
+      changed_when: false
+      failed_when: "'running' not in container_status.stdout"
+
+    - name: Test internal connectivity
+      ansible.builtin.command:
+        cmd: >
+          curl -f -s -o /dev/null -w "%{http_code}" http://{{ qbittorrent_ip_address }}:{{ qbittorrent_web_port }}
+      register: connectivity_test
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Display connectivity status
+      ansible.builtin.debug:
+        msg:
+          - "Connectivity Test: {{ 'SUCCESS' if connectivity_test.rc == 0 else 'FAILED' }}"
+          - "HTTP Status: {{ connectivity_test.stdout if connectivity_test.rc == 0 else 'N/A' }}"
+      when: not ansible_check_mode
+
+    - name: Security reminder
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SECURITY REMINDERS:"
+          - "=========================================="
+          - "1. Change default qBittorrent password immediately"
+          - "2. Consider enabling Traefik forward auth for SSO"
+          - "3. Configure bandwidth limits to avoid network saturation"
+          - "4. Set up firewall rules for BitTorrent ports (optional)"
+          - "5. Consider VPN integration for privacy (optional)"
+          - "6. Review acceptable use policy for torrent downloads"
+          - "=========================================="

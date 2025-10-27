@@ -5,7 +5,8 @@ Welcome to the Proxmox Infrastructure documentation. This directory contains all
 ## Quick Links
 
 - **[Getting Started](getting-started.md)** - New to this project? Start here
-- **[Architecture Overview](architecture/network-topology.md)** - Understand the infrastructure design
+- **[Network Architecture](NETWORK_ARCHITECTURE.md)** - CRITICAL: Understand the three-bridge network design
+- **[Architecture Overview](architecture/network-topology.md)** - Detailed network topology
 - **[Deployment Guide](deployment/)** - How to deploy services
 - **[Operations](operations/)** - Day-to-day operations and runbooks
 
@@ -14,6 +15,7 @@ Welcome to the Proxmox Infrastructure documentation. This directory contains all
 ### 📐 Architecture
 High-level design decisions and system architecture documentation.
 
+- **[Network Architecture](NETWORK_ARCHITECTURE.md)** - CRITICAL: Complete network architecture guide (MUST READ)
 - **[Network Topology](architecture/network-topology.md)** - Network design (vmbr0/vmbr2/vmbr3)
 - **[Container Mapping](architecture/container-mapping.md)** - Container ID reference table
 - **[Security Model](architecture/security-model.md)** - Security architecture (planned)
@@ -97,4 +99,4 @@ All documentation should follow these principles:
 
 ---
 
-**Last Updated**: 2025-10-24 - Added comprehensive Disaster Recovery documentation section
+**Last Updated**: 2025-10-27 - Added comprehensive Network Architecture documentation (CRITICAL for understanding internet connectivity)

@@ -3,3 +3,15 @@
   ansible.builtin.apt:
     update_cache: true
   when: proxmox_update_cache_after_repo_change
+
+- name: restart sshd
+  ansible.builtin.service:
+    name: sshd
+    state: restarted
+  listen: restart sshd
+
+- name: restart fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: restarted
+  listen: restart fail2ban

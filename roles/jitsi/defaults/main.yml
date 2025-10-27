@@ -1,0 +1,88 @@
+---
+jitsi_container_id: 160
+jitsi_hostname: jitsi
+jitsi_domain: viljo.se
+jitsi_memory: 4096
+jitsi_cores: 4
+jitsi_disk: 64
+jitsi_swap: 1024
+jitsi_bridge: "{{ public_bridge | default('vmbr3') }}"
+jitsi_ip_address: 172.16.10.160
+jitsi_netmask: 24
+jitsi_ip_config: "{{ jitsi_ip_address }}/{{ jitsi_netmask }}"
+jitsi_vlan_tag: null
+jitsi_gateway: 172.16.10.101
+jitsi_dns_servers:
+  - 172.16.10.101
+  - 1.1.1.1
+jitsi_rootfs_storage: local-lvm
+jitsi_unprivileged: true
+jitsi_start_onboot: true
+jitsi_features:
+  nesting: 1
+jitsi_template_url: "{{ debian_template_url | default('http://download.proxmox.com/images/system/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+jitsi_template_file: "{{ debian_template_file | default('/var/lib/vz/template/cache/debian-13-standard_13.1-2_amd64.tar.zst') }}"
+jitsi_root_password: "{{ vault_jitsi_root_password | default('') }}"
+jitsi_rootfs_path: "/var/lib/lxc/{{ jitsi_container_id }}/rootfs"
+jitsi_compose_path: /opt/jitsi
+jitsi_external_domain: "meet.{{ public_domain }}"
+jitsi_public_url: "https://meet.{{ public_domain }}"
+
+# Jitsi Meet Configuration
+jitsi_timezone: UTC
+jitsi_enable_auth: true
+jitsi_enable_guests: true
+jitsi_enable_recording: true
+jitsi_enable_transcription: false
+
+# WebRTC ports for UDP media streams
+jitsi_jvb_port: 10000
+jitsi_jvb_port_range: "10000-10200"
+
+# Authentication via Keycloak OIDC
+jitsi_auth_type: token  # jwt or token for OIDC
+jitsi_enable_keycloak_sso: true
+jitsi_keycloak_url: "https://keycloak.{{ public_domain }}"
+jitsi_keycloak_realm: master
+jitsi_oidc_client_id: jitsi
+jitsi_oidc_client_secret: "{{ vault_jitsi_oidc_client_secret | default('') }}"
+jitsi_oidc_issuer_url: "{{ jitsi_keycloak_url }}/realms/{{ jitsi_keycloak_realm }}"
+
+# Recording storage (bind mount from Proxmox host)
+jitsi_recording_storage_host: /mnt/storage/jitsi-recordings
+jitsi_recording_storage_container: /recordings
+
+# Environment variables for docker-compose
+jitsi_env:
+  ENABLE_AUTH: "{{ '1' if jitsi_enable_auth else '0' }}"
+  ENABLE_GUESTS: "{{ '1' if jitsi_enable_guests else '0' }}"
+  AUTH_TYPE: "{{ jitsi_auth_type }}"
+  ENABLE_RECORDING: "{{ '1' if jitsi_enable_recording else '0' }}"
+  ENABLE_TRANSCRIPTIONS: "{{ '1' if jitsi_enable_transcription else '0' }}"
+  TZ: "{{ jitsi_timezone }}"
+  PUBLIC_URL: "{{ jitsi_public_url }}"
+  XMPP_DOMAIN: meet.jitsi
+  XMPP_SERVER: xmpp.meet.jitsi
+  XMPP_BOSH_URL_BASE: "http://xmpp.meet.jitsi:5280"
+  XMPP_AUTH_DOMAIN: auth.meet.jitsi
+  XMPP_MUC_DOMAIN: muc.meet.jitsi
+  XMPP_INTERNAL_MUC_DOMAIN: internal-muc.meet.jitsi
+  XMPP_GUEST_DOMAIN: guest.meet.jitsi
+  XMPP_RECORDER_DOMAIN: recorder.meet.jitsi
+  JICOFO_COMPONENT_SECRET: "{{ vault_jitsi_jicofo_component_secret | default('') }}"
+  JICOFO_AUTH_USER: focus
+  JICOFO_AUTH_PASSWORD: "{{ vault_jitsi_jicofo_auth_password | default('') }}"
+  JVB_AUTH_USER: jvb
+  JVB_AUTH_PASSWORD: "{{ vault_jitsi_jvb_auth_password | default('') }}"
+  JVB_STUN_SERVERS: stun.l.google.com:19302,stun1.l.google.com:19302,stun2.l.google.com:19302
+  JVB_PORT: "{{ jitsi_jvb_port }}"
+  JVB_TCP_HARVESTER_DISABLED: "true"
+  JIBRI_RECORDER_USER: recorder
+  JIBRI_RECORDER_PASSWORD: "{{ vault_jitsi_jibri_recorder_password | default('') }}"
+  JIBRI_RECORDING_DIR: "{{ jitsi_recording_storage_container }}"
+  JIBRI_FINALIZE_RECORDING_SCRIPT_PATH: /config/finalize.sh
+  JIBRI_XMPP_USER: jibri
+  JIBRI_XMPP_PASSWORD: "{{ vault_jitsi_jibri_xmpp_password | default('') }}"
+  # OIDC/Token Auth Configuration (when using Keycloak)
+  TOKEN_AUTH_URL: "{{ jitsi_oidc_issuer_url }}/protocol/openid-connect/auth"
+  DEPLOYMENTINFO_USERREGION: "eu-north"

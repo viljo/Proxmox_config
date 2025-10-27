@@ -1,0 +1,126 @@
+---
+# Playbook: Deploy Jellyfin Media Server
+# Description: Deploy Jellyfin media server in LXC container with Traefik integration
+# Spec: specs/planned/009-jellyfin-media-server
+# Container ID: 56
+# IP Address: 172.16.10.56
+# Domain: jellyfin.viljo.se
+
+- name: Deploy Jellyfin Media Server
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+
+  vars:
+    service_name: Jellyfin Media Server
+    service_description: Media streaming and management platform
+    container_id: "{{ jellyfin_container_id }}"
+    service_url: "https://jellyfin.{{ public_domain }}"
+
+  pre_tasks:
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Deploying {{ service_name }}"
+          - "=========================================="
+          - "Container ID: {{ jellyfin_container_id }}"
+          - "IP Address: {{ jellyfin_ip_address }}"
+          - "Hostname: {{ jellyfin_hostname }}"
+          - "Domain: jellyfin.{{ public_domain }}"
+          - "Service Port: {{ jellyfin_service_port }}"
+          - "=========================================="
+
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - jellyfin_container_id is defined
+          - jellyfin_ip_address is defined
+          - jellyfin_hostname is defined
+          - jellyfin_root_password is defined
+          - jellyfin_root_password | length > 0
+        fail_msg: "Required Jellyfin configuration variables are missing"
+        success_msg: "All required Jellyfin variables are defined"
+
+    - name: Check if container already exists
+      ansible.builtin.stat:
+        path: "/etc/pve/lxc/{{ jellyfin_container_id }}.conf"
+      register: existing_container
+
+    - name: Warning if container exists
+      ansible.builtin.debug:
+        msg:
+          - "WARNING: Container {{ jellyfin_container_id }} already exists"
+          - "This playbook will reconfigure the existing container"
+      when: existing_container.stat.exists
+
+  roles:
+    - role: jellyfin
+      tags: jellyfin
+
+  post_tasks:
+    - name: Wait for Jellyfin service to be ready
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ jellyfin_container_id }} -- bash -lc "curl -f http://localhost:{{ jellyfin_service_port }}/health || true"
+      register: health_check
+      until: health_check.rc == 0
+      retries: 12
+      delay: 5
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Display deployment completion
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "{{ service_name }} Deployment Complete"
+          - "=========================================="
+          - "Container ID: {{ jellyfin_container_id }}"
+          - "IP Address: {{ jellyfin_ip_address }}"
+          - "Internal URL: http://{{ jellyfin_ip_address }}:{{ jellyfin_service_port }}"
+          - "External URL: {{ service_url }}"
+          - ""
+          - "Next Steps:"
+          - "1. Configure Traefik routing (if not already done):"
+          - "   - Ensure jellyfin service is in traefik_services list"
+          - "   - Run Traefik configuration update"
+          - "2. Access Jellyfin setup wizard at {{ service_url }}"
+          - "3. Create admin account"
+          - "4. Configure media libraries:"
+          - "   - Movies: /media/movies"
+          - "   - TV Shows: /media/tv"
+          - "   - Music: /media/music"
+          - "   - Downloads: /media/downloads"
+          - "5. Configure transcoding settings"
+          - "6. Optional: Configure LDAP/OIDC authentication"
+          - ""
+          - "Media Mount Configuration:"
+          - "{% for mount in jellyfin_media_mounts %}"
+          - "  - {{ mount.target }} ({{ 'read-only' if mount.ro else 'read-write' }})"
+          - "{% endfor %}"
+          - "=========================================="
+
+    - name: Verify container is running
+      ansible.builtin.command:
+        cmd: pct status {{ jellyfin_container_id }}
+      register: container_status
+      changed_when: false
+      failed_when: "'running' not in container_status.stdout"
+
+    - name: Test internal connectivity
+      ansible.builtin.command:
+        cmd: >
+          curl -f -s -o /dev/null -w "%{http_code}" http://{{ jellyfin_ip_address }}:{{ jellyfin_service_port }}
+      register: connectivity_test
+      changed_when: false
+      failed_when: false
+      when: not ansible_check_mode
+
+    - name: Display connectivity status
+      ansible.builtin.debug:
+        msg:
+          - "Connectivity Test: {{ 'SUCCESS' if connectivity_test.rc == 0 else 'FAILED' }}"
+          - "HTTP Status: {{ connectivity_test.stdout if connectivity_test.rc == 0 else 'N/A' }}"
+      when: not ansible_check_mode

@@ -9,7 +9,7 @@
 
 ### User Story 1 - External SSH Access to Proxmox Host (Priority: P1)
 
-Administrator needs to securely access the Proxmox host (mother @ 192.168.1.3) from external networks using a friendly domain name (viljo.se). The Proxmox infrastructure uses a Debian firewall LXC container that sits on vmbr2 (WAN) with a public IP, and the Proxmox host itself is on vmbr0 (management network). SSH connections will be port-forwarded through the firewall LXC to reach the Proxmox host.
+Administrator needs to securely access the Proxmox host (mother) from external networks using a friendly domain name (viljo.se). The Proxmox infrastructure uses a three-bridge architecture: vmbr0 (192.168.1.0/24 - management ONLY, NO internet), vmbr2 (WAN with public IP from Bahnhof ISP), and vmbr3 (172.16.10.0/24 - DMZ where services live). The firewall container (LXC 101) bridges vmbr2 (WAN) to vmbr3 (DMZ). The Proxmox host has IP 172.16.10.1 on vmbr3 (NOT on vmbr2). SSH connections arrive at vmbr2 public IP and must be DNAT forwarded through the firewall to 172.16.10.1:22 on vmbr3.
 
 **Why this priority**: This is the core requirement - enabling remote administration of the Proxmox infrastructure through a simple, memorable domain name.
 
@@ -17,7 +17,7 @@ Administrator needs to securely access the Proxmox host (mother @ 192.168.1.3) f
 
 **Acceptance Scenarios**:
 
-1. **Given** administrator is on external network, **When** they connect via `ssh root@viljo.se`, **Then** connection is forwarded through firewall LXC to Proxmox host at 192.168.1.3:22
+1. **Given** administrator is on external network, **When** they connect via `ssh root@viljo.se`, **Then** connection arrives at vmbr2 public IP and is DNAT forwarded through firewall LXC to Proxmox host at 172.16.10.1:22 on vmbr3
 2. **Given** administrator has valid SSH credentials/keys, **When** they authenticate, **Then** they gain shell access to Proxmox host
 3. **Given** DNS is properly configured, **When** administrator uses the viljo.se domain, **Then** name resolution succeeds and connection establishes
 
@@ -25,15 +25,15 @@ Administrator needs to securely access the Proxmox host (mother @ 192.168.1.3) f
 
 ### User Story 2 - Firewall Port Forwarding (Priority: P2)
 
-The firewall LXC container must forward SSH traffic from WAN (vmbr2) to the Proxmox host management network (192.168.1.3 on vmbr0), ensuring persistent configuration across reboots.
+The firewall LXC container must DNAT forward SSH traffic from WAN (vmbr2) to the Proxmox host on the DMZ network (172.16.10.1 on vmbr3), ensuring persistent configuration across reboots. Note: 192.168.1.3 is on vmbr0 (management network with NO internet access) and is NOT reachable from external networks.
 
 **Why this priority**: Required for external access to work but can be configured once SSH hardening and DNS are working.
 
-**Independent Test**: Can be tested by verifying external SSH connections on port 22 are forwarded to 192.168.1.3 and connections persist after firewall container restarts.
+**Independent Test**: Can be tested by verifying external SSH connections on vmbr2:22 are DNAT forwarded to 172.16.10.1:22 and connections persist after firewall container restarts.
 
 **Acceptance Scenarios**:
 
-1. **Given** firewall port forwarding is configured, **When** external SSH traffic arrives on WAN port 22, **Then** it is forwarded to 192.168.1.3:22
+1. **Given** firewall DNAT port forwarding is configured, **When** external SSH traffic arrives on vmbr2 WAN port 22, **Then** it is DNAT forwarded to 172.16.10.1:22 on vmbr3
 2. **Given** firewall container reboots, **When** system comes back online, **Then** port forwarding rules are automatically restored
 3. **Given** connection is established, **When** administrator runs commands, **Then** they execute on the Proxmox host
 
@@ -68,9 +68,9 @@ SSH access should be secured against common attacks while maintaining usability 
 
 ### Functional Requirements
 
-- **FR-001**: System MUST route SSH connections from viljo.se domain to Proxmox host vmbr2 interface
-- **FR-002**: System MUST maintain DNS configuration mapping viljo.se to vmbr2 external IP address
-- **FR-003**: System MUST configure firewall rules on vmbr2 to allow SSH on port 22
+- **FR-001**: System MUST route SSH connections from viljo.se domain to Proxmox host at 172.16.10.1 on vmbr3 via firewall DNAT
+- **FR-002**: System MUST maintain DNS configuration mapping viljo.se to firewall vmbr2 WAN public IP address
+- **FR-003**: System MUST configure firewall DNAT rules to forward vmbr2:22 → 172.16.10.1:22
 - **FR-004**: System MUST support standard SSH authentication (keys and/or password)
 - **FR-005**: System MUST handle dynamic external IP changes on vmbr2 through DNS update mechanism
 - **FR-006**: Configuration MUST persist across system reboots

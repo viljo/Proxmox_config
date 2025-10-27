@@ -1,5 +1,7 @@
 # Network Topology Strategy
 
+**IMPORTANT**: For comprehensive network architecture documentation including troubleshooting and common mistakes, see [NETWORK_ARCHITECTURE.md](../NETWORK_ARCHITECTURE.md).
+
 ## CRITICAL: Bridge Usage Policy
 
 **⚠️ IMPORTANT - Public Service Access:**

@@ -1,0 +1,84 @@
+---
+# SSH Hardening Tasks for External SSH Access
+# Feature: 003-external-ssh-admin
+# This task file implements SSH security hardening for the Proxmox host
+
+- name: Ensure OpenSSH server is installed
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+    update_cache: true
+
+- name: Backup existing SSH configuration
+  ansible.builtin.copy:
+    src: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.backup-{{ ansible_date_time.iso8601_basic_short }}
+    remote_src: true
+    mode: "0600"
+    owner: root
+    group: root
+  changed_when: false
+
+- name: Deploy hardened SSH configuration
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: "0600"
+    validate: /usr/sbin/sshd -t -f %s
+    backup: true
+  notify: restart sshd
+
+- name: Ensure SSH host keys exist with correct permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: root
+    group: root
+    mode: "0600"
+    state: file
+  loop:
+    - /etc/ssh/ssh_host_ed25519_key
+    - /etc/ssh/ssh_host_rsa_key
+  ignore_errors: true
+
+- name: Ensure root .ssh directory exists with correct permissions
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Deploy authorized SSH keys for root
+  ansible.builtin.authorized_key:
+    user: root
+    key: "{{ item }}"
+    manage_dir: false
+    exclusive: false
+  loop: "{{ proxmox_root_authorized_keys }}"
+  when: proxmox_root_authorized_keys | length > 0
+
+- name: Ensure authorized_keys has correct permissions
+  ansible.builtin.file:
+    path: /root/.ssh/authorized_keys
+    owner: root
+    group: root
+    mode: "0600"
+    state: file
+  when: proxmox_root_authorized_keys | length > 0
+
+- name: Enable and start SSH service
+  ansible.builtin.service:
+    name: sshd
+    enabled: true
+    state: started
+
+- name: Display SSH configuration validation result
+  ansible.builtin.debug:
+    msg: |
+      SSH hardening configuration has been applied successfully.
+      - Password authentication: {{ 'disabled' if not proxmox_ssh_password_auth else 'enabled' }}
+      - Root login: {{ proxmox_ssh_permit_root_login }}
+      - SSH port: {{ proxmox_ssh_port }}
+      - Authorized keys: {{ proxmox_root_authorized_keys | length }} keys configured

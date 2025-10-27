@@ -1,0 +1,179 @@
+---
+# External SSH Access Deployment Playbook
+# Feature: 003-external-ssh-admin
+#
+# This playbook configures secure external SSH access to the Proxmox host
+# via the viljo.se domain. Traffic flows:
+#   Internet → vmbr2 (WAN) → Firewall DNAT → 172.16.10.102:22 (Proxmox host on DMZ)
+#
+# Components:
+#   1. Firewall DNAT rules (already configured in firewall role)
+#   2. SSH hardening on Proxmox host
+#   3. Fail2ban brute force protection
+#   4. Loopia DDNS for dynamic IP updates (existing)
+#
+# Usage:
+#   ansible-playbook playbooks/external-ssh-access.yml --ask-vault-pass
+#   ansible-playbook playbooks/external-ssh-access.yml --tags ssh
+#   ansible-playbook playbooks/external-ssh-access.yml --tags fail2ban
+
+- name: Configure External SSH Access
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          External SSH Access Deployment
+          ========================================
+
+          Target: {{ inventory_hostname }}
+          Proxmox IP (DMZ): {{ dmz_host_ip }}
+          WAN Bridge: {{ wan_bridge }}
+          DMZ Bridge: {{ public_bridge }}
+          External Domain: {{ public_domain }}
+
+          Network Flow:
+          Internet → {{ public_domain }}
+               ↓ (DNS resolves to firewall WAN IP on {{ wan_bridge }})
+          Firewall Container (LXC {{ firewall_container_id }})
+               ↓ (DNAT: port 22 → {{ dmz_host_ip }}:22)
+          Proxmox Host SSH ({{ dmz_host_ip }}:22)
+               ↓ (Key-based authentication)
+          Authorized Access
+
+          Configuration:
+          - SSH Port: {{ proxmox_ssh_port | default(22) }}
+          - Password Auth: {{ 'Disabled' if not proxmox_ssh_password_auth | default(false) else 'Enabled' }}
+          - Root Login: {{ proxmox_ssh_permit_root_login | default('without-password') }}
+          - Fail2ban: {{ 'Enabled' if proxmox_fail2ban_enabled | default(false) else 'Disabled' }}
+          - Authorized Keys: {{ proxmox_root_authorized_keys | length }} configured
+
+    - name: Verify required variables are defined
+      ansible.builtin.assert:
+        that:
+          - dmz_host_ip is defined
+          - public_domain is defined
+          - firewall_container_id is defined
+          - proxmox_root_authorized_keys is defined
+        fail_msg: "Required variables not defined. Check inventory configuration."
+        success_msg: "All required variables are properly defined."
+
+  tasks:
+    - name: Include SSH hardening tasks
+      ansible.builtin.include_tasks:
+        file: "{{ role_path }}/tasks/ssh-hardening.yml"
+      vars:
+        role_path: "{{ playbook_dir }}/../roles/proxmox"
+      tags:
+        - ssh
+        - hardening
+
+    - name: Include fail2ban configuration tasks
+      ansible.builtin.include_tasks:
+        file: "{{ role_path }}/tasks/fail2ban.yml"
+      vars:
+        role_path: "{{ playbook_dir }}/../roles/proxmox"
+      when: proxmox_fail2ban_enabled | default(false)
+      tags:
+        - fail2ban
+        - security
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg: |
+          ========================================
+          External SSH Access - Deployment Complete
+          ========================================
+
+          SSH Configuration Applied:
+          - Configuration file: /etc/ssh/sshd_config
+          - Backup created: /etc/ssh/sshd_config.backup-*
+          - Password authentication: DISABLED
+          - Key-based authentication: ENABLED
+          - Root login: Keys only (without-password)
+          - Authorized keys: {{ proxmox_root_authorized_keys | length }}
+
+          {% if proxmox_fail2ban_enabled | default(false) %}
+          Fail2ban Protection:
+          - Status: ENABLED
+          - Max retries: {{ proxmox_fail2ban_maxretry | default(5) }}
+          - Find time: {{ proxmox_fail2ban_findtime | default(600) }}s
+          - Ban time: {{ proxmox_fail2ban_bantime | default(3600) }}s
+          - Whitelisted: {{ proxmox_fail2ban_ignoreip | default([]) | join(', ') }}
+          {% else %}
+          Fail2ban Protection: DISABLED (enable with proxmox_fail2ban_enabled: true)
+          {% endif %}
+
+          Network Configuration:
+          - Firewall DNAT: {{ wan_bridge }}:22 → {{ dmz_host_ip }}:22 (LXC {{ firewall_container_id }})
+          - DNS: {{ public_domain }} → Firewall WAN IP (updated via Loopia DDNS)
+          - Loopia DDNS: Monitoring LXC {{ firewall_container_id }} eth0 for IP changes
+
+          Testing Instructions:
+          ========================================
+
+          1. Test Internal Access (from local network):
+             ssh root@{{ dmz_host_ip }}
+
+          2. Test External Access (from internet):
+             ssh root@{{ public_domain }}
+
+          3. Verify SSH Configuration:
+             sshd -T | grep -E 'passwordauthentication|permitrootlogin'
+
+          4. Check Fail2ban Status (if enabled):
+             fail2ban-client status sshd
+
+          5. Monitor SSH Logs:
+             tail -f /var/log/auth.log
+             journalctl -u sshd -f
+
+          6. Test Port Forwarding:
+             From Proxmox host: pct exec {{ firewall_container_id }} -- nft list ruleset | grep dnat
+
+          Security Reminders:
+          ========================================
+          - Firewall port forwarding is already configured for SSH (port 22)
+          - External access requires valid SSH key (password auth disabled)
+          - Internal networks (192.168.x, 172.16.x, 10.x) allow password auth via Match rules
+          - All connection attempts are logged to /var/log/auth.log
+          - Review fail2ban logs regularly: journalctl -u fail2ban
+
+          For troubleshooting, see: specs/planned/003-external-ssh-admin/quickstart.md
+
+    - name: Verify SSH service is running
+      ansible.builtin.service:
+        name: sshd
+        state: started
+        enabled: true
+      check_mode: false
+
+    - name: Get SSH service status
+      ansible.builtin.command:
+        cmd: systemctl status sshd
+      register: sshd_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display SSH service status
+      ansible.builtin.debug:
+        var: sshd_status.stdout_lines
+
+    - name: Final validation check
+      ansible.builtin.command:
+        cmd: sshd -t
+      changed_when: false
+      register: sshd_validation
+
+    - name: Display validation result
+      ansible.builtin.debug:
+        msg: |
+          SSH configuration validation: {{ 'PASSED' if sshd_validation.rc == 0 else 'FAILED' }}
+          {% if sshd_validation.rc != 0 %}
+          Error: {{ sshd_validation.stderr }}
+          {% endif %}

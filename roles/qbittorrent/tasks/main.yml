@@ -47,6 +47,22 @@
     insertafter: EOF
   when: qbittorrent_container_conf.stat.exists
 
+- name: Ensure qBittorrent container features list is present
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ qbittorrent_container_id }}.conf"
+    regexp: '^features:'
+    line: "features: {{ qbittorrent_features | dictsort | map('join', '=') | join(',') }}"
+    insertafter: EOF
+  when: qbittorrent_container_conf.stat.exists and qbittorrent_features | length > 0
+
+- name: Ensure qBittorrent container DNS servers are set
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ qbittorrent_container_id }}.conf"
+    regexp: '^nameserver:'
+    line: "nameserver: {{ qbittorrent_dns_servers | join(' ') }}"
+    insertafter: EOF
+  when: qbittorrent_container_conf.stat.exists and qbittorrent_dns_servers is defined and qbittorrent_dns_servers | length > 0
+
 - name: Read qBittorrent container status
   ansible.builtin.command:
     cmd: pct status {{ qbittorrent_container_id }}
@@ -113,16 +129,61 @@
       pct exec {{ qbittorrent_container_id }} -- bash -lc "id qbittorrent 2>/dev/null || useradd -r -s /usr/sbin/nologin qbittorrent"
   when: not ansible_check_mode and qbittorrent_container_conf.stat.exists
 
-- name: Ensure qBittorrent directories exist (host)
+- name: Ensure qBittorrent host storage directory exists
   ansible.builtin.file:
-    path: "{{ qbittorrent_rootfs_path }}{{ item.path }}"
+    path: "{{ qbittorrent_host_download_path }}"
     state: directory
-    owner: qbittorrent
-    group: qbittorrent
+    owner: root
+    group: root
     mode: "0755"
+  when: qbittorrent_host_download_path is defined
+
+- name: Configure download storage mount point
+  ansible.builtin.lineinfile:
+    path: "/etc/pve/lxc/{{ qbittorrent_container_id }}.conf"
+    regexp: "^mp0:"
+    line: "mp0: {{ qbittorrent_host_download_path }},mp={{ qbittorrent_download_dir }}"
+    insertafter: EOF
+  when:
+    - qbittorrent_container_conf.stat.exists
+    - qbittorrent_host_download_path is defined
+  notify: restart qbittorrent
+
+- name: Ensure qBittorrent directories exist in container
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "mkdir -p {{ item }}"
   loop:
-    - { path: "{{ qbittorrent_download_dir }}" }
-    - { path: "{{ qbittorrent_config_dir }}" }
+    - "{{ qbittorrent_download_dir }}"
+    - "{{ qbittorrent_incomplete_dir }}"
+    - "{{ qbittorrent_complete_dir }}"
+    - "{{ qbittorrent_config_dir }}"
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+  changed_when: false
+
+- name: Ensure qBittorrent category directories exist in container
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "mkdir -p {{ item.save_path }}"
+  loop: "{{ qbittorrent_categories }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+    - qbittorrent_categories | length > 0
+  changed_when: false
+
+- name: Set ownership of download directories in container
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- bash -lc "chown -R qbittorrent:qbittorrent {{ qbittorrent_download_dir }}"
+  when:
+    - not ansible_check_mode
+    - qbittorrent_container_conf.stat.exists
+  changed_when: false
 
 - name: Deploy qBittorrent systemd service
   ansible.builtin.template:

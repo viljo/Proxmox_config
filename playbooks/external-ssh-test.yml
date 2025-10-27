@@ -1,0 +1,307 @@
+---
+# External SSH Access Testing and Validation Playbook
+# Feature: 003-external-ssh-admin
+#
+# This playbook validates the external SSH access configuration
+# without making any changes to the system.
+#
+# Usage:
+#   ansible-playbook playbooks/external-ssh-test.yml
+
+- name: Test External SSH Access Configuration
+  hosts: proxmox_hosts
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Test 1 - Check SSH service status
+      ansible.builtin.service:
+        name: sshd
+      register: sshd_service
+      check_mode: true
+
+    - name: Display SSH service status
+      ansible.builtin.debug:
+        msg: |
+          SSH Service Status: {{ 'RUNNING' if sshd_service.state == 'started' else 'STOPPED' }}
+          Enabled at boot: {{ 'YES' if sshd_service.enabled else 'NO' }}
+
+    - name: Test 2 - Validate SSH configuration syntax
+      ansible.builtin.command:
+        cmd: sshd -t
+      register: sshd_syntax_check
+      changed_when: false
+      failed_when: false
+
+    - name: Display SSH configuration validation
+      ansible.builtin.debug:
+        msg: |
+          SSH Configuration Syntax: {{ 'VALID' if sshd_syntax_check.rc == 0 else 'INVALID' }}
+          {% if sshd_syntax_check.rc != 0 %}
+          Error: {{ sshd_syntax_check.stderr }}
+          {% endif %}
+
+    - name: Test 3 - Check SSH configuration values
+      ansible.builtin.command:
+        cmd: sshd -T
+      register: sshd_config_test
+      changed_when: false
+
+    - name: Parse SSH configuration
+      ansible.builtin.set_fact:
+        ssh_config_parsed:
+          password_auth: "{{ sshd_config_test.stdout | regex_search('passwordauthentication (.+)', '\\1') | first }}"
+          root_login: "{{ sshd_config_test.stdout | regex_search('permitrootlogin (.+)', '\\1') | first }}"
+          pubkey_auth: "{{ sshd_config_test.stdout | regex_search('pubkeyauthentication (.+)', '\\1') | first }}"
+          port: "{{ sshd_config_test.stdout | regex_search('port (.+)', '\\1') | first }}"
+          log_level: "{{ sshd_config_test.stdout | regex_search('loglevel (.+)', '\\1') | first }}"
+
+    - name: Display SSH configuration security settings
+      ansible.builtin.debug:
+        msg: |
+          SSH Security Configuration:
+          - Port: {{ ssh_config_parsed.port }}
+          - Password Authentication: {{ ssh_config_parsed.password_auth | upper }}
+          - Pubkey Authentication: {{ ssh_config_parsed.pubkey_auth | upper }}
+          - Permit Root Login: {{ ssh_config_parsed.root_login | upper }}
+          - Log Level: {{ ssh_config_parsed.log_level | upper }}
+
+          Security Status:
+          {% if ssh_config_parsed.password_auth == 'no' %}
+          ✓ Password authentication is DISABLED (secure)
+          {% else %}
+          ✗ WARNING: Password authentication is ENABLED (insecure for external access)
+          {% endif %}
+          {% if ssh_config_parsed.root_login == 'without-password' or ssh_config_parsed.root_login == 'prohibit-password' %}
+          ✓ Root login requires SSH key (secure)
+          {% else %}
+          ✗ WARNING: Root login setting is not optimal: {{ ssh_config_parsed.root_login }}
+          {% endif %}
+          {% if ssh_config_parsed.pubkey_auth == 'yes' %}
+          ✓ Public key authentication is ENABLED
+          {% else %}
+          ✗ WARNING: Public key authentication is DISABLED
+          {% endif %}
+
+    - name: Test 4 - Check authorized_keys file
+      ansible.builtin.stat:
+        path: /root/.ssh/authorized_keys
+      register: authorized_keys_stat
+
+    - name: Display authorized_keys status
+      ansible.builtin.debug:
+        msg: |
+          Authorized Keys File:
+          - Exists: {{ 'YES' if authorized_keys_stat.stat.exists else 'NO' }}
+          {% if authorized_keys_stat.stat.exists %}
+          - Permissions: {{ '%04o' | format(authorized_keys_stat.stat.mode) }}
+          - Owner: {{ authorized_keys_stat.stat.pw_name }}
+          - Size: {{ authorized_keys_stat.stat.size }} bytes
+          {% endif %}
+
+          {% if authorized_keys_stat.stat.exists %}
+          {% if authorized_keys_stat.stat.mode | string | regex_search('[0-7]{4}$') == '0600' %}
+          ✓ File permissions are correct (0600)
+          {% else %}
+          ✗ WARNING: File permissions should be 0600, currently {{ '%04o' | format(authorized_keys_stat.stat.mode) }}
+          {% endif %}
+          {% else %}
+          ✗ WARNING: No authorized_keys file found - SSH key authentication will not work
+          {% endif %}
+
+    - name: Count authorized keys
+      ansible.builtin.shell:
+        cmd: grep -c '^ssh-' /root/.ssh/authorized_keys || echo 0
+      register: key_count
+      changed_when: false
+      when: authorized_keys_stat.stat.exists
+
+    - name: Display key count
+      ansible.builtin.debug:
+        msg: "Authorized SSH keys configured: {{ key_count.stdout | default('0') }}"
+      when: authorized_keys_stat.stat.exists
+
+    - name: Test 5 - Check fail2ban status (if installed)
+      ansible.builtin.command:
+        cmd: systemctl status fail2ban
+      register: fail2ban_status
+      changed_when: false
+      failed_when: false
+
+    - name: Display fail2ban status
+      ansible.builtin.debug:
+        msg: |
+          Fail2ban Status: {{ 'INSTALLED and RUNNING' if fail2ban_status.rc == 0 else 'NOT INSTALLED or NOT RUNNING' }}
+          {% if fail2ban_status.rc == 0 %}
+          ✓ Fail2ban is protecting SSH service
+          {% else %}
+          ⚠ Fail2ban is not active - consider enabling for brute force protection
+          {% endif %}
+
+    - name: Get fail2ban SSH jail status
+      ansible.builtin.command:
+        cmd: fail2ban-client status sshd
+      register: fail2ban_sshd_status
+      changed_when: false
+      failed_when: false
+      when: fail2ban_status.rc == 0
+
+    - name: Display fail2ban SSH jail details
+      ansible.builtin.debug:
+        var: fail2ban_sshd_status.stdout_lines
+      when:
+        - fail2ban_status.rc == 0
+        - fail2ban_sshd_status.rc == 0
+
+    - name: Test 6 - Check firewall DNAT configuration
+      ansible.builtin.command:
+        cmd: pct exec {{ firewall_container_id }} -- nft list ruleset
+      register: firewall_rules
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      become: false
+
+    - name: Parse DNAT rules for SSH
+      ansible.builtin.set_fact:
+        ssh_dnat_configured: "{{ firewall_rules.stdout | regex_search('dnat.*' + dmz_host_ip + '.*22') is not none }}"
+      when: firewall_rules.rc == 0
+
+    - name: Display firewall DNAT status
+      ansible.builtin.debug:
+        msg: |
+          Firewall DNAT Configuration:
+          {% if firewall_rules.rc == 0 %}
+          - Firewall container: LXC {{ firewall_container_id }}
+          - DNAT rule for SSH: {{ 'CONFIGURED' if ssh_dnat_configured | default(false) else 'NOT FOUND' }}
+          {% if ssh_dnat_configured | default(false) %}
+          ✓ DNAT forwards port 22 to {{ dmz_host_ip }}:22
+          {% else %}
+          ✗ WARNING: No DNAT rule found for SSH to {{ dmz_host_ip }}
+          {% endif %}
+          {% else %}
+          ✗ Could not check firewall rules (container may be stopped or unreachable)
+          {% endif %}
+
+    - name: Test 7 - Check DNS configuration
+      ansible.builtin.command:
+        cmd: dig +short {{ public_domain }} @1.1.1.1
+      register: dns_check
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      become: false
+
+    - name: Get firewall WAN IP
+      ansible.builtin.command:
+        cmd: pct exec {{ firewall_container_id }} -- ip -4 addr show eth0
+      register: firewall_wan_ip_check
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      become: false
+
+    - name: Parse firewall WAN IP
+      ansible.builtin.set_fact:
+        firewall_wan_ip: "{{ firewall_wan_ip_check.stdout | regex_search('inet ([0-9.]+)', '\\1') | first }}"
+      when: firewall_wan_ip_check.rc == 0
+
+    - name: Display DNS configuration status
+      ansible.builtin.debug:
+        msg: |
+          DNS Configuration:
+          - Domain: {{ public_domain }}
+          - DNS Resolution: {{ dns_check.stdout | trim if dns_check.rc == 0 else 'FAILED' }}
+          {% if firewall_wan_ip_check.rc == 0 %}
+          - Firewall WAN IP: {{ firewall_wan_ip | default('UNKNOWN') }}
+          {% endif %}
+
+          {% if dns_check.rc == 0 and firewall_wan_ip_check.rc == 0 %}
+          {% if dns_check.stdout | trim == firewall_wan_ip %}
+          ✓ DNS correctly points to firewall WAN IP
+          {% else %}
+          ⚠ WARNING: DNS ({{ dns_check.stdout | trim }}) does not match firewall WAN IP ({{ firewall_wan_ip }})
+          {% endif %}
+          {% else %}
+          ⚠ Could not verify DNS configuration
+          {% endif %}
+
+    - name: Test 8 - Check recent SSH authentication logs
+      ansible.builtin.command:
+        cmd: journalctl -u sshd -n 20 --no-pager
+      register: ssh_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Display recent SSH activity
+      ansible.builtin.debug:
+        msg: |
+          Recent SSH Activity (last 20 entries):
+          Log entries available: {{ 'YES' if ssh_logs.rc == 0 else 'NO' }}
+
+          Tip: Monitor SSH logs with:
+          - journalctl -u sshd -f
+          - tail -f /var/log/auth.log
+
+    - name: Generate comprehensive test report
+      ansible.builtin.debug:
+        msg: |
+          ================================================================================
+          EXTERNAL SSH ACCESS - COMPREHENSIVE TEST REPORT
+          ================================================================================
+
+          System: {{ inventory_hostname }}
+          Date: {{ ansible_date_time.iso8601 }}
+
+          COMPONENT STATUS:
+          ----------------
+          {% if sshd_service.state == 'started' %}✓{% else %}✗{% endif %} SSH Service: {{ sshd_service.state | upper }}
+          {% if sshd_syntax_check.rc == 0 %}✓{% else %}✗{% endif %} SSH Config Syntax: {{ 'VALID' if sshd_syntax_check.rc == 0 else 'INVALID' }}
+          {% if ssh_config_parsed.password_auth == 'no' %}✓{% else %}✗{% endif %} Password Auth: {{ ssh_config_parsed.password_auth | upper }}
+          {% if authorized_keys_stat.stat.exists %}✓{% else %}✗{% endif %} Authorized Keys: {{ 'CONFIGURED' if authorized_keys_stat.stat.exists else 'MISSING' }}
+          {% if fail2ban_status.rc == 0 %}✓{% else %}⚠{% endif %} Fail2ban: {{ 'ACTIVE' if fail2ban_status.rc == 0 else 'INACTIVE' }}
+          {% if ssh_dnat_configured | default(false) %}✓{% else %}✗{% endif %} Firewall DNAT: {{ 'CONFIGURED' if ssh_dnat_configured | default(false) else 'NOT FOUND' }}
+          {% if dns_check.rc == 0 %}✓{% else %}✗{% endif %} DNS Resolution: {{ 'WORKING' if dns_check.rc == 0 else 'FAILED' }}
+
+          SECURITY CONFIGURATION:
+          ----------------------
+          Port: {{ ssh_config_parsed.port }}
+          Root Login: {{ ssh_config_parsed.root_login | upper }}
+          Public Key Auth: {{ ssh_config_parsed.pubkey_auth | upper }}
+          Log Level: {{ ssh_config_parsed.log_level | upper }}
+          Authorized Keys: {{ key_count.stdout | default('0') }}
+
+          NETWORK CONFIGURATION:
+          ---------------------
+          External Domain: {{ public_domain }}
+          DNS Target IP: {{ dns_check.stdout | trim if dns_check.rc == 0 else 'N/A' }}
+          Firewall WAN IP: {{ firewall_wan_ip | default('UNKNOWN') }}
+          Proxmox DMZ IP: {{ dmz_host_ip }}
+          Firewall Container: LXC {{ firewall_container_id }}
+
+          RECOMMENDATIONS:
+          ---------------
+          {% if ssh_config_parsed.password_auth != 'no' %}
+          ! Enable password authentication only for internal networks
+          {% endif %}
+          {% if not authorized_keys_stat.stat.exists %}
+          ! Configure at least one authorized SSH key
+          {% endif %}
+          {% if fail2ban_status.rc != 0 %}
+          ! Install and configure fail2ban for brute force protection
+          {% endif %}
+          {% if not ssh_dnat_configured | default(false) %}
+          ! Configure firewall DNAT rule for SSH port forwarding
+          {% endif %}
+          {% if dns_check.rc == 0 and firewall_wan_ip_check.rc == 0 and dns_check.stdout | trim != firewall_wan_ip %}
+          ! Update DNS to point to current firewall WAN IP
+          {% endif %}
+
+          NEXT STEPS FOR TESTING:
+          ----------------------
+          1. Test internal access: ssh root@{{ dmz_host_ip }}
+          2. Test external access: ssh root@{{ public_domain }}
+          3. Monitor logs: journalctl -u sshd -f
+          4. Check fail2ban: fail2ban-client status sshd (if enabled)
+
+          ================================================================================

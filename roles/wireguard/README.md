@@ -8,8 +8,8 @@ The WireGuard server runs in an unprivileged LXC container (CT 90) on the manage
 
 ## Architecture
 
-- **Container**: Unprivileged Debian 13 LXC (CT 90)
-- **Network**: Management network (vmbr0) with static IP 192.168.1.90/24
+- **Container**: Unprivileged Debian 13 LXC (CT 190)
+- **Network**: Management network (vmbr0) with static IP 192.168.1.190/24
 - **VPN Tunnel**: 192.168.100.0/24 subnet
 - **Server IP**: 192.168.100.1/24 (VPN interface)
 - **Protocol**: WireGuard (UDP port 51820)
@@ -22,7 +22,7 @@ See `defaults/main.yml` for all configurable variables.
 ### Key Variables
 
 **Container Configuration:**
-- `wireguard_container_id`: LXC container ID (default: `90`)
+- `wireguard_container_id`: LXC container ID (default: `190`)
 - `wireguard_hostname`: Container hostname (default: `wireguard`)
 - `wireguard_domain`: Container domain (default: `infra.local`)
 - `wireguard_memory`: RAM allocation in MB (default: `1024`)
@@ -195,25 +195,25 @@ iptables -A FORWARD -p udp -d 192.168.1.90 --dport 51820 -j ACCEPT
 
 **WireGuard service won't start:**
 ```bash
-pct exec 90 -- systemctl status wg-quick@wg0
-pct exec 90 -- journalctl -u wg-quick@wg0 -n 50
+pct exec 190 -- systemctl status wg-quick@wg0
+pct exec 190 -- journalctl -u wg-quick@wg0 -n 50
 ```
 
 **Check connected peers:**
 ```bash
-pct exec 90 -- wg show
+pct exec 190 -- wg show
 ```
 
 **Verify IP forwarding:**
 ```bash
-pct exec 90 -- sysctl net.ipv4.ip_forward
+pct exec 190 -- sysctl net.ipv4.ip_forward
 ```
 
 **Test connectivity from VPN client:**
 ```bash
 # After connecting to VPN
-ping 192.168.1.90  # WireGuard server
-ping 192.168.1.1   # Gateway
+ping 192.168.1.190  # WireGuard server
+ping 192.168.1.1    # Gateway
 ```
 
 ### Rollback Procedure
@@ -222,8 +222,8 @@ To remove WireGuard deployment:
 
 ```bash
 # Stop and destroy container
-pct stop 90
-pct destroy 90
+pct stop 190
+pct destroy 190
 
 # Remove role from playbook
 # Comment out wireguard role in playbooks/site.yml

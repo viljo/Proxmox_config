@@ -1,0 +1,301 @@
+# GitLab CI/CD Template: Deployment with Manual Approval
+# Purpose: Multi-stage deployment pipeline with manual approval gates
+# Usage: Include this template in your .gitlab-ci.yml:
+#   include:
+#     - local: '/ci-templates/deployment-with-approval.gitlab-ci.yml'
+
+variables:
+  ANSIBLE_HOST_KEY_CHECKING: "False"
+  ANSIBLE_FORCE_COLOR: "true"
+
+stages:
+  - build
+  - test
+  - staging
+  - production
+  - rollback
+
+# Build artifacts
+build:
+  stage: build
+  image: debian:12
+  tags:
+    - docker
+    - self-hosted
+  script:
+    - echo "Building application artifacts"
+    - make build || ./build.sh
+  artifacts:
+    paths:
+      - dist/
+      - build/
+    expire_in: 1 week
+  only:
+    - branches
+    - tags
+
+# Automated testing
+test:
+  stage: test
+  image: python:3.11
+  tags:
+    - docker
+    - self-hosted
+  script:
+    - echo "Running automated tests"
+    - pip install -r requirements-test.txt || true
+    - pytest tests/ || ./run-tests.sh
+  dependencies:
+    - build
+  artifacts:
+    reports:
+      junit: test-reports/*.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  only:
+    - branches
+    - tags
+
+# Deploy to staging environment
+deploy-staging:
+  stage: staging
+  image: python:3.11
+  tags:
+    - docker
+    - self-hosted
+  before_script:
+    - pip install ansible
+    - eval $(ssh-agent -s)
+    - echo "$DEPLOYMENT_SSH_KEY" | ssh-add -
+    - mkdir -p ~/.ssh
+    - echo "$DEPLOYMENT_SSH_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+  script:
+    - echo "Deploying to staging environment"
+    - ansible-playbook
+        -i inventory/staging
+        --extra-vars "version=${CI_COMMIT_SHORT_SHA}"
+        --extra-vars "environment=staging"
+        playbooks/deploy.yml
+  environment:
+    name: staging
+    url: https://staging.example.com
+    on_stop: stop-staging
+  dependencies:
+    - build
+  only:
+    - develop
+    - main
+    - master
+
+# Health check staging
+verify-staging:
+  stage: staging
+  image: curlimages/curl:latest
+  tags:
+    - docker
+    - self-hosted
+  script:
+    - echo "Verifying staging deployment"
+    - sleep 10
+    - curl --fail --retry 5 --retry-delay 10 https://staging.example.com/health || exit 1
+  dependencies:
+    - deploy-staging
+  only:
+    - develop
+    - main
+    - master
+
+# Manual approval gate for production
+approve-production:
+  stage: staging
+  image: alpine:latest
+  tags:
+    - docker
+    - self-hosted
+  script:
+    - echo "Production deployment approved by $GITLAB_USER_NAME"
+    - echo "Commit: $CI_COMMIT_SHORT_SHA"
+    - echo "Pipeline: $CI_PIPELINE_URL"
+  when: manual
+  allow_failure: false
+  dependencies: []
+  only:
+    - main
+    - master
+    - tags
+
+# Deploy to production (manual trigger required)
+deploy-production:
+  stage: production
+  image: python:3.11
+  tags:
+    - docker
+    - self-hosted
+  before_script:
+    - pip install ansible
+    - eval $(ssh-agent -s)
+    - echo "$DEPLOYMENT_SSH_KEY" | ssh-add -
+    - mkdir -p ~/.ssh
+    - echo "$DEPLOYMENT_SSH_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+  script:
+    - echo "Deploying to production environment"
+    - echo "Approved by: $GITLAB_USER_NAME"
+    - ansible-playbook
+        -i inventory/production
+        --extra-vars "version=${CI_COMMIT_SHORT_SHA}"
+        --extra-vars "environment=production"
+        --extra-vars "deployed_by=${GITLAB_USER_NAME}"
+        playbooks/deploy.yml
+  environment:
+    name: production
+    url: https://example.com
+    on_stop: stop-production
+  dependencies:
+    - build
+    - approve-production
+  only:
+    - main
+    - master
+    - tags
+
+# Health check production
+verify-production:
+  stage: production
+  image: curlimages/curl:latest
+  tags:
+    - docker
+    - self-hosted
+  script:
+    - echo "Verifying production deployment"
+    - sleep 15
+    - curl --fail --retry 10 --retry-delay 15 https://example.com/health || exit 1
+  dependencies:
+    - deploy-production
+  only:
+    - main
+    - master
+    - tags
+
+# Notification job (success)
+notify-success:
+  stage: production
+  image: alpine:latest
+  tags:
+    - docker
+    - self-hosted
+  script:
+    - echo "Deployment successful"
+    - echo "Version ${CI_COMMIT_SHORT_SHA} deployed to production"
+    - echo "Deployed by: $GITLAB_USER_NAME"
+    # Add webhook notification, Slack, email, etc.
+  when: on_success
+  dependencies: []
+  only:
+    - main
+    - master
+    - tags
+
+# Notification job (failure)
+notify-failure:
+  stage: production
+  image: alpine:latest
+  tags:
+    - docker
+    - self-hosted
+  script:
+    - echo "Deployment FAILED"
+    - echo "Pipeline: $CI_PIPELINE_URL"
+    - echo "Commit: $CI_COMMIT_SHORT_SHA"
+    # Add alert notification
+  when: on_failure
+  dependencies: []
+  only:
+    - main
+    - master
+    - tags
+
+# Rollback production (manual trigger)
+rollback-production:
+  stage: rollback
+  image: python:3.11
+  tags:
+    - docker
+    - self-hosted
+  before_script:
+    - pip install ansible
+    - eval $(ssh-agent -s)
+    - echo "$DEPLOYMENT_SSH_KEY" | ssh-add -
+    - mkdir -p ~/.ssh
+    - echo "$DEPLOYMENT_SSH_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+  script:
+    - echo "Rolling back production deployment"
+    - echo "Triggered by: $GITLAB_USER_NAME"
+    - ansible-playbook
+        -i inventory/production
+        --extra-vars "environment=production"
+        --extra-vars "rollback=true"
+        playbooks/rollback.yml
+  environment:
+    name: production
+    action: rollback
+  when: manual
+  allow_failure: false
+  dependencies: []
+  only:
+    - main
+    - master
+    - tags
+
+# Stop staging environment
+stop-staging:
+  stage: staging
+  image: python:3.11
+  tags:
+    - docker
+    - self-hosted
+  before_script:
+    - pip install ansible
+  script:
+    - echo "Stopping staging environment"
+    - ansible-playbook
+        -i inventory/staging
+        --extra-vars "environment=staging"
+        playbooks/stop.yml
+  environment:
+    name: staging
+    action: stop
+  when: manual
+  dependencies: []
+
+# Stop production environment (extreme caution)
+stop-production:
+  stage: production
+  image: python:3.11
+  tags:
+    - docker
+    - self-hosted
+  before_script:
+    - pip install ansible
+  script:
+    - echo "STOPPING PRODUCTION ENVIRONMENT"
+    - echo "Triggered by: $GITLAB_USER_NAME"
+    - echo "WARNING: This will take production offline"
+    - sleep 5
+    - ansible-playbook
+        -i inventory/production
+        --extra-vars "environment=production"
+        playbooks/stop.yml
+  environment:
+    name: production
+    action: stop
+  when: manual
+  allow_failure: false
+  dependencies: []
+  only:
+    - main
+    - master

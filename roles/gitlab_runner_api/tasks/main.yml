@@ -82,10 +82,70 @@
     creates: /usr/bin/gitlab-runner
   delegate_to: gitlab_runner_container
 
+- name: Add gitlab-runner user to docker group
+  ansible.builtin.user:
+    name: gitlab-runner
+    groups: docker
+    append: true
+  delegate_to: gitlab_runner_container
+
+- name: Check if runner is already registered
+  ansible.builtin.command:
+    cmd: gitlab-runner list
+  register: runner_list
+  changed_when: false
+  failed_when: false
+  delegate_to: gitlab_runner_container
+
+- name: Register GitLab Runner with Docker executor
+  ansible.builtin.command:
+    cmd: >
+      gitlab-runner register
+      --non-interactive
+      --url "{{ gitlab_runner_url }}"
+      --registration-token "{{ gitlab_runner_registration_token }}"
+      --executor "docker"
+      --docker-image "{{ gitlab_runner_docker_image | default('debian:12') }}"
+      --docker-privileged="{{ gitlab_runner_docker_privileged | default(true) | string }}"
+      --docker-volumes "{{ gitlab_runner_docker_volumes | default(['/cache', '/certs/client']) | join(',') }}"
+      --docker-pull-policy "{{ gitlab_runner_docker_pull_policy | default('if-not-present') }}"
+      --tag-list "{{ gitlab_runner_tags | default(['docker', 'linux', 'self-hosted']) | join(',') }}"
+      --name "{{ gitlab_runner_hostname }}"
+      --run-untagged="false"
+      --locked="false"
+  when: runner_list.stdout is not search(gitlab_runner_hostname)
+  delegate_to: gitlab_runner_container
+  no_log: true
+
+- name: Configure runner concurrency
+  ansible.builtin.lineinfile:
+    path: /etc/gitlab-runner/config.toml
+    regexp: '^concurrent\s*='
+    line: "concurrent = {{ gitlab_runner_concurrent | default(4) }}"
+  delegate_to: gitlab_runner_container
+  notify: restart gitlab-runner
+
+- name: Ensure GitLab Runner service is enabled and started
+  ansible.builtin.systemd:
+    name: gitlab-runner
+    enabled: true
+    state: started
+  delegate_to: gitlab_runner_container
+
+- name: Verify runner registration
+  ansible.builtin.command:
+    cmd: gitlab-runner verify
+  register: runner_verify
+  changed_when: false
+  delegate_to: gitlab_runner_container
+
 - name: Display configuration
   ansible.builtin.debug:
     msg:
-      - "GitLab Runner {{ gitlab_runner_version }} deployed"
+      - "GitLab Runner {{ gitlab_runner_version }} deployed and registered"
       - "  Container ID: {{ gitlab_runner_container_id }}"
       - "  IP: {{ gitlab_runner_ip_address }}"
-      - "  Note: Register with: gitlab-runner register --url {{ gitlab_runner_url }} --token <your-token>"
+      - "  Executor: docker"
+      - "  Tags: {{ gitlab_runner_tags | default(['docker', 'linux', 'self-hosted']) | join(', ') }}"
+      - "  Concurrent jobs: {{ gitlab_runner_concurrent | default(4) }}"
+      - "  Registration status: {{ 'Verified ✓' if runner_verify.rc == 0 else 'Failed ✗' }}"

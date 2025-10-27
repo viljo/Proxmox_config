@@ -11,5 +11,19 @@ gitlab_runner_dns_servers:
 gitlab_runner_root_password: "{{ vault_gitlab_runner_root_password }}"
 gitlab_runner_coordinator_url: "https://gitlab.{{ public_domain }}"
 gitlab_runner_registration_token: "{{ vault_gitlab_runner_registration_token }}"
+
+# Runner configuration
+gitlab_runner_executor: docker
+gitlab_runner_concurrent: 4
 gitlab_runner_tags:
-  - shell
+  - docker
+  - linux
+  - self-hosted
+
+# Docker executor configuration
+gitlab_runner_docker_image: "debian:12"
+gitlab_runner_docker_privileged: true
+gitlab_runner_docker_volumes:
+  - "/cache"
+  - "/certs/client"
+gitlab_runner_docker_pull_policy: "if-not-present"

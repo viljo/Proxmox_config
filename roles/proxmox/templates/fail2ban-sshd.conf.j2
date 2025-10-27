@@ -1,0 +1,26 @@
+# Fail2ban SSH Jail Configuration
+# Managed by Ansible - DO NOT EDIT MANUALLY
+# Feature: 003-external-ssh-admin
+# Last updated: {{ ansible_date_time.iso8601 }}
+#
+# This jail protects SSH service from brute force attacks
+
+[sshd]
+enabled = true
+port    = {{ proxmox_ssh_port | default('22') }}
+filter  = sshd
+logpath = %(sshd_log)s
+backend = %(sshd_backend)s
+
+# Override default values for SSH-specific tuning
+maxretry = {{ proxmox_fail2ban_sshd_maxretry | default(proxmox_fail2ban_maxretry | default(5)) }}
+findtime = {{ proxmox_fail2ban_sshd_findtime | default(proxmox_fail2ban_findtime | default(600)) }}
+bantime  = {{ proxmox_fail2ban_sshd_bantime | default(proxmox_fail2ban_bantime | default(3600)) }}
+
+# Ban action
+action = %(action_)s
+
+# Additional whitelist for SSH (merged with global ignoreip)
+{% if proxmox_fail2ban_sshd_ignoreip | default([]) | length > 0 %}
+ignoreip = {{ (proxmox_fail2ban_ignoreip | default([]) + proxmox_fail2ban_sshd_ignoreip | default([])) | unique | join(' ') }}
+{% endif %}
