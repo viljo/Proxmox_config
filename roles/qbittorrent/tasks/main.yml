@@ -185,15 +185,30 @@
     - qbittorrent_container_conf.stat.exists
   changed_when: false
 
-- name: Deploy qBittorrent systemd service
+- name: Generate qBittorrent systemd service file
   ansible.builtin.template:
     src: qbittorrent.service.j2
-    dest: "{{ qbittorrent_rootfs_path }}/etc/systemd/system/qbittorrent.service"
+    dest: /tmp/qbittorrent.service
     owner: root
     group: root
     mode: "0644"
   when: qbittorrent_container_conf.stat.exists
+
+- name: Deploy qBittorrent systemd service to container
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ qbittorrent_container_id }}
+      /tmp/qbittorrent.service
+      /etc/systemd/system/qbittorrent.service
+  when: not ansible_check_mode and qbittorrent_container_conf.stat.exists
   notify: restart qbittorrent
+
+- name: Reload systemd daemon in container
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ qbittorrent_container_id }} -- systemctl daemon-reload
+  when: not ansible_check_mode and qbittorrent_container_conf.stat.exists
+  changed_when: false
 
 - name: Enable qBittorrent service
   ansible.builtin.command:
