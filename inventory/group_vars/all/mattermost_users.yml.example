@@ -1,0 +1,45 @@
+---
+# Example Mattermost user list for bulk provisioning
+# Copy to mattermost_users.yml and customize
+#
+# Usage:
+#   ansible-playbook playbooks/provision_mattermost_users.yml \
+#     -e "@inventory/group_vars/all/mattermost_users.yml"
+
+users:
+  # Admin users
+  - email: anders@viljo.se
+    username: anders
+    admin: true
+    # password: optional - will be generated if not provided
+
+  - email: admin@example.com
+    username: admin
+    admin: true
+
+  # Regular users
+  - email: john.doe@example.com
+    username: johndoe
+    admin: false
+
+  - email: jane.smith@example.com
+    username: janesmith
+    admin: false
+
+  - email: developer@example.com
+    username: dev1
+    admin: false
+
+  # User with predefined password (not recommended)
+  - email: testuser@example.com
+    username: testuser
+    admin: false
+    password: "TestPassword123!"  # Only for testing!
+
+# Note: After running the playbook, credentials will be saved to:
+# /tmp/mattermost_user_credentials_<timestamp>.yml
+#
+# IMPORTANT:
+# - Share passwords securely with users
+# - Delete the credentials file after sharing
+# - Consider using ansible-vault for sensitive data
