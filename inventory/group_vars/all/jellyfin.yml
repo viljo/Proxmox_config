@@ -1,6 +1,6 @@
 ---
 jellyfin_domain: "{{ public_domain }}"
-jellyfin_container_id: 56
+jellyfin_container_id: 156
 jellyfin_hostname: jellyfin
 jellyfin_bridge: "{{ public_bridge }}"
 jellyfin_ip_address: 172.16.10.56
