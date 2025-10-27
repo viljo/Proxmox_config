@@ -43,9 +43,63 @@ grep -E "(password|secret|api_key|token):" inventory/group_vars/all/yourservice.
 
 ---
 
+## MANDATORY REQUIREMENTS FOR ALL SERVICES
+
+**CRITICAL**: Every service deployment MUST include these three requirements:
+
+1. **SSO via Keycloak** (GitLab.com OAuth backend)
+2. **DNS entry at Loopia** (automated via loopia_dns role)
+3. **HTTPS certificate** (automated via Traefik + Let's Encrypt)
+
+**These are NOT OPTIONAL.** They ensure security, discoverability, and usability.
+
+**See detailed implementation guide**: [SERVICE_IMPLEMENTATION_PIPELINE.md](SERVICE_IMPLEMENTATION_PIPELINE.md)
+
+**When implemented:**
+- DNS Entry: Step 1 (before deployment)
+- HTTPS Certificate: Step 1 (after container created)
+- SSO Integration: Step 3.5 (after automation validation, before backup planning)
+
+---
+
 ## Step 1: Implement Service (Initial Deployment)
 
 **Objective**: Create working Ansible automation for the service
+
+### MANDATORY: Add DNS and Traefik Entries First
+
+**BEFORE creating the Ansible role**, add these mandatory entries:
+
+1. **Add DNS entry** to `inventory/group_vars/all/main.yml`:
+   ```yaml
+   loopia_dns_records:
+     # ... existing entries ...
+     - host: servicename  # Add your service
+       ttl: 600
+   ```
+
+2. **Add Traefik service** to `inventory/group_vars/all/main.yml`:
+   ```yaml
+   traefik_services:
+     # ... existing entries ...
+     - name: servicename
+       host: "servicename.{{ public_domain }}"
+       container_id: "{{ servicename_container_id }}"
+       port: 8080  # Internal service port
+   ```
+
+3. **Deploy DNS configuration**:
+   ```bash
+   ansible-playbook -i inventory/hosts.yml playbooks/loopia-dns-deploy.yml --ask-vault-pass
+   ```
+
+4. **Verify DNS resolves**:
+   ```bash
+   dig +short servicename.viljo.se @1.1.1.1
+   # Should return your public IP
+   ```
+
+**Why this order?** DNS must exist before Traefik can request HTTPS certificate.
 
 ### Tasks
 
@@ -93,14 +147,40 @@ grep -E "(password|secret|api_key|token):" inventory/group_vars/all/yourservice.
        status_code: 200
    ```
 
+6. **Deploy Traefik configuration** (enables HTTPS):
+   ```bash
+   ansible-playbook -i inventory/hosts.yml playbooks/traefik-deploy.yml --ask-vault-pass
+   ```
+
+7. **Monitor certificate issuance** (~1-3 minutes):
+   ```bash
+   pct exec 167 -- docker logs -f traefik
+   # Look for: "Obtained certificate for servicename.viljo.se"
+   ```
+
+8. **Verify HTTPS access**:
+   ```bash
+   curl -I https://servicename.viljo.se
+   # Should return HTTP/2 200 with valid certificate
+   ```
+
 ### Acceptance Criteria
 
+**Ansible Automation:**
 - [ ] Ansible role created with all required files
 - [ ] Deployment playbook runs without errors
 - [ ] Container created via Proxmox API
 - [ ] Service starts automatically
 - [ ] Health check passes
 - [ ] No manual steps required
+
+**MANDATORY REQUIREMENTS (Must be completed in Step 1):**
+- [ ] **DNS entry added** to inventory/group_vars/all/main.yml
+- [ ] **DNS resolves correctly**: `dig +short servicename.viljo.se` returns public IP
+- [ ] **Traefik service entry added** to inventory/group_vars/all/main.yml
+- [ ] **HTTPS certificate issued**: Service accessible via https://servicename.viljo.se
+- [ ] **No browser security warnings**: Certificate valid and trusted
+- [ ] **SSO will be configured in Step 3.5** (after automation validation)
 
 ### Documentation Required
 
@@ -288,6 +368,222 @@ ansible-playbook -i inventory/hosts.yml playbooks/<service>-deploy.yml \
 **Problem**: Playbook not idempotent
 - **Cause**: Tasks always report "changed"
 - **Fix**: Use `changed_when: false` or check before modify
+
+---
+
+## Step 3.5: SSO Integration (MANDATORY)
+
+**Objective**: Configure Single Sign-On via Keycloak for service authentication
+
+**This is a MANDATORY requirement.** No service is production-ready without SSO.
+
+### Why SSO Integration Happens Here
+
+SSO configuration requires:
+- Working service (Step 1 complete)
+- Service accessible via HTTPS (Step 1 complete)
+- Validated automation (Step 3 complete)
+- Stable service endpoint (before backups in Step 4)
+
+### Implementation Approaches
+
+**Choose the approach based on service capabilities:**
+
+#### Approach A: Native OIDC Support (PREFERRED)
+
+Use when service has built-in Keycloak/OIDC integration.
+
+**Examples**: Nextcloud, GitLab, Jellyfin, Coolify, Grafana
+
+**Steps**:
+
+1. **Create Keycloak Client**:
+   ```bash
+   # Open Keycloak admin console
+   open https://keycloak.viljo.se
+   # Login with admin credentials (from vault)
+
+   # Navigate: Clients → Create client
+   # Client ID: servicename
+   # Client Type: OpenID Connect
+   # Client authentication: ON (confidential)
+   # Valid redirect URIs: https://servicename.viljo.se/*
+   # (Add service-specific callback URLs)
+   ```
+
+2. **Configure Client Mappers** (in Keycloak):
+   - Add "username" mapper: `preferred_username` claim
+   - Add "email verified" mapper: `email_verified` claim
+   - See [SERVICE_IMPLEMENTATION_PIPELINE.md](SERVICE_IMPLEMENTATION_PIPELINE.md) Section B, Step A.3
+
+3. **Store Client Secret**:
+   ```bash
+   # Edit vault
+   ansible-vault edit inventory/group_vars/all/secrets.yml --vault-password-file=.vault_pass.txt
+
+   # Add:
+   # vault_servicename_oidc_client_secret: "paste-secret-from-keycloak"
+   ```
+
+4. **Configure Service for OIDC**:
+   - Add OIDC configuration to service
+   - Use discovery endpoint: `https://keycloak.viljo.se/realms/master/.well-known/openid-configuration`
+   - Client ID: `servicename`
+   - Client Secret: `{{ vault_servicename_oidc_client_secret }}`
+   - Enable auto-provisioning (create users on first login)
+
+5. **Test SSO Login Flow**:
+   ```bash
+   # Open in incognito mode
+   open https://servicename.viljo.se
+
+   # Click SSO login button
+   # Should redirect to Keycloak → GitLab.com
+   # Authenticate with GitLab credentials
+   # Should return to service, logged in
+   ```
+
+6. **Verify User Provisioning**:
+   - Login via SSO
+   - Check user created in service
+   - Verify username and email populated
+   - Grant admin access if needed (service-specific command)
+
+#### Approach B: oauth2-proxy Forward Auth
+
+Use when service lacks native OIDC support.
+
+**Examples**: Legacy services, services without OAuth support
+
+**Steps**:
+
+1. **Create Keycloak Client** (same as Approach A, step 1)
+   - Client ID: `servicename-proxy` (distinguish from service)
+   - Redirect URI: `https://servicename.viljo.se/oauth2/callback`
+
+2. **Store Client Secret in Vault** (same as Approach A, step 3)
+
+3. **Configure oauth2-proxy** for service:
+   - Add to oauth2-proxy configuration
+   - Configure forward auth to service backend
+   - See [SERVICE_IMPLEMENTATION_PIPELINE.md](SERVICE_IMPLEMENTATION_PIPELINE.md) Section B, Approach B
+
+4. **Update Traefik Middleware**:
+   ```yaml
+   # inventory/group_vars/all/main.yml
+   traefik_services:
+     - name: servicename
+       # ... existing config ...
+       middlewares:
+         - "oauth2-proxy-servicename@file"
+   ```
+
+5. **Deploy oauth2-proxy and Traefik**:
+   ```bash
+   ansible-playbook -i inventory/hosts.yml playbooks/oauth2-proxy-deploy.yml --ask-vault-pass
+   ansible-playbook -i inventory/hosts.yml playbooks/traefik-deploy.yml --ask-vault-pass
+   ```
+
+6. **Test Forward Auth Flow**:
+   - Access service
+   - Should auto-redirect to oauth2-proxy
+   - Login via Keycloak → GitLab.com
+   - Should return to service with auth headers
+
+### Detailed Implementation Guide
+
+**For complete step-by-step instructions, see**:
+[SERVICE_IMPLEMENTATION_PIPELINE.md](SERVICE_IMPLEMENTATION_PIPELINE.md) - Section B: Implementation Steps, Step 3
+
+This comprehensive guide includes:
+- Keycloak client creation procedures
+- Client mapper configuration
+- Service-specific OIDC configuration examples
+- Troubleshooting common issues
+- Testing procedures
+
+### Acceptance Criteria
+
+**SSO Configuration:**
+- [ ] **Keycloak client created** with correct settings
+- [ ] **Client secret stored in vault** (vault_servicename_oidc_client_secret)
+- [ ] **Client mappers configured** (username, email_verified)
+- [ ] **Service configured for OIDC** (discovery endpoint or manual endpoints)
+- [ ] **Auto-provisioning enabled** (if service supports)
+
+**SSO Testing:**
+- [ ] **SSO login button appears** on service login page
+- [ ] **Redirect to Keycloak works** (no errors)
+- [ ] **GitLab.com authentication works** (can login)
+- [ ] **Return to service successful** (no redirect loops)
+- [ ] **User auto-provisioned** (user created on first login)
+- [ ] **User attributes populated** (username, email correct)
+- [ ] **Admin access granted** (if needed, via service-specific command)
+
+**Documentation:**
+- [ ] **SSO configuration documented** in service README
+- [ ] **Admin user grant procedure documented**
+- [ ] **Client secret location documented** (vault variable name)
+- [ ] **Troubleshooting steps added** for common SSO issues
+
+### Common Issues and Solutions
+
+**Issue**: "invalid_redirect_uri" error
+- **Fix**: Verify redirect URI in Keycloak matches service callback URL exactly
+- Include wildcards if needed: `https://servicename.viljo.se/*`
+
+**Issue**: User authenticated but no username/email
+- **Fix**: Add username and email_verified mappers in Keycloak client
+
+**Issue**: "OIDC provider not found"
+- **Fix**: Verify discovery endpoint accessible from service container
+- Test: `curl https://keycloak.viljo.se/realms/master/.well-known/openid-configuration`
+
+**Issue**: Redirect loop
+- **Fix**: Clear browser cookies, verify session storage in service works
+
+**For complete troubleshooting guide, see**:
+[SERVICE_IMPLEMENTATION_PIPELINE.md](SERVICE_IMPLEMENTATION_PIPELINE.md) - Section B, Step 3, "SSO Implementation Troubleshooting"
+
+### Exception Handling
+
+**If service truly cannot support SSO** (rare):
+
+1. **Document why SSO is not possible**:
+   - Technical limitation (no OIDC support, no reverse proxy support)
+   - Service type (API-only, no web UI)
+   - Legacy system constraints
+
+2. **Propose alternative authentication**:
+   - API keys with rotation policy
+   - mTLS certificates
+   - IP allowlisting
+
+3. **Document security compensating controls**:
+   - Strong password policy
+   - MFA if available
+   - Audit logging
+   - Network isolation
+
+4. **Get explicit approval** before proceeding
+
+5. **Add to technical debt register** for future remediation
+
+**Exception process documented in**:
+[SERVICE_IMPLEMENTATION_PIPELINE.md](SERVICE_IMPLEMENTATION_PIPELINE.md) - Section A, "Exception Handling"
+
+### Time Estimate
+
+- **Approach A (Native OIDC)**: 15-30 minutes
+- **Approach B (oauth2-proxy)**: 30-45 minutes
+- **First time**: Add 15-30 minutes for learning
+- **Troubleshooting**: Budget extra 15-30 minutes if issues arise
+
+### Next Step
+
+Once SSO is configured and tested, proceed to Step 4 (Backup Planning).
+
+**Do not proceed without completing SSO integration.** This is a mandatory gate.
 
 ---
 
