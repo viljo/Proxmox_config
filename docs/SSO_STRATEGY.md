@@ -49,8 +49,9 @@ User → Service → Traefik → Authentication Layer → Backend
 - **SSO Options**:
   - Could use oauth2-proxy forward auth (protect the URL)
   - Limited native OAuth support
-- **Current Status**: ⚠️ No SSO (native authentication)
-- **Recommendation**: Consider oauth2-proxy forward auth if access control is needed
+- **Current Status**: ✅ Accessible (native authentication, no SSO)
+- **HTTPS Access**: Configured via Traefik (2025-10-27)
+- **Note**: oauth2-proxy forward auth available but not enabled (would create double authentication)
 
 ## SSO Components
 
@@ -146,15 +147,17 @@ vault_oauth2_proxy_cookie_secret: <Random Secret>
 |---------|-------------|--------------|----------|---------|
 | GitLab | N/A (IdP) | N/A | N/A | N/A |
 | Nextcloud | ✅ Yes (user_oidc) | ✅ Yes | ✅ Yes | ✅ Implemented |
-| Webtop | ❌ No | ✅ Yes | ❌ No | ⏳ Optional |
+| Webtop | ❌ No | ✅ Available | ❌ No | ✅ Accessible (native auth) |
 
 ## Next Steps
 
 1. ✅ **COMPLETED: Nextcloud SSO** - Implemented via user_oidc app (2025-10-27)
-2. **Test Nextcloud SSO** - Verify authentication flow with anders@viljo.se
-3. **Evaluate Webtop** - Determine if forward auth is needed
-4. **Monitor Keycloak** - Ensure performance and reliability
-5. **Document user onboarding** - How to add new users to GitLab.com org
+2. ✅ **COMPLETED: Webtop HTTPS Access** - Added Traefik routing and DNS (2025-10-27)
+3. **Test Nextcloud SSO** - Verify authentication flow with anders@viljo.se
+4. **Test Webtop HTTPS Access** - Verify browser.viljo.se is accessible
+5. **Evaluate Webtop Forward Auth** - Determine if oauth2-proxy protection is needed
+6. **Monitor Keycloak** - Ensure performance and reliability
+7. **Document user onboarding** - How to add new users to GitLab.com org
 
 ## Maintenance Tasks
 
