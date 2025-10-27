@@ -18,6 +18,7 @@
 - [ ] Health checks added
 - [ ] Role README.md created
 - [ ] Vault variables documented
+- [ ] **Service added to `services.yml` and links page updated** (if public-facing)
 - [ ] Initial deployment successful
 
 **Deployment Time**: _____ minutes

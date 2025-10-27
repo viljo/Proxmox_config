@@ -41,16 +41,6 @@ infrastructure_services:
     has_api: true
     api_note: "Realms API requires authentication"
 
-  - name: Mattermost
-    slug: mattermost
-    icon: "💬"
-    description: Team collaboration and chat platform
-    subdomain: mattermost
-    container_id: 163
-    status: deployed_working
-    has_api: true
-    api_note: "API may not respond until fully initialized"
-
   - name: Webtop
     slug: webtop
     icon: "🌐"
@@ -69,25 +59,59 @@ infrastructure_services:
     status: deployed_working
     spec: specs/completed/010-links-portal
 
-  # ==================================================================
-  # DEPLOYED BUT NON-WORKING - Running but not accessible/functional
-  # ==================================================================
-
-  # Currently none - Redis is infrastructure, not a user-facing service
-
-  # ==================================================================
-  # PLANNED - Not yet deployed
-  # ==================================================================
-
   - name: Jellyfin
     slug: jellyfin
     icon: "🎬"
     description: Media streaming and management server
     subdomain: jellyfin
     container_id: "{{ jellyfin_container_id }}"
-    status: planned
+    status: deployed_working
     spec: specs/planned/009-jellyfin-media-server
-    priority: P1
+
+  - name: qBittorrent
+    slug: qbittorrent
+    icon: "🌊"
+    description: Torrent client and download manager
+    subdomain: qbittorrent
+    container_id: "{{ qbittorrent_container_id }}"
+    status: deployed_working
+    spec: specs/planned/009-bittorrent-client
+
+  - name: Coolify
+    slug: coolify
+    icon: "🚀"
+    description: Self-hosted PaaS (Heroku-like platform)
+    subdomain: coolify
+    container_id: "{{ coolify_container_id }}"
+    status: deployed_working
+    spec: specs/planned/002-docker-platform-selfservice
+
+  - name: Jitsi Meet
+    slug: jitsi
+    icon: "📹"
+    description: Video conferencing and online meetings
+    subdomain: meet
+    container_id: "{{ jitsi_container_id }}"
+    status: deployed_working
+    spec: specs/001-jitsi-server
+
+  - name: Zabbix
+    slug: zabbix
+    icon: "📊"
+    description: Enterprise infrastructure monitoring and alerting
+    subdomain: zabbix
+    container_id: "{{ zabbix_container_id }}"
+    status: deployed_working
+
+  # ==================================================================
+  # DEPLOYED BUT NON-WORKING - Running but not accessible/functional
+  # ==================================================================
+
+  # Currently none
+
+  # ==================================================================
+  # PLANNED - Not yet deployed
+  # ==================================================================
 
   - name: Home Assistant
     slug: homeassistant
@@ -133,35 +157,6 @@ infrastructure_services:
     container_id: "{{ zipline_container_id }}"
     status: planned
     priority: P3
-
-  - name: qBittorrent
-    slug: qbittorrent
-    icon: "🌊"
-    description: Torrent client and download manager
-    subdomain: qbittorrent
-    container_id: "{{ qbittorrent_container_id }}"
-    status: planned
-    spec: specs/planned/009-bittorrent-client
-    priority: P1
-
-  - name: Coolify
-    slug: coolify
-    icon: "🚀"
-    description: Self-hosted Heroku/Netlify alternative for Docker deployments
-    subdomain: coolify
-    container_id: "{{ coolify_container_id }}"
-    status: planned
-    spec: specs/planned/002-docker-platform-selfservice
-    priority: P1
-
-  - name: Zabbix
-    slug: zabbix
-    icon: "📊"
-    description: Enterprise infrastructure monitoring and alerting
-    subdomain: zabbix
-    container_id: "{{ zabbix_container_id }}"
-    status: planned
-    priority: P2
 
   - name: WireGuard VPN
     slug: wireguard

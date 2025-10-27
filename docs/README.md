@@ -52,6 +52,7 @@ Comprehensive DR procedures, testing reports, and recovery automation.
 #### Production Readiness
 - **[New Service Workflow](NEW_SERVICE_WORKFLOW.md)** - 9-step TDD workflow for new services (96KB)
 - **[Service Checklist Template](SERVICE_CHECKLIST_TEMPLATE.md)** - Track TDD workflow progress
+- **[Links Page Maintenance](LINKS_PAGE_MAINTENANCE.md)** - REQUIRED: Keep service directory current
 - **[TDD Workflow Status](TDD_WORKFLOW_STATUS.md)** - Completion status for all 11 services (36KB)
 - **[Vault Variables](VAULT_VARIABLES.md)** - Required vault variables (3KB)
 - **[Vault Completion Checklist](VAULT_COMPLETION_CHECKLIST.md)** - Complete vault configuration (21KB)

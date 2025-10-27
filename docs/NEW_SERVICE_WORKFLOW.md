@@ -110,6 +110,48 @@ grep -E "(password|secret|api_key|token):" inventory/group_vars/all/yourservice.
 - [ ] Port mappings documented
 - [ ] **Service configuration committed to git** (`inventory/group_vars/all/<service>.yml`)
 - [ ] **Secrets added to Vault** (no hardcoded credentials in tracked files)
+- [ ] **Links page updated** (add service to `inventory/group_vars/all/services.yml` and redeploy)
+
+### Links Page Update (REQUIRED for Public-Facing Services)
+
+**⚠️ CRITICAL**: If your service is publicly accessible, you **MUST** update the links page.
+
+**Quick Steps**:
+
+1. **Add service to services registry**:
+   ```bash
+   vi inventory/group_vars/all/services.yml
+   ```
+
+2. **Add entry in deployed_working section**:
+   ```yaml
+   - name: Your Service
+     slug: servicename
+     icon: "🚀"
+     description: Brief service description
+     subdomain: servicename
+     container_id: "{{ servicename_container_id }}"
+     status: deployed_working
+     spec: specs/path/to/spec
+   ```
+
+3. **Redeploy links portal**:
+   ```bash
+   ansible-playbook -i inventory/hosts.yml playbooks/demo-site-deploy.yml
+   ```
+
+4. **Verify service appears**:
+   ```bash
+   open https://links.viljo.se
+   ```
+
+5. **Commit changes**:
+   ```bash
+   git add inventory/group_vars/all/services.yml
+   git commit -m "Add [Service] to links page"
+   ```
+
+**See**: [Links Page Maintenance Guide](LINKS_PAGE_MAINTENANCE.md) for complete details.
 
 ---
 
