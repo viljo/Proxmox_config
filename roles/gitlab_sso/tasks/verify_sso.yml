@@ -1,0 +1,51 @@
+---
+# Verify GitLab SSO Configuration
+
+- name: Wait for GitLab to become ready after reconfiguration
+  ansible.builtin.uri:
+    url: "{{ gitlab_sso_public_url }}/users/sign_in"
+    method: GET
+    status_code: [200, 302]
+    validate_certs: yes
+    timeout: 10
+  register: gitlab_health_check
+  retries: 12
+  delay: 10
+  until: gitlab_health_check.status in [200, 302]
+
+- name: Fetch GitLab login page
+  ansible.builtin.uri:
+    url: "{{ gitlab_sso_public_url }}/users/sign_in"
+    method: GET
+    return_content: yes
+    validate_certs: yes
+  register: gitlab_login_page
+
+- name: Check if OIDC login button is present
+  ansible.builtin.set_fact:
+    sso_button_found: "{{ 'openid_connect' in gitlab_login_page.content or gitlab_sso_provider_label in gitlab_login_page.content }}"
+
+- name: Display SSO verification result
+  ansible.builtin.debug:
+    msg:
+      - "SSO Configuration Verification:"
+      - "  Login page accessible: {{ gitlab_health_check.status == 200 or gitlab_health_check.status == 302 }}"
+      - "  SSO button detected: {{ sso_button_found }}"
+      - ""
+      - "{% if sso_button_found %}SSO integration appears to be working correctly!{% else %}Warning: SSO button not detected on login page{% endif %}"
+
+- name: Verify Keycloak OIDC discovery endpoint
+  ansible.builtin.uri:
+    url: "{{ gitlab_sso_issuer }}/.well-known/openid-configuration"
+    method: GET
+    status_code: 200
+    validate_certs: yes
+  register: oidc_discovery
+
+- name: Display OIDC discovery status
+  ansible.builtin.debug:
+    msg:
+      - "Keycloak OIDC Discovery:"
+      - "  Endpoint: {{ gitlab_sso_issuer }}/.well-known/openid-configuration"
+      - "  Status: {{ oidc_discovery.status }}"
+      - "  Issuer: {{ (oidc_discovery.json | default({})).issuer | default('N/A') }}"

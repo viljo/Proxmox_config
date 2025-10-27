@@ -1,0 +1,89 @@
+---
+# Configure GitLab OIDC integration with Keycloak
+
+- name: Add GitLab container to inventory
+  ansible.builtin.add_host:
+    name: gitlab_container
+    ansible_host: "{{ gitlab_sso_ip_address }}"
+    ansible_user: root
+    ansible_password: "{{ gitlab_sso_root_password }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand="ssh -W %h:%p -q root@{{ hostvars[inventory_hostname].ansible_host }}"'
+    groups: containers
+
+- name: Check if GitLab config file exists
+  ansible.builtin.stat:
+    path: "{{ gitlab_config_file }}"
+  delegate_to: gitlab_container
+  register: gitlab_config_stat
+
+- name: Fail if GitLab config file does not exist
+  ansible.builtin.fail:
+    msg: "GitLab configuration file not found at {{ gitlab_config_file }}"
+  when: not gitlab_config_stat.stat.exists
+
+- name: Backup current GitLab configuration
+  ansible.builtin.copy:
+    src: "{{ gitlab_config_file }}"
+    dest: "{{ gitlab_config_file }}.backup.{{ ansible_date_time.epoch }}"
+    remote_src: yes
+  delegate_to: gitlab_container
+
+- name: Check if OmniAuth is already configured
+  ansible.builtin.shell:
+    cmd: grep -q "gitlab_rails\['omniauth_enabled'\]" "{{ gitlab_config_file }}"
+  delegate_to: gitlab_container
+  register: omniauth_check
+  failed_when: false
+  changed_when: false
+
+- name: Remove existing OmniAuth configuration if present
+  ansible.builtin.shell:
+    cmd: |
+      sed -i '/gitlab_rails\[.omniauth_enabled.\]/,/gitlab_rails\[.omniauth_providers.\].*\]/d' "{{ gitlab_config_file }}"
+  delegate_to: gitlab_container
+  when: omniauth_check.rc == 0
+
+- name: Configure GitLab OmniAuth OIDC provider
+  ansible.builtin.blockinfile:
+    path: "{{ gitlab_config_file }}"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - OIDC SSO"
+    block: |
+      # OmniAuth Configuration for Keycloak OIDC
+      gitlab_rails['omniauth_enabled'] = true
+      gitlab_rails['omniauth_allow_single_sign_on'] = ['openid_connect']
+      gitlab_rails['omniauth_block_auto_created_users'] = {{ gitlab_sso_block_auto_created_users | lower }}
+      gitlab_rails['omniauth_auto_link_ldap_user'] = {{ gitlab_sso_auto_link_ldap_user | lower }}
+      gitlab_rails['omniauth_auto_link_saml_user'] = {{ gitlab_sso_auto_link_saml_user | lower }}
+
+      gitlab_rails['omniauth_providers'] = [
+        {
+          name: '{{ gitlab_sso_provider_name }}',
+          label: '{{ gitlab_sso_provider_label }}',
+          args: {
+            name: '{{ gitlab_sso_provider_name }}',
+            scope: {{ gitlab_sso_scopes | to_json }},
+            response_type: 'code',
+            issuer: '{{ gitlab_sso_issuer }}',
+            discovery: {{ gitlab_sso_discovery_enabled | lower }},
+            client_auth_method: 'query',
+            uid_field: '{{ gitlab_sso_uid_field }}',
+            send_scope_to_token_endpoint: 'false',
+            client_options: {
+              identifier: '{{ gitlab_sso_client_id }}',
+              secret: '{{ gitlab_keycloak_client_secret }}',
+              redirect_uri: '{{ gitlab_sso_redirect_uri }}'
+            }
+          }
+        }
+      ]
+  delegate_to: gitlab_container
+  notify: reconfigure gitlab
+
+- name: Display GitLab configuration status
+  ansible.builtin.debug:
+    msg:
+      - "GitLab OIDC configuration added to {{ gitlab_config_file }}"
+      - "  Provider: {{ gitlab_sso_provider_label }}"
+      - "  Client ID: {{ gitlab_sso_client_id }}"
+      - "  Issuer: {{ gitlab_sso_issuer }}"
+      - "  Redirect URI: {{ gitlab_sso_redirect_uri }}"

@@ -1,0 +1,43 @@
+---
+# Configure GitLab SSO via Keycloak OIDC
+
+- name: Display SSO configuration plan
+  ansible.builtin.debug:
+    msg:
+      - "Configuring GitLab SSO with Keycloak OIDC"
+      - "  GitLab: {{ gitlab_sso_ip_address }} ({{ gitlab_sso_public_url }})"
+      - "  Keycloak: {{ gitlab_sso_keycloak_ip_address }} ({{ gitlab_sso_keycloak_public_url }})"
+      - "  Client ID: {{ gitlab_sso_client_id }}"
+      - "  Provider: {{ gitlab_sso_provider_label }}"
+
+# Step 1: Configure Keycloak client for GitLab
+- name: Configure Keycloak OIDC client for GitLab
+  include_tasks: configure_keycloak_client.yml
+
+# Step 2: Configure GitLab OIDC integration
+- name: Configure GitLab OIDC integration
+  include_tasks: configure_gitlab_oidc.yml
+
+# Step 3: Verify SSO configuration
+- name: Verify SSO configuration
+  include_tasks: verify_sso.yml
+
+- name: Display completion message
+  ansible.builtin.debug:
+    msg:
+      - "==========================================="
+      - "GitLab SSO Configuration Complete"
+      - "==========================================="
+      - ""
+      - "Test the SSO flow:"
+      - "  1. Visit: {{ gitlab_sso_public_url }}"
+      - "  2. Click '{{ gitlab_sso_provider_label }}'"
+      - "  3. Authenticate with GitLab.com (via Keycloak)"
+      - "  4. You should be logged into GitLab"
+      - ""
+      - "Keycloak Admin Console: {{ gitlab_sso_keycloak_public_url }}/admin"
+      - ""
+      - "Client Configuration:"
+      - "  Client ID: {{ gitlab_sso_client_id }}"
+      - "  Redirect URI: {{ gitlab_sso_redirect_uri }}"
+      - "  Issuer: {{ gitlab_sso_issuer }}"

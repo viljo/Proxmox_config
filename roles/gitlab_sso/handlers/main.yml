@@ -1,0 +1,8 @@
+---
+# GitLab SSO Handlers
+
+- name: reconfigure gitlab
+  ansible.builtin.shell:
+    cmd: docker exec gitlab gitlab-ctl reconfigure
+  delegate_to: gitlab_container
+  become: yes

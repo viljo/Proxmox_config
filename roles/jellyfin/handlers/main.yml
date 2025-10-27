@@ -6,5 +6,5 @@
 
 - name: Restart Jellyfin container
   ansible.builtin.command:
-    cmd: pct restart {{ jellyfin_container_id }}
+    cmd: pct reboot {{ jellyfin_container_id }}
   when: not ansible_check_mode

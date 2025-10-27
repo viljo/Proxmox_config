@@ -11,6 +11,9 @@ jellyfin_dns_servers:
   - 1.1.1.1
 jellyfin_root_password: "{{ vault_jellyfin_root_password }}"
 jellyfin_repo_release: bookworm
+# Use Debian 12 (Bookworm) template for compatibility with Jellyfin packages
+jellyfin_template_url: "http://download.proxmox.com/images/system/debian-12-standard_12.12-1_amd64.tar.zst"
+jellyfin_template_file: "/var/lib/vz/template/cache/debian-12-standard_12.12-1_amd64.tar.zst"
 # Media mount points - configure based on storage backend
 # Example: Mount from OpenMediaVault NAS or local Proxmox storage
 jellyfin_media_mounts:
