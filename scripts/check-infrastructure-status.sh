@@ -19,23 +19,14 @@ FAILED_CHECKS=0
 
 # Service definitions
 # Format: "service_name:container_id:internal_port:domain"
+# All services now deployed via Coolify API in LXC 200
 SERVICES=(
-    "Keycloak:151:8080:keycloak.viljo.se"
-    "GitLab:153:80:gitlab.viljo.se"
-    "Nextcloud:155:80:nextcloud.viljo.se"
-    "Redis:158:6379:none"
-    "Links Portal:160:80:links.viljo.se"
-    "Mattermost:163:8065:mattermost.viljo.se"
-    "Webtop:170:3000:browser.viljo.se"
+    "Coolify LXC:200:8000:paas.viljo.se"
 )
 
 # Infrastructure containers (no external domain)
-INFRA_CONTAINERS=(
-    "Firewall:101"
-    "Bastion:110"
-    "PostgreSQL:150"
-    "GitLab Runner:154"
-)
+# Note: Most services moved to Coolify-managed containers in LXC 200
+INFRA_CONTAINERS=()
 
 echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}Infrastructure Status Check${NC}"
@@ -73,59 +64,34 @@ else
 fi
 echo ""
 
-# Check firewall container status
-echo -e "${BLUE}[2] Checking Firewall Container (101)${NC}"
-FW_STATUS=$(ssh root@192.168.1.3 "pct status 101" 2>/dev/null | grep -o "running\|stopped")
-if [ "$FW_STATUS" = "running" ]; then
-    print_result "Firewall Container" "PASS" "(running)"
-    
-    # Get WAN IP from firewall
-    FW_WAN_IP=$(ssh root@192.168.1.3 "pct exec 101 -- ip -4 addr show eth0 | grep 'inet ' | awk '{print \$2}' | cut -d/ -f1" 2>/dev/null)
-    if [ -n "$FW_WAN_IP" ]; then
-        print_result "Firewall WAN IP" "PASS" "($FW_WAN_IP on vmbr2/Bahnhof)"
+# Check Coolify LXC container status
+echo -e "${BLUE}[2] Checking Coolify LXC Container (200)${NC}"
+COOLIFY_STATUS=$(ssh root@192.168.1.3 "pct status 200" 2>/dev/null | grep -o "running\|stopped")
+if [ "$COOLIFY_STATUS" = "running" ]; then
+    print_result "Coolify LXC Container" "PASS" "(running)"
+
+    # Check Docker service inside LXC
+    DOCKER_STATUS=$(ssh root@192.168.1.3 "pct exec 200 -- systemctl is-active docker" 2>/dev/null)
+    if [ "$DOCKER_STATUS" = "active" ]; then
+        print_result "Docker in Coolify LXC" "PASS" "(active)"
     else
-        print_result "Firewall WAN IP" "FAIL" "(could not determine)"
+        print_result "Docker in Coolify LXC" "FAIL" "($DOCKER_STATUS)"
     fi
-    
-    # Check NAT rules
-    NAT_RULES=$(ssh root@192.168.1.3 "pct exec 101 -- nft list table ip nat 2>/dev/null | grep -c dnat" 2>/dev/null)
-    if [ "$NAT_RULES" -gt 0 ]; then
-        print_result "Firewall NAT Rules" "PASS" "($NAT_RULES DNAT rules configured)"
+
+    # Check Coolify proxy container
+    COOLIFY_PROXY=$(ssh root@192.168.1.3 "pct exec 200 -- docker ps --filter name=coolify-proxy --format '{{.Status}}' 2>/dev/null" 2>/dev/null | head -1)
+    if [ -n "$COOLIFY_PROXY" ]; then
+        print_result "Coolify Proxy" "PASS" "($COOLIFY_PROXY)"
     else
-        print_result "Firewall NAT Rules" "FAIL" "(no DNAT rules found)"
+        print_result "Coolify Proxy" "FAIL" "(not running)"
     fi
 else
-    print_result "Firewall Container" "FAIL" "($FW_STATUS)"
+    print_result "Coolify LXC Container" "FAIL" "($COOLIFY_STATUS)"
 fi
 echo ""
 
-# Check Traefik status
-echo -e "${BLUE}[3] Checking Traefik Reverse Proxy${NC}"
-TRAEFIK_STATUS=$(ssh root@192.168.1.3 "systemctl is-active traefik" 2>/dev/null)
-if [ "$TRAEFIK_STATUS" = "active" ]; then
-    print_result "Traefik Service" "PASS" "(active)"
-    
-    # Check if Traefik is listening on ports 80 and 443
-    LISTENING_80=$(ssh root@192.168.1.3 "ss -tlnp | grep traefik | grep -c ':80 '" 2>/dev/null)
-    LISTENING_443=$(ssh root@192.168.1.3 "ss -tlnp | grep traefik | grep -c ':443 '" 2>/dev/null)
-    
-    if [ "$LISTENING_80" -gt 0 ] && [ "$LISTENING_443" -gt 0 ]; then
-        print_result "Traefik Ports" "PASS" "(listening on 80 and 443)"
-    else
-        print_result "Traefik Ports" "FAIL" "(not listening on required ports)"
-    fi
-    
-    # Check dynamic configs
-    DYNAMIC_CONFIGS=$(ssh root@192.168.1.3 "ls /etc/traefik/dynamic/*.yml 2>/dev/null | wc -l" 2>/dev/null)
-    if [ "$DYNAMIC_CONFIGS" -gt 0 ]; then
-        print_result "Traefik Configs" "PASS" "($DYNAMIC_CONFIGS dynamic configs loaded)"
-    else
-        print_result "Traefik Configs" "WARN" "(no dynamic configs found)"
-    fi
-else
-    print_result "Traefik Service" "FAIL" "($TRAEFIK_STATUS)"
-fi
-echo ""
+# Note: Traefik replaced by Coolify's built-in proxy (handled above)
+# Legacy Traefik check removed - services now use Coolify proxy
 
 # Check Loopia DDNS
 echo -e "${BLUE}[4] Checking Loopia DDNS Service${NC}"
@@ -217,87 +183,30 @@ else
 fi
 echo ""
 
-# Advanced service health checks
-echo -e "${BLUE}[8] Advanced Service Health Checks${NC}"
-if [ -n "$FW_WAN_IP" ]; then
-    # Mattermost API ping
-    MATTERMOST_PING=$(curl -s --connect-timeout 5 http://172.16.10.163:8065/api/v4/system/ping 2>/dev/null)
-    if [ -n "$MATTERMOST_PING" ]; then
-        print_result "Mattermost API" "PASS" "(ping successful)"
+# Note: Individual service health checks removed - services now managed via Coolify API
+# Use Coolify dashboard or API for detailed service health monitoring
+
+# Coolify-managed services health check
+echo -e "${BLUE}[3] Coolify-Managed Services Health${NC}"
+if [ "$COOLIFY_STATUS" = "running" ]; then
+    # Count running Docker containers in Coolify LXC
+    DOCKER_CONTAINERS=$(ssh root@192.168.1.3 "pct exec 200 -- docker ps --format '{{.Names}}' 2>/dev/null" 2>/dev/null | wc -l)
+    if [ "$DOCKER_CONTAINERS" -gt 0 ]; then
+        print_result "Coolify Docker Containers" "PASS" "($DOCKER_CONTAINERS containers running)"
     else
-        print_result "Mattermost API" "FAIL" "(no response)"
+        print_result "Coolify Docker Containers" "WARN" "(no containers found)"
     fi
 
-    # GitLab version API
-    GITLAB_VERSION=$(curl -s --connect-timeout 5 http://172.16.10.153/api/v4/version 2>/dev/null | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
-    if [ -n "$GITLAB_VERSION" ]; then
-        print_result "GitLab API" "PASS" "(version: $GITLAB_VERSION)"
+    # Check Coolify API health
+    COOLIFY_API=$(ssh root@192.168.1.3 "pct exec 200 -- curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health 2>/dev/null" 2>/dev/null)
+    if [ "$COOLIFY_API" = "200" ]; then
+        print_result "Coolify API Health" "PASS" "(HTTP 200)"
     else
-        print_result "GitLab API" "FAIL" "(no response)"
-    fi
-
-    # Nextcloud status.php
-    NEXTCLOUD_STATUS=$(curl -s --connect-timeout 5 http://172.16.10.155/status.php 2>/dev/null | grep -o '"installed":true')
-    if [ -n "$NEXTCLOUD_STATUS" ]; then
-        print_result "Nextcloud Status" "PASS" "(installed and configured)"
-    else
-        print_result "Nextcloud Status" "FAIL" "(not responding)"
-    fi
-
-    # Keycloak realms endpoint
-    KEYCLOAK_REALMS=$(curl -s --connect-timeout 5 http://172.16.10.151:8080/realms/master 2>/dev/null | grep -o '"realm":"master"')
-    if [ -n "$KEYCLOAK_REALMS" ]; then
-        print_result "Keycloak Realms" "PASS" "(master realm accessible)"
-    else
-        print_result "Keycloak Realms" "FAIL" "(no response)"
-    fi
-
-    # PostgreSQL connection test
-    PG_CONNECTABLE=$(ssh root@192.168.1.3 "pct exec 150 -- su - postgres -c 'psql -c \"SELECT version()\"' 2>/dev/null | grep -c PostgreSQL" 2>/dev/null)
-    if [ "$PG_CONNECTABLE" -gt 0 ]; then
-        print_result "PostgreSQL Connection" "PASS" "(accepting connections)"
-    else
-        print_result "PostgreSQL Connection" "FAIL" "(not responding)"
-    fi
-
-    # Redis service check (port listening + process running)
-    REDIS_PORT=$(ssh root@192.168.1.3 "pct exec 158 -- ss -tlnp 2>/dev/null | grep -c ':6379'" 2>/dev/null)
-    REDIS_PROCESS=$(ssh root@192.168.1.3 "pct exec 158 -- pgrep redis-server" 2>/dev/null)
-    if [ "$REDIS_PORT" -gt 0 ] && [ -n "$REDIS_PROCESS" ]; then
-        print_result "Redis Service" "PASS" "(listening on port 6379)"
-    else
-        print_result "Redis Service" "FAIL" "(not listening or process not running)"
-    fi
-
-    # Links Portal content check
-    LINKS_CONTENT=$(curl -s --connect-timeout 5 http://172.16.10.160/ 2>/dev/null | grep -c "Viljo\|matrix\|canvas")
-    if [ "$LINKS_CONTENT" -gt 0 ]; then
-        print_result "Links Portal Content" "PASS" "(page content loaded)"
-    else
-        print_result "Links Portal Content" "WARN" "(content not detected)"
+        print_result "Coolify API Health" "WARN" "(HTTP $COOLIFY_API)"
     fi
 else
-    print_result "Advanced Health Checks" "FAIL" "(no firewall WAN IP - skipping)"
+    print_result "Coolify Services" "FAIL" "(Coolify LXC not running)"
 fi
-echo ""
-
-# Docker container health checks
-echo -e "${BLUE}[9] Docker Container Health (inside LXC)${NC}"
-for service_entry in "${SERVICES[@]}"; do
-    IFS=: read -r name id port domain <<< "$service_entry"
-    # Skip Redis as it doesn't use Docker
-    if [ "$id" != "158" ]; then
-        CONTAINER_STATUS=$(ssh root@192.168.1.3 "pct status $id 2>/dev/null" | grep -o "running")
-        if [ "$CONTAINER_STATUS" = "running" ]; then
-            DOCKER_PS=$(ssh root@192.168.1.3 "pct exec $id -- docker ps 2>/dev/null | grep -v CONTAINER" 2>/dev/null | wc -l)
-            if [ "$DOCKER_PS" -gt 0 ]; then
-                print_result "Docker in $name ($id)" "PASS" "($DOCKER_PS containers running)"
-            else
-                print_result "Docker in $name ($id)" "WARN" "(no containers found)"
-            fi
-        fi
-    fi
-done
 echo ""
 
 # SSL Certificate expiration checks
