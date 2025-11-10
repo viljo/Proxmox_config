@@ -9,99 +9,15 @@ infrastructure_services:
   # DEPLOYED & WORKING - Services that are running and accessible
   # ==================================================================
 
-  - name: GitLab
-    slug: gitlab
-    icon: "🦊"
-    description: Repository management and CI/CD platform
-    subdomain: gitlab
-    container_id: "{{ gitlab_container_id }}"
-    status: deployed_working
-    spec: specs/planned/008-gitlab-cicd
-    has_api: true
-    api_note: "API may not respond until fully initialized"
-
-  - name: Nextcloud
-    slug: nextcloud
-    icon: "☁️"
-    description: File storage and collaboration platform
-    subdomain: nextcloud
-    container_id: "{{ nextcloud_container_id }}"
-    status: deployed_working
-    has_api: true
-    api_note: "Status API may not respond until fully configured"
-
-  - name: Keycloak
-    slug: keycloak
-    icon: "🔐"
-    description: Identity and access management (SSO/OIDC)
-    subdomain: keycloak
-    container_id: "{{ keycloak_container_id }}"
-    status: deployed_working
-    spec: specs/planned/001-gitlab-oauth-keycloak
-    has_api: true
-    api_note: "Realms API requires authentication"
-
-  - name: Webtop
-    slug: webtop
-    icon: "🌐"
-    description: Browser-based desktop environment
-    subdomain: browser
-    container_id: 170
-    status: deployed_working
-    spec: specs/planned/005-webtop-browser
-
-  - name: Links Portal
-    slug: links
-    icon: "🔗"
-    description: Service directory and landing page
-    subdomain: links
-    container_id: "{{ demo_site_container_id }}"
-    status: deployed_working
-    spec: specs/completed/010-links-portal
-
-  - name: Jellyfin
-    slug: jellyfin
-    icon: "🎬"
-    description: Media streaming and management server
-    subdomain: jellyfin
-    container_id: "{{ jellyfin_container_id }}"
-    status: deployed_working
-    spec: specs/planned/009-jellyfin-media-server
-
-  - name: qBittorrent
-    slug: qbittorrent
-    icon: "🌊"
-    description: Torrent client and download manager
-    subdomain: qbittorrent
-    container_id: "{{ qbittorrent_container_id }}"
-    status: deployed_working
-    spec: specs/planned/009-bittorrent-client
-
   - name: Coolify
     slug: coolify
     icon: "🚀"
-    description: Self-hosted PaaS (Heroku-like platform)
-    subdomain: coolify
-    container_id: "{{ coolify_container_id }}"
+    description: Self-hosted PaaS platform for deploying all services
+    subdomain: paas
+    container_id: 200
     status: deployed_working
     spec: specs/planned/002-docker-platform-selfservice
-
-  - name: Jitsi Meet
-    slug: jitsi
-    icon: "📹"
-    description: Video conferencing and online meetings
-    subdomain: meet
-    container_id: "{{ jitsi_container_id }}"
-    status: deployed_working
-    spec: specs/001-jitsi-server
-
-  - name: Zabbix
-    slug: zabbix
-    icon: "📊"
-    description: Enterprise infrastructure monitoring and alerting
-    subdomain: zabbix
-    container_id: "{{ zabbix_container_id }}"
-    status: deployed_working
+    note: "All other services are deployed via Coolify API"
 
   # ==================================================================
   # DEPLOYED BUT NON-WORKING - Running but not accessible/functional
@@ -110,8 +26,96 @@ infrastructure_services:
   # Currently none
 
   # ==================================================================
-  # PLANNED - Not yet deployed
+  # PLANNED - Not yet deployed (to be deployed via Coolify API)
   # ==================================================================
+
+  - name: GitLab
+    slug: gitlab
+    icon: "🦊"
+    description: Repository management and CI/CD platform
+    subdomain: gitlab
+    status: planned
+    spec: specs/planned/008-gitlab-cicd
+    priority: P1
+    note: "Will be deployed via Coolify API"
+
+  - name: Nextcloud
+    slug: nextcloud
+    icon: "☁️"
+    description: File storage and collaboration platform
+    subdomain: cloud
+    status: planned
+    priority: P1
+    note: "Will be deployed via Coolify API"
+
+  - name: Keycloak
+    slug: keycloak
+    icon: "🔐"
+    description: Identity and access management (SSO/OIDC)
+    subdomain: keycloak
+    status: planned
+    spec: specs/planned/001-gitlab-oauth-keycloak
+    priority: P1
+    note: "Will be deployed via Coolify API"
+
+  - name: Links Portal
+    slug: links
+    icon: "🔗"
+    description: Service directory and landing page
+    subdomain: links
+    status: planned
+    spec: specs/completed/010-links-portal
+    priority: P1
+    note: "Will be deployed via Coolify API"
+
+  - name: Jellyfin
+    slug: jellyfin
+    icon: "🎬"
+    description: Media streaming and management server
+    subdomain: media
+    status: planned
+    spec: specs/planned/009-jellyfin-media-server
+    priority: P2
+    note: "Will be deployed via Coolify API"
+
+  - name: qBittorrent
+    slug: qbittorrent
+    icon: "🌊"
+    description: Torrent client and download manager
+    subdomain: torrent
+    status: planned
+    spec: specs/planned/009-bittorrent-client
+    priority: P2
+    note: "Will be deployed via Coolify API"
+
+  - name: Webtop
+    slug: webtop
+    icon: "🌐"
+    description: Browser-based desktop environment
+    subdomain: browser
+    status: planned
+    spec: specs/planned/005-webtop-browser
+    priority: P2
+    note: "Will be deployed via Coolify API"
+
+  - name: Jitsi Meet
+    slug: jitsi
+    icon: "📹"
+    description: Video conferencing and online meetings
+    subdomain: meet
+    status: planned
+    spec: specs/001-jitsi-server
+    priority: P2
+    note: "Will be deployed via Coolify API"
+
+  - name: Zabbix
+    slug: zabbix
+    icon: "📊"
+    description: Enterprise infrastructure monitoring and alerting
+    subdomain: zabbix
+    status: planned
+    priority: P2
+    note: "Will be deployed via Coolify API"
 
   - name: Home Assistant
     slug: homeassistant
@@ -170,34 +174,8 @@ infrastructure_services:
     note: "No web interface - VPN service only"
 
 # Infrastructure services (not shown on links page)
-infrastructure_services_internal:
-  - name: PostgreSQL
-    slug: postgres
-    container_id: "{{ postgres_container_id }}"
-    status: deployed_working
-
-  - name: Redis
-    slug: redis
-    container_id: 158
-    status: deployed_working
-    note: "Key-value cache for services"
-
-  - name: Firewall
-    slug: firewall
-    container_id: "{{ firewall_container_id }}"
-    status: deployed_working
-
-  - name: SSH Server
-    slug: ssh-server
-    container_id: 110
-    status: deployed_working
-    note: "Internal SSH bastion/jump host"
-
-  - name: GitLab Runner
-    slug: gitlab-runner
-    container_id: "{{ gitlab_runner_container_id }}"
-    status: deployed_working
-    spec: specs/planned/007-gitlab-ci-runner
+# Note: All infrastructure is now consolidated in Coolify LXC (200)
+infrastructure_services_internal: []
 
 # Planned infrastructure features (not services, but enhancements)
 # These are cross-cutting features that enhance existing services
