@@ -1,10 +1,71 @@
 # Disaster Recovery Runbook
 
 **Version**: 1.0
-**Last Updated**: 2025-10-24
-**Next Review**: 2025-11-23
+**Last Updated**: 2025-11-10
+**Next Review**: 2025-12-10
 
-## Purpose
+---
+
+## ⚠️ CRITICAL WARNING: OUTDATED DOCUMENTATION
+
+**This DR runbook is OUTDATED and describes a fictional infrastructure that was never deployed.**
+
+**Documented (but never existed)**:
+- 10+ individual service LXC containers
+- Firewall LXC container (101)
+- DMZ network on vmbr3 (172.16.10.0/24)
+- Individual container backups for each service
+
+**Actual current architecture** (as of 2025-11-10):
+- **Single LXC container**: Coolify (ID: 200)
+- **All services**: Run as Docker containers inside Coolify
+- **No firewall container**: Direct internet access via vmbr2
+- **No DMZ network**: vmbr3 created but unused
+
+## Current DR Procedures (Simplified)
+
+### Quick Recovery for Coolify Architecture
+
+**If you need to recover NOW, follow these steps instead**:
+
+1. **Verify Coolify LXC backup exists**:
+   ```bash
+   ssh root@192.168.1.3
+   pvesm list local | grep "vzdump-lxc-200"
+   ```
+
+2. **Restore Coolify LXC container**:
+   ```bash
+   BACKUP=$(pvesm list local | grep "vzdump-lxc-200" | tail -1 | awk '{print $1}')
+   pct restore 200 "$BACKUP" --storage local-lvm
+   pct start 200
+   ```
+
+3. **Verify Coolify is running**:
+   ```bash
+   pct status 200
+   curl -s http://192.168.1.200:8000/health
+   ```
+
+4. **Check Docker containers**:
+   ```bash
+   pct exec 200 -- docker ps
+   ```
+
+5. **Access Coolify dashboard**: https://paas.viljo.se
+
+For complete current architecture details, see:
+- [Network Topology](architecture/network-topology.md)
+- [Container Mapping](architecture/container-mapping.md)
+- [ADR-001: Network Architecture Decision](adr/001-network-topology-change.md)
+
+---
+
+## Historical Documentation (Outdated)
+
+The procedures below describe recovering a multi-container infrastructure that was **never actually deployed**. This is retained for historical reference only.
+
+## Purpose (Historical)
 
 This runbook provides step-by-step procedures for recovering the Proxmox infrastructure from backups after a disaster. Follow these procedures in order for the fastest recovery.
 

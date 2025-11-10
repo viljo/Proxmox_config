@@ -87,15 +87,25 @@ Home Assistant configuration, automations, and add-on data must persist across c
 
 ### Infrastructure Requirements *(for Proxmox deployments)*
 
+**NOTE**: These requirements reflect the PLANNED architecture that was never deployed.
+**ACTUAL**: Home Assistant should be deployed as a Docker container inside Coolify LXC 200 or as a standalone service, NOT as a separate LXC.
+
+**Original planned requirements** (deprecated):
 - **IR-001**: Service MUST run in privileged LXC container (CT 57) for Docker/nesting support
-- **IR-002**: Container MUST be deployed on vmbr2 (Management) at 172.16.10.57/24
+- **IR-002**: ~~Container MUST be deployed on vmbr2 (Management) at 172.16.10.57/24~~ - **OBSOLETE**: No DMZ network exists
 - **IR-003**: Container MUST use minimum 2GB RAM, 2 CPU cores, 32GB disk (configurable)
 - **IR-004**: Container MUST enable nesting feature for Docker container support
-- **IR-005**: Container MUST integrate with Traefik for external HTTPS access
+- **IR-005**: ~~Container MUST integrate with Traefik for external HTTPS access~~ - **OBSOLETE**: Use Coolify Proxy instead
 - **IR-006**: Configuration MUST be managed via Ansible for reproducibility
 - **IR-007**: Container MUST use Debian 12 as base (required for Home Assistant Supervised)
 - **IR-008**: Container MUST have sufficient resources for multiple add-ons
 - **IR-009**: Container MUST support systemd for Supervisor service management
+
+**Current architecture alternative**:
+- Deploy Home Assistant as Docker container via Coolify API
+- Use Coolify dashboard (https://paas.viljo.se) for service management
+- Coolify Proxy provides automatic SSL termination
+- Service deployed on Coolify LXC 200 (no separate container needed)
 
 ### Security Requirements *(mandatory for all services)*
 

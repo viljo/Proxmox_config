@@ -2,15 +2,17 @@
 # External SSH Access Deployment Playbook
 # Feature: 003-external-ssh-admin
 #
-# This playbook configures secure external SSH access to the Proxmox host
-# via the viljo.se domain. Traffic flows:
-#   Internet → vmbr2 (WAN) → Firewall DNAT → 172.16.10.102:22 (Proxmox host on DMZ)
+# NOTE: This playbook is DEPRECATED in the current Coolify-based architecture.
 #
-# Components:
-#   1. Firewall DNAT rules (already configured in firewall role)
-#   2. SSH hardening on Proxmox host
-#   3. Fail2ban brute force protection
-#   4. Loopia DDNS for dynamic IP updates (existing)
+# Current Architecture:
+#   - No firewall container (direct internet access via vmbr2)
+#   - Proxmox host on management network (192.168.1.3 on vmbr0)
+#   - SSH access via viljo.se domain pointing to Coolify public IP
+#
+# This playbook is retained for reference but should NOT be used.
+# External SSH access is configured directly on Proxmox host.
+#
+# For current SSH access methods, see: docs/operations/ssh-access-methods.md
 #
 # Usage:
 #   ansible-playbook playbooks/external-ssh-access.yml --ask-vault-pass

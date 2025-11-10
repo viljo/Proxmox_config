@@ -5,9 +5,9 @@ Welcome to the Proxmox Infrastructure documentation. This directory contains all
 ## Quick Links
 
 - **[Getting Started](getting-started.md)** - New to this project? Start here
-- **[Network Architecture](NETWORK_ARCHITECTURE.md)** - CRITICAL: Understand the three-bridge network design
-- **[Architecture Overview](architecture/network-topology.md)** - Detailed network topology
-- **[Deployment Guide](deployment/)** - How to deploy services
+- **[Network Architecture](NETWORK_ARCHITECTURE.md)** - CRITICAL: Understand the Coolify-based architecture
+- **[Architecture Overview](architecture/network-topology.md)** - Complete network topology
+- **[Container Mapping](architecture/container-mapping.md)** - LXC and Docker container reference
 - **[Operations](operations/)** - Day-to-day operations and runbooks
 
 ## Documentation Structure
@@ -15,17 +15,19 @@ Welcome to the Proxmox Infrastructure documentation. This directory contains all
 ### 📐 Architecture
 High-level design decisions and system architecture documentation.
 
-- **[Network Architecture](NETWORK_ARCHITECTURE.md)** - CRITICAL: Complete network architecture guide (MUST READ)
-- **[Network Topology](architecture/network-topology.md)** - Network design (vmbr0/vmbr2/vmbr3)
-- **[Container Mapping](architecture/container-mapping.md)** - Container ID reference table
+- **[Network Architecture](NETWORK_ARCHITECTURE.md)** - CRITICAL: Coolify PaaS architecture guide (MUST READ)
+- **[Network Topology](architecture/network-topology.md)** - Simplified single-LXC network design
+- **[Container Mapping](architecture/container-mapping.md)** - LXC and Docker container reference
+- **[ADR-001: Network Architecture Decision](adr/001-network-topology-change.md)** - Why we chose Coolify
 - **[Security Model](architecture/security-model.md)** - Security architecture (planned)
 
 ### 🚀 Deployment
 Step-by-step guides for deploying infrastructure components.
 
 - **[Proxmox Access](deployment/proxmox-access.md)** - Initial Proxmox setup and access
-- **[Firewall Deployment](deployment/firewall-deployment.md)** - Firewall LXC container setup
+- **[Coolify Deployment](../specs/planned/002-docker-platform-selfservice/)** - Deploy Coolify LXC container
 - **[Secrets Management](deployment/secrets-management.md)** - Ansible Vault usage
+- **[Service Deployment](../README.md#usage)** - Deploy services via Coolify API
 
 ### ⚙️ Operations
 Operational procedures, runbooks, and troubleshooting guides.
@@ -65,8 +67,8 @@ Comprehensive DR procedures, testing reports, and recovery automation.
 Historical records of significant architectural decisions.
 
 - **[ADR Index](adr/README.md)** - All architecture decisions
-- **[ADR-001: Network Topology Change](adr/001-network-topology-change.md)** - vmbr1 → vmbr2/vmbr3 redesign
-- **[ADR-002: Container ID Standardization](adr/002-container-id-standardization.md)** - ID = IP last octet pattern
+- **[ADR-001: Network Architecture Decision](adr/001-network-topology-change.md)** - Simplified Coolify PaaS approach
+- **[ADR-002: Container ID Standardization](adr/002-container-id-standardization.md)** - DEPRECATED (single-container architecture)
 
 ### 💻 Development
 Guides for contributing to and developing this infrastructure.
@@ -100,4 +102,4 @@ All documentation should follow these principles:
 
 ---
 
-**Last Updated**: 2025-10-27 - Added comprehensive Network Architecture documentation (CRITICAL for understanding internet connectivity)
+**Last Updated**: 2025-11-10 - Updated all documentation to reflect actual Coolify-based architecture

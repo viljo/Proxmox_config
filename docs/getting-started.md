@@ -1,6 +1,19 @@
 # Getting Started
 
-Quick start guide for deploying and managing the Proxmox infrastructure using Ansible.
+Quick start guide for deploying and managing the Proxmox infrastructure with Coolify PaaS.
+
+## Architecture Overview
+
+This infrastructure uses **Coolify PaaS** in a single LXC container (ID: 200) to host all services as Docker containers. This simplified architecture eliminates the complexity of managing multiple LXC containers.
+
+**Key Components**:
+- **Proxmox VE 9**: Hypervisor (192.168.1.3 on vmbr0)
+- **Coolify LXC 200**: Single container hosting all services
+  - Management interface: 192.168.1.200/16 (eth1 on vmbr0)
+  - Public interface: DHCP public IP (eth0 on vmbr2)
+- **Services**: Deployed via Coolify API using Ansible
+
+For complete architecture details, see [Network Topology](architecture/network-topology.md).
 
 ## Prerequisites
 
@@ -13,6 +26,7 @@ Quick start guide for deploying and managing the Proxmox infrastructure using An
 ### Required Access
 - SSH access to Proxmox host as root
 - Ansible Vault password (`.vault_pass.txt` or entered manually)
+- Coolify API token (for service deployments)
 
 ## Initial Setup
 
@@ -60,32 +74,43 @@ proxmox_admin | SUCCESS => {
 
 ## Basic Usage
 
-### Deploy All Services
+### Deploy Coolify Infrastructure
+
+This repository manages the Proxmox infrastructure and Coolify deployment:
 
 ```bash
-ansible-playbook -i inventory playbooks/site.yml
+# Deploy Coolify LXC container to Proxmox
+ansible-playbook -i inventory/production.ini playbooks/coolify-deploy.yml
 ```
 
-### Deploy Specific Service
+### Deploy Application Services
+
+Application services (GitLab, Nextcloud, media services, etc.) are deployed via the `/coolify_service/ansible` repository using Coolify API:
 
 ```bash
-# Deploy firewall only
-ansible-playbook -i inventory playbooks/site.yml --tags firewall
+# Services are in separate repository
+cd /path/to/coolify_service/ansible
 
-# Deploy demo site
-ansible-playbook -i inventory playbooks/demo-site-deploy.yml
+# Deploy a service via Coolify API
+ansible-playbook -i inventory/production.ini \
+  playbooks/deploy-SERVICE-via-api.yml \
+  --vault-password-file=.vault_pass.txt
 ```
 
-### Check Syntax
+### Verify Infrastructure
 
 ```bash
-ansible-playbook -i inventory playbooks/site.yml --syntax-check
-```
+# Check Coolify container status
+ssh root@192.168.1.3 pct status 200
 
-### Dry Run (Check Mode)
+# Check Coolify API
+curl -s http://192.168.1.200:8000/health
 
-```bash
-ansible-playbook -i inventory playbooks/site.yml --check --diff
+# Check Docker containers
+ssh root@192.168.1.3 pct exec 200 -- docker ps
+
+# Check infrastructure status
+bash scripts/check-infrastructure-status.sh
 ```
 
 ## Project Structure
