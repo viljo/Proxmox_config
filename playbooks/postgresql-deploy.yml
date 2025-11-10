@@ -1,8 +1,0 @@
----
-- name: Deploy PostgreSQL Database Server
-  hosts: proxmox_admin
-  gather_facts: yes
-  become: no
-
-  roles:
-    - role: postgresql_api

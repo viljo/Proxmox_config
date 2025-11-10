@@ -1,4 +1,0 @@
----
-- name: restart postgresql
-  ansible.builtin.command:
-    cmd: pct exec {{ postgres_container_id }} -- systemctl restart postgresql

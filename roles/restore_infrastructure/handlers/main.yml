@@ -1,6 +1,0 @@
----
-# Restore notification handlers (placeholder)
-
-- name: Send restore notification
-  ansible.builtin.debug:
-    msg: "Restore notification would be sent here"

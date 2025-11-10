@@ -1,7 +1,0 @@
-# Managed by Ansible
-{% if network_resolvconf_search %}
-search {{ network_resolvconf_search | join(' ') }}
-{% endif %}
-{% for nameserver in network_resolvconf_nameservers %}
-nameserver {{ nameserver }}
-{% endfor %}

@@ -1,4 +1,0 @@
----
-- name: restart zipline stack
-  ansible.builtin.command:
-    cmd: pct exec {{ zipline_container_id }} -- bash -lc "cd {{ zipline_compose_path }} && docker compose up -d"

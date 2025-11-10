@@ -1,5 +1,0 @@
----
-- name: Restart demo site nginx
-  ansible.builtin.command:
-    cmd: pct exec {{ demo_site_container_id }} -- systemctl restart nginx
-  changed_when: true

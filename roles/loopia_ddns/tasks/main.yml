@@ -1,4 +1,0 @@
----
-- name: Ensure ddns prerequisites
-  ansible.builtin.import_tasks: setup.yml
-  when: loopia_ddns_enabled

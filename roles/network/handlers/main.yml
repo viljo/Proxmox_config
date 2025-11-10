@@ -1,5 +1,0 @@
----
-- name: reload networking
-  ansible.builtin.command:
-    cmd: ifreload -a
-  when: network_handler_enable_reload

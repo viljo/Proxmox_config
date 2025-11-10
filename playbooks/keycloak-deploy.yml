@@ -1,8 +1,0 @@
----
-- name: Deploy Keycloak SSO/Identity Provider
-  hosts: proxmox_admin
-  gather_facts: yes
-  become: no
-
-  roles:
-    - role: keycloak_api

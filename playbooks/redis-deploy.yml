@@ -1,8 +1,0 @@
----
-- name: Deploy Redis Cache and Message Queue
-  hosts: proxmox_admin
-  gather_facts: yes
-  become: no
-
-  roles:
-    - role: redis_api

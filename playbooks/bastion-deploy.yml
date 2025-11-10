@@ -1,8 +1,0 @@
----
-- name: Deploy SSH Bastion (Jump Host)
-  hosts: proxmox_admin
-  gather_facts: yes
-  become: no
-
-  roles:
-    - role: bastion_api

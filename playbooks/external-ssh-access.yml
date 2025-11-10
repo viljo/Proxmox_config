@@ -63,20 +63,18 @@
         success_msg: "All required variables are properly defined."
 
   tasks:
-    - name: Include SSH hardening tasks
-      ansible.builtin.include_tasks:
-        file: "{{ role_path }}/tasks/ssh-hardening.yml"
-      vars:
-        role_path: "{{ playbook_dir }}/../roles/proxmox"
+    - name: Configure SSH hardening
+      ansible.builtin.include_role:
+        name: proxmox
+        tasks_from: ssh-hardening
       tags:
         - ssh
         - hardening
 
-    - name: Include fail2ban configuration tasks
-      ansible.builtin.include_tasks:
-        file: "{{ role_path }}/tasks/fail2ban.yml"
-      vars:
-        role_path: "{{ playbook_dir }}/../roles/proxmox"
+    - name: Configure fail2ban
+      ansible.builtin.include_role:
+        name: proxmox
+        tasks_from: fail2ban
       when: proxmox_fail2ban_enabled | default(false)
       tags:
         - fail2ban

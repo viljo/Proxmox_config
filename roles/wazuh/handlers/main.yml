@@ -1,4 +1,0 @@
----
-- name: restart wazuh stack
-  ansible.builtin.command:
-    cmd: pct exec {{ wazuh_container_id }} -- bash -lc "cd {{ wazuh_compose_path }} && docker compose up -d"

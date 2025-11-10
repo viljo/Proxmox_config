@@ -1,8 +1,0 @@
----
-openmediavault_container_id: 164
-openmediavault_hostname: openmediavault
-openmediavault_bridge: "{{ public_bridge }}"
-openmediavault_ip_address: 172.16.10.164
-openmediavault_netmask: 24
-openmediavault_gateway: "{{ dmz_gateway }}"
-openmediavault_root_password: "{{ vault_omv_root_password }}"

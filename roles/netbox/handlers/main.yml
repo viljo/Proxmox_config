@@ -1,4 +1,0 @@
----
-- name: restart netbox stack
-  ansible.builtin.command:
-    cmd: pct exec {{ netbox_container_id }} -- bash -lc "cd {{ netbox_compose_path }} && docker compose up -d"

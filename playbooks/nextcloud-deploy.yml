@@ -1,8 +1,0 @@
----
-- name: Deploy Nextcloud File Storage
-  hosts: proxmox_admin
-  gather_facts: yes
-  become: no
-
-  roles:
-    - role: nextcloud_complete

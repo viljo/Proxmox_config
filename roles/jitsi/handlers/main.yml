@@ -1,4 +1,0 @@
----
-- name: restart jitsi stack
-  ansible.builtin.command:
-    cmd: pct exec {{ jitsi_container_id }} -- bash -lc "cd {{ jitsi_compose_path }} && docker compose up -d"

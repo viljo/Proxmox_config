@@ -52,7 +52,7 @@ proxmox_ssh_allow_agent_forwarding: true
 proxmox_ssh_allow_tcp_forwarding: true
 proxmox_ssh_banner_file: ""
 proxmox_ssh_sftp_path: /usr/lib/openssh/sftp-server
-proxmox_ssh_internal_network_rules: true
+proxmox_ssh_internal_network_rules: false
 proxmox_ssh_ciphers: chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
 proxmox_ssh_macs: hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
 proxmox_ssh_kex_algorithms: curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256

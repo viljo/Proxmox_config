@@ -1,9 +1,0 @@
----
-loopia_dns_enabled: true
-loopia_dns_domain: "viljo.se"
-loopia_dns_records: []
-loopia_dns_default_ttl: 600
-loopia_dns_interface: "{{ wan_bridge | default('vmbr2') }}"
-loopia_dns_debug: false
-loopia_dns_api_user: "{{ loopia_api_user | default(loopia_api_user_open | default('')) }}"
-loopia_dns_api_password: "{{ loopia_api_password | default(loopia_api_password_open | default('')) }}"

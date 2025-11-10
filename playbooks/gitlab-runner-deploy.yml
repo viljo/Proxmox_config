@@ -1,8 +1,0 @@
----
-- name: Deploy GitLab Runner
-  hosts: proxmox_admin
-  gather_facts: yes
-  become: no
-
-  roles:
-    - role: gitlab_runner_api

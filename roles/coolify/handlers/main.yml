@@ -1,4 +1,0 @@
----
-- name: restart coolify stack
-  ansible.builtin.command:
-    cmd: pct exec {{ coolify_container_id }} -- bash -lc "cd {{ coolify_compose_path }} && docker compose up -d"

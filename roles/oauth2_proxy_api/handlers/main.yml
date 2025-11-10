@@ -1,6 +1,0 @@
----
-# oauth2-proxy handlers
-
-- name: Restart oauth2-proxy
-  ansible.builtin.command:
-    cmd: "pct exec {{ oauth2_proxy_container_id }} -- bash -c 'cd {{ oauth2_proxy_data_dir }} && docker compose -f docker-compose.yml restart'"

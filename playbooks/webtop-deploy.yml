@@ -1,8 +1,0 @@
----
-- name: Deploy Webtop Browser Workspace
-  hosts: proxmox_admin
-  gather_facts: yes
-  become: no
-
-  roles:
-    - role: webtop_api
