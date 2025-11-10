@@ -1,1099 +1,891 @@
-# Network Architecture - Proxmox Infrastructure
+# Network Architecture - Proxmox Infrastructure with Coolify PaaS
 
-**CRITICAL**: This document explains the network architecture to prevent recurring misunderstandings about internet connectivity.
+**CRITICAL**: This document explains the simplified network architecture to prevent misunderstandings.
 
-**Last Updated**: 2025-10-27
+**Last Updated**: 2025-11-10
 **Status**: Authoritative Reference
 **Related**:
 - [Network Topology](architecture/network-topology.md)
-- [ADR-001: Network Topology Redesign](adr/001-network-topology-change.md)
-- [Firewall Deployment](deployment/firewall-deployment.md)
+- [ADR-001: Network Architecture Decision](adr/001-network-topology-change.md)
 
 ---
 
-## WARNING: COMMON MISTAKE - READ THIS FIRST
+## ARCHITECTURE OVERVIEW: SIMPLE IS BETTER
 
-### THE RECURRING MISUNDERSTANDING
+### The Reality (Current Implementation)
 
-There has been a **very common recurring mistake** about this network architecture:
+**One LXC container running everything:**
+- **Coolify LXC 200**: Single container hosting all services as Docker containers
+- **Direct Internet**: Coolify exposed directly to internet via vmbr2 (no firewall/NAT layer)
+- **Management Network**: Separate management access via vmbr0
+- **Unused DMZ**: vmbr3 created but DOWN, reserved for future use
+
+**Why this approach:**
+- Eliminated complexity of 16+ individual LXC containers
+- PaaS management via Coolify API and dashboard
+- Faster deployments, easier maintenance
+- Modern Docker-based infrastructure
+
+---
+
+## WARNING: COMMON MISCONCEPTIONS
+
+### MISCONCEPTION #1: Proxmox Host Should Have Internet
 
 **INCORRECT ASSUMPTION**:
-- The 192.168.x network (vmbr0) should have internet access
-- The Proxmox host should be able to ping external IPs (1.1.1.1, 8.8.8.8, etc.)
-- Lack of internet on Proxmox host is a problem that needs fixing
+- The Proxmox host (192.168.1.3) should be able to ping 1.1.1.1
+- The management network (vmbr0) needs internet access
+- Lack of internet on Proxmox is a problem
 
 **CORRECT UNDERSTANDING**:
-- The 192.168.x network (vmbr0) is **MANAGEMENT ONLY** - it is **NOT** the internet connection
-- The Proxmox host does **NOT** need direct internet access
-- Internet flows through vmbr2 → Firewall container → vmbr3 (DMZ)
-- The Proxmox host CANNOT and SHOULD NOT ping external IPs directly
-
-### WHY THIS MATTERS
-
-If you try to:
-- Ping 1.1.1.1 from the Proxmox host → **WILL FAIL** (this is correct behavior)
-- Access the internet from 192.168.1.3 → **WILL FAIL** (this is by design)
-- Test internet connectivity from vmbr0 → **WILL FAIL** (this is intentional)
-
-**This is NOT a problem. This is the architecture working as designed.**
-
-### HOW TO TEST INTERNET CONNECTIVITY CORRECTLY
-
-**WRONG**:
-```bash
-# From your workstation
-ssh root@192.168.1.3 "ping 1.1.1.1"  # WILL FAIL - THIS IS EXPECTED
-```
-
-**CORRECT**:
-```bash
-# Test from a container on vmbr3 (DMZ)
-ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 1.1.1.1"  # GitLab container
-ssh root@192.168.1.3 "pct exec 155 -- ping -c 2 1.1.1.1"  # Nextcloud container
-```
-
----
-
-## Network Architecture Overview
-
-This Proxmox infrastructure uses a **three-bridge security architecture** with strict separation between management, WAN, and service networks.
-
-### Bridge Summary Table
-
-| Bridge | Network | Purpose | Internet | ISP | Proxmox Host Access |
-|--------|---------|---------|----------|-----|---------------------|
-| **vmbr0** | 192.168.1.0/24 | Management ONLY | NO | Starlink (CGNAT) | YES (192.168.1.3) |
-| **vmbr2** | DHCP from ISP | WAN/Internet | YES | Bahnhof (Public IP) | NO |
-| **vmbr3** | 172.16.10.0/24 | Service DMZ | Via Firewall | Internal | YES (172.16.10.1) |
-
-### Critical Understanding
-
-1. **vmbr0 (Management Network)**
-   - Used ONLY for administrative SSH access to Proxmox host
-   - Connected to Starlink ISP (behind CGNAT)
-   - **Has NO internet connectivity** (by design)
-   - Proxmox host IP: 192.168.1.3
-   - Purpose: Secure management access separate from production traffic
-
-2. **vmbr2 (WAN/Internet Connection)**
-   - This is the **ACTUAL internet connection**
-   - Connected to Bahnhof ISP (public IP, NOT CGNAT)
-   - Connected ONLY to firewall container (LXC 101) WAN interface
-   - Gets public IP via DHCP
-   - This is where DNS records point (*.viljo.se)
-
-3. **vmbr3 (Service DMZ Network)**
-   - Private network for all service containers
-   - Network: 172.16.10.0/24
-   - Gateway: 172.16.10.101 (firewall container LAN interface)
-   - DNS: 172.16.10.101, 1.1.1.1
-   - Internet access via NAT through firewall container
-
----
-
-## Network Topology Diagram
-
-### Three-Bridge Architecture
-
-```
-                                    INTERNET
-                                       |
-                                       |
-        ┌──────────────────────────────┼──────────────────────────────┐
-        |                              |                              |
-        |                              |                              |
-   Starlink ISP                   Bahnhof ISP                         |
-   (CGNAT - NO inbound)          (Public IP)                          |
-        |                              |                              |
-        |                              |                              |
-   ╔════▼════╗                    ╔════▼════╗                         |
-   ║  vmbr0  ║                    ║  vmbr2  ║                         |
-   ║ (br0)   ║                    ║ (br2)   ║                         |
-   ╠═════════╣                    ╠═════════╣                         |
-   ║ 192.168 ║                    ║  DHCP   ║                         |
-   ║ .1.0/24 ║                    ║ from ISP║                         |
-   ╚════╤════╝                    ╚════╤════╝                         |
-        │                              │                              |
-        │ MANAGEMENT ONLY              │ WAN ONLY                     |
-        │                              │                              |
-   ┌────▼─────────────┐          ┌─────▼─────────────┐               |
-   │  Proxmox Host    │          │ Firewall (LXC 101)│               |
-   │  192.168.1.3     │          │ eth0: vmbr2 (DHCP)│               |
-   │                  │          │ eth1: 172.16.10.101               |
-   │  - SSH Access    │          │                   │               |
-   │  - Management    │          │  - NAT/Routing    │               |
-   │  - NO Internet   │          │  - Port Forwarding│               |
-   └──────────────────┘          │  - Firewall Rules │               |
-                                 └─────┬─────────────┘               |
-                                       │                              |
-                                       │ ROUTES/NATS                  |
-                                       │                              |
-                                  ╔════▼════╗                         |
-                                  ║  vmbr3  ║                         |
-                                  ║ (br3)   ║                         |
-                                  ╠═════════╣                         |
-                                  ║172.16.10║                         |
-                                  ║  .0/24  ║                         |
-                                  ╚════╤════╝                         |
-                                       │                              |
-                        ┌──────────────┼──────────────┐               |
-                        │              │              │               |
-                   ┌────▼────┐    ┌────▼────┐   ┌────▼────┐          |
-                   │ GitLab  │    │Nextcloud│   │Keycloak │          |
-                   │ LXC 153 │    │ LXC 155 │   │ LXC 151 │          |
-                   │172.16.  │    │172.16.  │   │172.16.  │          |
-                   │ 10.153  │    │ 10.155  │   │ 10.151  │          |
-                   └─────────┘    └─────────┘   └─────────┘          |
-                                                                      |
-                   [ ALL SERVICE CONTAINERS ON vmbr3 ]               |
-                   [ Gateway: 172.16.10.101 ]                        |
-                   [ Internet: Via Firewall NAT ]                    |
-                                                                      |
-        ┌─────────────────────────────────────────────────────┐      |
-        │  Traefik (on Proxmox Host)                          │      |
-        │  - Listens on 172.16.10.1:80/443                    │      |
-        │  - Receives traffic via port forwarding from        │      |
-        │    firewall (vmbr2:80/443 → 172.16.10.1:80/443)    │      |
-        │  - Proxies to service containers on vmbr3           │      |
-        └─────────────────────────────────────────────────────┘      |
-                                       ▲                              |
-                                       |                              |
-                                       └──────────────────────────────┘
-                                          DNS (*.viljo.se)
-                                          Points to vmbr2 Public IP
-```
-
----
-
-## Internet Traffic Flow
-
-### Inbound Traffic (Internet → Services)
-
-```
-Internet User
-    |
-    | HTTPS Request to gitlab.viljo.se
-    |
-    ▼
-DNS Resolution (*.viljo.se → vmbr2 Public IP)
-    |
-    ▼
-Bahnhof ISP (vmbr2)
-    |
-    ▼
-Firewall Container (LXC 101) - eth0 on vmbr2
-    |
-    | nftables DNAT rule:
-    | tcp dport {80,443} → 172.16.10.1:80/443
-    |
-    ▼
-Traefik (Proxmox Host on vmbr3: 172.16.10.1)
-    |
-    | Traefik routing based on hostname
-    |
-    ▼
-Service Container (e.g., GitLab LXC 153 on vmbr3)
-    |
-    ▼
-Service responds
-```
-
-### Outbound Traffic (Services → Internet)
-
-```
-Service Container (e.g., Nextcloud LXC 155)
-    |
-    | Default route: 172.16.10.101
-    |
-    ▼
-Firewall Container (LXC 101) - eth1 on vmbr3
-    |
-    | nftables MASQUERADE:
-    | Source: 172.16.10.0/24
-    | Output interface: eth0 (vmbr2)
-    |
-    ▼
-Bahnhof ISP (vmbr2)
-    |
-    ▼
-Internet
-```
-
-### Management Access (Your Workstation → Proxmox)
-
-```
-Your Workstation
-    |
-    | SSH to 192.168.1.3
-    |
-    ▼
-Starlink ISP (CGNAT)
-    |
-    ▼
-vmbr0 (Management Bridge)
-    |
-    ▼
-Proxmox Host (192.168.1.3)
-    |
-    | STOPS HERE - NO INTERNET ACCESS
-    |
-    ✗ CANNOT reach internet from here
-```
-
----
-
-## Why This Architecture Exists
-
-### Security Benefits
-
-1. **Separation of Concerns**
-   - Management traffic (vmbr0) is completely separate from production (vmbr3)
-   - Production services never exposed directly to internet
-   - Firewall container is single choke point for all internet traffic
-
-2. **Defense in Depth**
-   - Firewall container provides NAT isolation
-   - All inbound traffic must go through firewall nftables rules
-   - Service containers cannot be directly accessed from internet
-
-3. **ISP Limitations**
-   - Starlink uses CGNAT - cannot host public services
-   - Bahnhof provides public IP - required for hosting
-   - Separating management (Starlink) from production (Bahnhof) ensures stability
-
-### Operational Benefits
-
-1. **Clear Network Boundaries**
-   - Easy to reason about traffic flows
-   - Troubleshooting is straightforward
-   - Each bridge has exactly one purpose
-
-2. **Scalability**
-   - Easy to add new services to vmbr3
-   - All routing decisions centralized at firewall
-   - No complex routing on service containers
-
-3. **Standard Enterprise Pattern**
-   - DMZ architecture is industry standard
-   - Well-understood security model
-   - Aligns with infrastructure best practices
-
----
-
-## Detailed Bridge Configuration
-
-### vmbr0 (Management Bridge)
-
-**Purpose**: Management access ONLY
-
-**Configuration**:
-- Network: 192.168.1.0/24
-- Physical connection: Starlink ISP (CGNAT)
-- Proxmox host IP: 192.168.1.3
-- Netmask: 255.255.255.0 (/24)
-- Gateway: 192.168.1.1 (Starlink router)
-
-**Connected Devices**:
-- Proxmox host management interface ONLY
-- NO containers connected to this bridge
-
-**Capabilities**:
-- SSH access to Proxmox host
-- Proxmox web UI access (https://192.168.1.3:8006)
-- Management operations (pct, pvesh, etc.)
-
-**Limitations**:
-- **NO internet access** (by design)
-- Behind CGNAT - cannot receive inbound connections from internet
-- ONLY for management traffic
-
-**Why Starlink/CGNAT**:
-- Starlink connection is used for management access
-- CGNAT means NO inbound connections possible
-- This is fine because this bridge is ONLY for management
-- Production services use Bahnhof (vmbr2) instead
-
-### vmbr2 (WAN Bridge)
-
-**Purpose**: Internet connection ONLY
-
-**Configuration**:
-- IP: DHCP from Bahnhof ISP
-- Physical connection: Bahnhof ISP (public IP)
-- Netmask: Provided by DHCP
-- Gateway: Provided by DHCP
-
-**Connected Devices**:
-- Firewall container (LXC 101) eth0 interface ONLY
-- NO other devices connected
-
-**Capabilities**:
-- Public IP address (NOT CGNAT)
-- Fully routable from internet
-- Receives all inbound internet traffic
-- Source of outbound internet connectivity
-
-**DNS Configuration**:
-- All DNS records (*.viljo.se) point to this bridge's public IP
-- Loopia DDNS updates every 15 minutes
-- IP read from firewall container eth0 interface
-
-**Security**:
-- Only firewall container connected
-- All traffic must go through firewall nftables rules
-- No services directly exposed
-
-### vmbr3 (DMZ/Service Bridge)
-
-**Purpose**: Internal service network
-
-**Configuration**:
-- Network: 172.16.10.0/24
-- Proxmox host IP: 172.16.10.1
-- Netmask: 255.255.255.0 (/24)
-- Gateway: 172.16.10.101 (firewall container)
-- DNS: 172.16.10.101, 1.1.1.1
-
-**Connected Devices**:
-- Firewall container (LXC 101) eth1 interface
-- ALL service containers (GitLab, Nextcloud, Keycloak, etc.)
-- Proxmox host has IP on this bridge
-
-**IP Allocation Standard**:
-- 172.16.10.1: Proxmox host (Traefik listener)
-- 172.16.10.101: Firewall container gateway
-- 172.16.10.{container_id}: Service containers
-  - Example: GitLab LXC 153 → 172.16.10.153
-  - Example: Nextcloud LXC 155 → 172.16.10.155
-
-**Capabilities**:
-- Inter-container communication
-- Internet access via firewall NAT
-- Traefik routing to services
-- Private network - not directly internet accessible
-
-**Traffic Flows**:
-- Inbound: vmbr2 → firewall → DNAT → Traefik (172.16.10.1) → service container
-- Outbound: service container → firewall gateway → MASQUERADE → vmbr2 → internet
-- Inter-container: direct communication on same L2 network
-
----
-
-## Firewall Container (LXC 101) Configuration
-
-The firewall container is the **critical linchpin** of this architecture.
-
-### Interfaces
-
-**eth0 (WAN Interface)**:
-- Bridge: vmbr2
-- IP: DHCP from Bahnhof ISP
-- Purpose: Internet connectivity
-- Direction: Inbound and outbound internet traffic
-
-**eth1 (LAN Interface)**:
-- Bridge: vmbr3
-- IP: 172.16.10.101/24 (static)
-- Purpose: DMZ gateway
-- Direction: Service network routing
-
-### nftables Configuration
-
-**NAT Table - Masquerading (Outbound)**:
-```nft
-table ip nat {
-    chain postrouting {
-        type nat hook postrouting priority srcnat;
-        ip saddr 172.16.10.0/24 oifname "eth0" masquerade
-    }
-}
-```
-- Translates source IPs from DMZ (172.16.10.0/24) to WAN IP
-- Allows service containers to reach internet
-- Response packets automatically translated back
-
-**NAT Table - DNAT (Inbound)**:
-```nft
-table ip nat {
-    chain prerouting {
-        type nat hook prerouting priority dstnat;
-        iifname "eth0" tcp dport 80 dnat to 172.16.10.1:80
-        iifname "eth0" tcp dport 443 dnat to 172.16.10.1:443
-    }
-}
-```
-- Forwards HTTP/HTTPS from WAN to Traefik
-- Traefik runs on Proxmox host at 172.16.10.1
-- All web traffic goes through Traefik for routing
-
-### IP Forwarding
-
-**sysctl configuration**:
-```
-net.ipv4.ip_forward = 1
-```
-- Enables routing between eth0 and eth1
-- Required for NAT to work
-- Configured automatically by firewall Ansible role
-
----
-
-## DNS Configuration
-
-### Loopia Dynamic DNS
-
-**Script**: `/usr/local/lib/loopia-ddns/update.py`
-**Frequency**: Every 15 minutes (systemd timer)
-**Source Interface**: Firewall container (LXC 101) eth0 on vmbr2
-
-**How It Works**:
-```python
-CONTAINER_ID = 101  # Firewall container
-INTERFACE = "eth0"  # WAN interface on vmbr2
-
-# Read current public IP from firewall WAN interface
-ip_output = subprocess.check_output([
-    "pct", "exec", str(CONTAINER_ID), "--",
-    "ip", "-4", "-o", "addr", "show", "dev", INTERFACE
-])
-current_ip = ip_output.split()[3].split('/')[0]
-
-# Update all DNS records (*.viljo.se) to this IP
-```
+- The Proxmox host does **NOT** have direct internet access
+- The management network (vmbr0) is **management only**
+- Internet flows through vmbr2 → Coolify LXC → Docker containers
+- Proxmox host cannot and should not ping external IPs
 
 **Why This Is Correct**:
-- Firewall eth0 (vmbr2) has the public IP from Bahnhof
-- This is the IP that receives all inbound traffic
-- DNS must point to this IP for services to be accessible
-- Script correctly monitors this interface and updates DNS
+- Management network isolated from production traffic
+- Proxmox only needs SSH access for administration
+- All services run inside Coolify Docker containers with their own network
 
-**DNS Records**:
-- viljo.se → vmbr2 public IP
-- *.viljo.se → vmbr2 public IP
-- All subdomains (gitlab.viljo.se, nextcloud.viljo.se, etc.) → same IP
+### MISCONCEPTION #2: We Need a Firewall Container
 
-**Traffic Flow After DNS Resolution**:
-1. User resolves gitlab.viljo.se → vmbr2 public IP
-2. Connection arrives at firewall eth0 (vmbr2)
-3. Firewall DNAT forwards to Traefik (172.16.10.1:443)
-4. Traefik routes to GitLab container based on hostname
-5. GitLab responds back through same path
+**INCORRECT ASSUMPTION**:
+- There should be a firewall container (LXC 101) between internet and services
+- vmbr3 should be a DMZ network with NAT/routing
+- Services shouldn't be directly exposed to internet
 
----
+**CORRECT UNDERSTANDING**:
+- **No firewall container exists** (never deployed)
+- Coolify LXC directly exposed to internet on vmbr2
+- vmbr3 exists but is DOWN/unused (reserved for future)
+- Security provided by Coolify Proxy, Docker isolation, and application security
 
-## Traefik Configuration
+**Why This Was Chosen**:
+- Single public IP doesn't benefit from NAT
+- Coolify Proxy provides SSL termination and routing
+- Simpler architecture easier to maintain
+- Can add firewall layer later if needed (vmbr3 available)
 
-### Location and Binding
+### MISCONCEPTION #3: Each Service Has Its Own LXC Container
 
-**Runs On**: Proxmox host (NOT in a container)
-**Listens On**: 172.16.10.1:80 and 172.16.10.1:443
-**Bridge**: vmbr3 (DMZ network)
+**INCORRECT ASSUMPTION**:
+- GitLab runs in LXC 153
+- Nextcloud runs in LXC 155
+- Each service has a dedicated container on vmbr3
 
-### Why This Configuration
-
-1. **Proxmox host has IP on vmbr3**: 172.16.10.1
-2. **Firewall DNAT targets this IP**: Traffic from vmbr2 forwarded to 172.16.10.1
-3. **Traefik can reach service containers**: All on same vmbr3 network
-4. **Centralized reverse proxy**: Single point for HTTPS termination and routing
-
-### Traffic Flow
-
-```
-Internet (HTTPS to gitlab.viljo.se)
-    |
-    ▼
-vmbr2 (Firewall eth0) - Public IP
-    |
-    ▼
-Firewall DNAT: tcp dport 443 → 172.16.10.1:443
-    |
-    ▼
-Traefik (Proxmox host on vmbr3: 172.16.10.1:443)
-    |
-    | TLS termination (Let's Encrypt cert)
-    | Host header check: gitlab.viljo.se
-    | Route to backend: http://172.16.10.153:80
-    |
-    ▼
-GitLab Container (LXC 153: 172.16.10.153:80)
-```
-
-### Routing Configuration
-
-Traefik routes are configured via Ansible in `inventory/group_vars/all/main.yml`:
-
-```yaml
-traefik_services:
-  - name: gitlab
-    host: "gitlab.{{ public_domain }}"
-    container_id: 153
-    port: 80
-```
-
-This generates:
-- Router matching `Host: gitlab.viljo.se`
-- Service backend `http://172.16.10.153:80`
-- TLS cert for `gitlab.viljo.se`
+**CORRECT UNDERSTANDING**:
+- **Only one LXC container**: Coolify (ID: 200)
+- All services run as **Docker containers** inside Coolify LXC
+- Services managed via Coolify API, not individual LXCs
+- Container deployment happens via Ansible playbooks calling Coolify API
 
 ---
 
-## Container Network Configuration
+## Network Architecture Details
 
-### Standard Configuration for All Service Containers
+### Bridge Configuration Table
 
-**Bridge**: vmbr3
-**IP Address**: 172.16.10.{container_id}
-**Netmask**: 255.255.255.0 (/24)
-**Gateway**: 172.16.10.101 (firewall container)
-**DNS Servers**: 172.16.10.101, 1.1.1.1
+| Bridge | Network | Purpose | Internet Access | Proxmox Host | Notes |
+|--------|---------|---------|----------------|--------------|-------|
+| **vmbr0** | 192.168.1.0/16 | Management ONLY | NO | YES (192.168.1.3) | SSH access to Proxmox, Ansible API access to Coolify |
+| **vmbr2** | DHCP from ISP | WAN/Public Internet | YES | NO | Coolify public interface, all DNS records point here |
+| **vmbr3** | 172.16.10.0/24 | Reserved (unused) | NO | NO | Created but DOWN, available for future segmentation |
 
-### Example: GitLab Container (LXC 153)
+### Network Topology Diagram
 
-**Network Config**:
 ```
-eth0: 172.16.10.153/24
-gateway: 172.16.10.101
-dns: 172.16.10.101, 1.1.1.1
+                            INTERNET
+                               |
+                       ISP Router (DHCP)
+                               |
+                               v
+                    +---------------------+
+                    |   vmbr2 (WAN)       |
+                    |   Bridge on Proxmox |
+                    +----------+----------+
+                               |
+                               | Public IP via DHCP
+                               |
+                +--------------+----------------+
+                |   Coolify LXC 200 (eth0)     |
+                |   Public IP from ISP         |
+                |                               |
+                |  +------------------------+   |
+                |  |   Coolify Proxy        |   |
+                |  |   (SSL termination,    |   |
+                |  |    routing, Let's      |   |
+                |  |    Encrypt)            |   |
+                |  +----------+-------------+   |
+                |             |                 |
+                |             v                 |
+                |  +------------------------+   |
+                |  |  Docker Containers     |   |
+                |  |  - Nextcloud           |   |
+                |  |  - GitLab (if enabled) |   |
+                |  |  - Jellyfin            |   |
+                |  |  - qBittorrent         |   |
+                |  |  - Links Portal        |   |
+                |  |  - Other services      |   |
+                |  +------------------------+   |
+                |                               |
+                |   Coolify LXC 200 (eth1)      |
+                |   192.168.1.200/16            |
+                +---------------+---------------+
+                                |
+                                | Management Network
+                                |
+                    +-----------+-----------+
+                    |   vmbr0 (Management)  |
+                    |   192.168.1.0/16      |
+                    +-----------+-----------+
+                                |
+                                v
+                    Proxmox Host (192.168.1.3)
+                    Ansible Control Plane
+
+
+    [vmbr3 - DOWN/Unused]
+    172.16.10.0/24 - Reserved for future use
 ```
 
-**Routing Table**:
+---
+
+## Detailed Component Breakdown
+
+### 1. Proxmox Host
+
+**IP Address**: 192.168.1.3/16 on vmbr0
+**Role**: Hypervisor and management platform
+**Internet Access**: NO (by design)
+**Purpose**:
+- Runs LXC containers and VMs
+- Provides SSH access for administration
+- Executes Ansible playbooks
+- Hosts Loopia DDNS service (updates DNS records)
+
+**Why no internet**:
+- Management network isolated from production
+- Doesn't need direct internet access
+- Security best practice: management separate from services
+
+### 2. Coolify LXC Container (ID: 200)
+
+**Container Type**: Privileged LXC with Docker support
+**Operating System**: Debian-based
+**Resource Allocation**: Adequate for running multiple Docker containers
+
+**Network Interfaces**:
+
+#### eth0 → vmbr2 (Public/WAN)
+- **IP**: Dynamic via DHCP from ISP
+- **Purpose**: Public internet access, service exposure
+- **DNS Records**: All *.viljo.se point to this IP
+- **Traffic**: All incoming HTTPS/HTTP requests
+- **Security**: Coolify Proxy handles SSL, routing, rate limiting
+
+#### eth1 → vmbr0 (Management)
+- **IP**: 192.168.1.200/16 (static)
+- **Purpose**: Ansible API access, management
+- **Traffic**: Coolify API calls (port 8000)
+- **Access**: From Proxmox host only
+
+**Services Running**:
+- **Docker Engine**: Container runtime
+- **Coolify API**: Service management (port 8000)
+- **Coolify Proxy**: Built-in reverse proxy (replaces Traefik)
+- **Coolify Dashboard**: Web UI for management
+- **Application Containers**: All services as Docker containers
+
+### 3. Network Bridges (Proxmox Host)
+
+#### vmbr0 - Management Network
+
+**Network**: 192.168.1.0/16
+**Status**: Active
+**Physical**: Connected to local network switch
+**Purpose**: Management and administration
+**Connected Devices**:
+- Proxmox host (192.168.1.3)
+- Coolify eth1 (192.168.1.200)
+- Workstations/laptops for SSH access
+
+**Traffic Types**:
+- SSH to Proxmox host
+- Ansible API calls to Coolify
+- Coolify dashboard access (via SSH tunnel or VPN)
+
+**No Internet**: This bridge does NOT have internet connectivity
+
+#### vmbr2 - WAN/Public Internet
+
+**Network**: No static network (DHCP from ISP)
+**Status**: Active
+**Physical**: Connected to ISP router
+**Purpose**: Public internet connectivity
+**Connected Devices**:
+- Coolify eth0 (gets public IP via DHCP)
+
+**Traffic Types**:
+- All incoming HTTPS requests (443)
+- All incoming HTTP requests (80, redirected to HTTPS)
+- Outbound internet from Docker containers
+- DNS queries
+- Let's Encrypt certificate challenges
+
+**DNS Configuration**:
+- Loopia DDNS monitors this interface
+- Updates all *.viljo.se to current public IP
+- Runs every 15 minutes via systemd timer
+
+#### vmbr3 - Reserved/Unused DMZ
+
+**Network**: 172.16.10.0/24 (configured but not active)
+**Status**: DOWN (no carrier)
+**Physical**: Created but no cable connected
+**Purpose**: Reserved for future network segmentation
+**Connected Devices**: None
+
+**Why it exists**:
+- Originally planned as DMZ network
+- Created during initial setup
+- Never activated in actual deployment
+- Available if architecture changes
+
+**Future Use Cases**:
+- If firewall/NAT layer added
+- If services moved behind DMZ
+- If network segmentation required
+- Can be activated without infrastructure changes
+
+---
+
+## Service Management
+
+### Deployment Architecture
+
+**Traditional Approach** (NOT used):
+- Create individual LXC containers for each service
+- Configure networking for each container
+- Install and configure service in each LXC
+- Manage updates per container
+
+**Coolify Approach** (Current):
+- Services defined as Docker Compose configurations
+- Deployed via Coolify API calls from Ansible
+- Coolify manages container lifecycle
+- Updates via Coolify dashboard or API
+
+### Deployment Flow
+
 ```
-default via 172.16.10.101 dev eth0
-172.16.10.0/24 dev eth0 proto kernel scope link src 172.16.10.153
+Developer/Operator
+       |
+       | Runs Ansible playbook
+       v
+Ansible Control Machine
+       |
+       | API Call (http://192.168.1.200:8000/api/v1/services)
+       v
+Coolify API (Coolify LXC)
+       |
+       | Creates Docker containers
+       v
+Docker Engine (Coolify LXC)
+       |
+       | Containers join Docker networks
+       v
+Coolify Proxy
+       |
+       | Routes traffic based on FQDN
+       v
+Application Containers
+       |
+       | Services accessible at https://service.viljo.se
+       v
+Internet Users
 ```
 
-**Connectivity Tests**:
+### Service Discovery
+
+**Coolify Dashboard**: https://paas.viljo.se
+- View all services
+- Check container health
+- View logs
+- Manage deployments
+
+**Coolify API**: http://192.168.1.200:8000/api/v1
+- Programmatic access
+- Service CRUD operations
+- Health checks
+- Deployment automation
+
+**Direct Service Access**: https://service.viljo.se
+- Public access to services
+- SSL via Let's Encrypt
+- Routed through Coolify Proxy
+
+---
+
+## DNS and SSL Configuration
+
+### Loopia DDNS Service
+
+**Location**: Proxmox host (systemd service)
+**Script**: `/usr/local/lib/loopia-ddns/update.py`
+**Frequency**: Every 15 minutes (systemd timer)
+**Monitoring**: Coolify LXC 200 eth0 interface
+
+**How It Works**:
+
+1. **IP Detection**:
+```python
+# Runs on Proxmox host
+pct exec 200 -- ip -4 addr show eth0
+# Extracts public IP from eth0 (vmbr2)
+```
+
+2. **DNS Update**:
+```python
+# Calls Loopia API
+client.updateZoneRecord(
+    username=vault_loopia_api_user,
+    password=vault_loopia_api_password,
+    domain="viljo.se",
+    subdomain="*",  # All subdomains
+    ip=current_public_ip
+)
+```
+
+3. **Result**:
+- paas.viljo.se → Current public IP
+- nextcloud.viljo.se → Current public IP
+- All other services → Current public IP
+
+### SSL Certificate Management
+
+**Provider**: Let's Encrypt (via Coolify Proxy)
+**Method**: Automatic via Coolify
+**Renewal**: Automatic before expiration
+**Challenge Type**: HTTP-01 or DNS-01 (configurable)
+
+**Process**:
+1. Service added to Coolify with FQDN
+2. Coolify Proxy requests certificate from Let's Encrypt
+3. Certificate stored and configured automatically
+4. Auto-renewal 30 days before expiration
+
+---
+
+## HOW TO TEST CONNECTIVITY CORRECTLY
+
+### WRONG: Testing from Proxmox Host
+
+These will FAIL (and should):
+
 ```bash
-# Ping gateway
-ping -c 2 172.16.10.101  # WORKS - direct L2 connectivity
+# From workstation
+ssh root@192.168.1.3 "ping 1.1.1.1"
+# Result: FAIL - Proxmox has no internet
 
-# Ping internet
-ping -c 2 1.1.1.1  # WORKS - routed via firewall
+ssh root@192.168.1.3 "curl https://google.com"
+# Result: FAIL - Proxmox has no internet
 
-# Ping other container
-ping -c 2 172.16.10.155  # WORKS - direct L2 connectivity (Nextcloud)
+ssh root@192.168.1.3 "apt update"
+# Result: FAIL - Proxmox has no internet
+```
 
-# HTTP to internet
-curl -I https://google.com  # WORKS - NATed through firewall
+### CORRECT: Testing from Coolify LXC
+
+These will SUCCEED:
+
+```bash
+# Test from Coolify LXC
+ssh root@192.168.1.3 "pct exec 200 -- ping -c 2 1.1.1.1"
+# Result: SUCCESS - Coolify has internet via eth0
+
+ssh root@192.168.1.3 "pct exec 200 -- curl -s https://google.com"
+# Result: SUCCESS - Coolify can reach internet
+
+ssh root@192.168.1.3 "pct exec 200 -- docker ps"
+# Result: Shows all running containers
+```
+
+### CORRECT: Testing Services Externally
+
+```bash
+# From workstation (internet access)
+curl -I https://paas.viljo.se
+# Result: HTTP/2 200 - Coolify dashboard
+
+curl -I https://nextcloud.viljo.se
+# Result: HTTP/2 200 - Nextcloud (if deployed)
+
+dig +short paas.viljo.se @1.1.1.1
+# Result: Shows current public IP
+```
+
+### Verifying Network Configuration
+
+**Check Coolify Public IP**:
+```bash
+ssh root@192.168.1.3 "pct exec 200 -- ip addr show eth0 | grep inet"
+# Should show public IP from ISP
+```
+
+**Check Coolify Management IP**:
+```bash
+ssh root@192.168.1.3 "pct exec 200 -- ip addr show eth1 | grep inet"
+# Should show 192.168.1.200/16
+```
+
+**Check DNS Resolution**:
+```bash
+dig +short paas.viljo.se @1.1.1.1
+# Should match Coolify eth0 public IP
+```
+
+**Check Coolify API**:
+```bash
+curl -s http://192.168.1.200:8000/health
+# Should return: {"status":"ok"}
+```
+
+**Check Docker Containers**:
+```bash
+ssh root@192.168.1.3 "pct exec 200 -- docker ps --format 'table {{.Names}}\t{{.Status}}'"
+# Shows all running containers
+```
+
+**Check Coolify Proxy**:
+```bash
+ssh root@192.168.1.3 "pct exec 200 -- docker logs coolify-proxy 2>&1 | tail -20"
+# Shows recent proxy logs
 ```
 
 ---
 
 ## Troubleshooting Guide
 
-### CRITICAL: Understanding What SHOULD and SHOULD NOT Work
+### Problem: Services Not Accessible from Internet
 
-This section explains the CORRECT expected behavior. If you see these "failures", they are NOT problems.
+**Symptoms**:
+- Cannot access https://service.viljo.se
+- Connection timeout or refused
 
-### From Proxmox Host (192.168.1.3)
+**Debugging Steps**:
 
-**THESE COMMANDS SHOULD FAIL** (This is correct behavior):
-
+1. **Check Coolify LXC Running**:
 ```bash
-# From your workstation
-ssh root@192.168.1.3 "ping 1.1.1.1"
-# Expected: FAILS - Network unreachable or timeout
-# Why: Proxmox host has NO internet access by design
-
-ssh root@192.168.1.3 "curl https://google.com"
-# Expected: FAILS - Could not resolve host or connection timeout
-# Why: vmbr0 (management network) is NOT connected to internet
-
-ssh root@192.168.1.3 "apt update"
-# Expected: FAILS - Cannot connect to repositories
-# Why: Proxmox host cannot reach internet (by design)
+ssh root@192.168.1.3 "pct status 200"
+# Should show: running
 ```
 
-**THIS IS NOT A PROBLEM. THIS IS THE ARCHITECTURE WORKING AS DESIGNED.**
-
-**THESE COMMANDS SHOULD WORK** (Within vmbr3 network):
-
+2. **Check Docker Service**:
 ```bash
-# Ping DMZ gateway (firewall)
-ssh root@192.168.1.3 "ping -c 2 172.16.10.101"
-# Expected: WORKS - Proxmox host can reach vmbr3 network
-
-# Ping service containers
-ssh root@192.168.1.3 "ping -c 2 172.16.10.153"  # GitLab
-# Expected: WORKS - All on same vmbr3 network
+ssh root@192.168.1.3 "pct exec 200 -- systemctl status docker"
+# Should show: active (running)
 ```
 
-### From Service Containers (172.16.10.x)
-
-**THESE COMMANDS SHOULD WORK**:
-
+3. **Check Coolify Proxy**:
 ```bash
-# Ping gateway
-ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 172.16.10.101"
-# Expected: WORKS - Container can reach gateway
-
-# Ping internet
-ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 1.1.1.1"
-# Expected: WORKS - Routed via firewall to internet
-
-# HTTP to internet
-ssh root@192.168.1.3 "pct exec 153 -- curl -I https://google.com"
-# Expected: WORKS - NATed through firewall
-
-# Ping other containers
-ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 172.16.10.155"
-# Expected: WORKS - Direct L2 connectivity on vmbr3
-
-# DNS resolution
-ssh root@192.168.1.3 "pct exec 153 -- nslookup google.com"
-# Expected: WORKS - DNS via 172.16.10.101 or 1.1.1.1
-
-# Package updates
-ssh root@192.168.1.3 "pct exec 153 -- apt update"
-# Expected: WORKS - Can reach Debian repositories via NAT
+ssh root@192.168.1.3 "pct exec 200 -- docker ps | grep coolify-proxy"
+# Should show proxy container running
 ```
 
-**IF THESE FAIL**, then you have a real problem:
-
-1. **Cannot ping gateway (172.16.10.101)**
-   - Check container network configuration
-   - Verify container is on vmbr3
-   - Check firewall container is running: `pct status 101`
-
-2. **Cannot ping internet (1.1.1.1)**
-   - Check firewall container is running
-   - Verify IP forwarding: `pct exec 101 -- sysctl net.ipv4.ip_forward`
-   - Check nftables rules: `pct exec 101 -- nft list ruleset`
-   - Verify firewall eth0 has IP: `pct exec 101 -- ip addr show eth0`
-
-3. **Cannot reach HTTPS sites**
-   - Check DNS configuration in container
-   - Verify firewall is masquerading correctly
-   - Check firewall eth0 can reach internet
-
-### Testing Internet Connectivity - THE CORRECT WAY
-
-**STEP 1: Choose a service container to test from**
-
-Good choices:
-- GitLab (LXC 153)
-- Nextcloud (LXC 155)
-- Keycloak (LXC 151)
-
-**STEP 2: Test from INSIDE the container**
-
+4. **Check Service Container**:
 ```bash
-# Test basic IP connectivity
-ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 1.1.1.1"
-
-# Test DNS resolution
-ssh root@192.168.1.3 "pct exec 153 -- nslookup google.com"
-
-# Test HTTPS connectivity
-ssh root@192.168.1.3 "pct exec 153 -- curl -I https://google.com"
+ssh root@192.168.1.3 "pct exec 200 -- docker ps | grep service-name"
+# Should show your service container
 ```
 
-**STEP 3: If tests fail, diagnose step by step**
-
+5. **Check DNS**:
 ```bash
-# 1. Can container reach its gateway?
-ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 172.16.10.101"
-
-# 2. Is firewall container running?
-ssh root@192.168.1.3 "pct status 101"
-
-# 3. Does firewall have IP on WAN?
-ssh root@192.168.1.3 "pct exec 101 -- ip addr show eth0"
-
-# 4. Is IP forwarding enabled?
-ssh root@192.168.1.3 "pct exec 101 -- sysctl net.ipv4.ip_forward"
-
-# 5. Are nftables rules loaded?
-ssh root@192.168.1.3 "pct exec 101 -- nft list ruleset"
-
-# 6. Can firewall reach internet?
-ssh root@192.168.1.3 "pct exec 101 -- ping -c 2 1.1.1.1"
+dig +short service.viljo.se @1.1.1.1
+# Should return Coolify public IP
 ```
 
-### Common Issues and Solutions
-
-#### Issue: "Proxmox host can't reach internet"
-
-**Symptom**:
+6. **Check from Coolify**:
 ```bash
-ssh root@192.168.1.3 "ping 1.1.1.1"
-# Network unreachable or timeout
+ssh root@192.168.1.3 "pct exec 200 -- curl -I http://localhost"
+# Test if proxy is responding locally
 ```
 
-**Solution**: THIS IS NOT AN ISSUE. This is correct behavior. The Proxmox host does not have and does not need internet access.
+### Problem: Coolify API Not Accessible
 
-**Why**: The management network (vmbr0/192.168.1.x) is separate from the internet connection (vmbr2). This is by design for security and operational reasons.
+**Symptoms**:
+- Ansible playbooks fail with connection error
+- Cannot reach http://192.168.1.200:8000
 
-#### Issue: "Container can't reach internet"
+**Debugging Steps**:
 
-**Symptom**:
+1. **Check Coolify LXC eth1**:
 ```bash
-ssh root@192.168.1.3 "pct exec 153 -- ping 1.1.1.1"
-# Network unreachable or timeout
+ssh root@192.168.1.3 "pct exec 200 -- ip addr show eth1"
+# Should show 192.168.1.200/16
 ```
 
-**Diagnosis**:
-
-1. **Check container network config**:
-   ```bash
-   ssh root@192.168.1.3 "pct config 153 | grep net0"
-   # Should show: bridge=vmbr3,ip=172.16.10.153/24,gw=172.16.10.101
-   ```
-
-2. **Check container routing**:
-   ```bash
-   ssh root@192.168.1.3 "pct exec 153 -- ip route"
-   # Should show: default via 172.16.10.101
-   ```
-
-3. **Check firewall container status**:
-   ```bash
-   ssh root@192.168.1.3 "pct status 101"
-   # Should show: status: running
-   ```
-
-4. **Check firewall IP forwarding**:
-   ```bash
-   ssh root@192.168.1.3 "pct exec 101 -- sysctl net.ipv4.ip_forward"
-   # Should show: net.ipv4.ip_forward = 1
-   ```
-
-5. **Check firewall nftables**:
-   ```bash
-   ssh root@192.168.1.3 "pct exec 101 -- nft list ruleset"
-   # Should show masquerade rule for 172.16.10.0/24
-   ```
-
-**Solution**: Fix whichever component is incorrect above, then re-test.
-
-#### Issue: "DNS not resolving"
-
-**Symptom**:
+2. **Check Coolify API Process**:
 ```bash
-ssh root@192.168.1.3 "pct exec 153 -- nslookup google.com"
-# ;; connection timed out; no servers could be reached
+ssh root@192.168.1.3 "pct exec 200 -- ps aux | grep coolify"
+# Should show Coolify processes
 ```
 
-**Diagnosis**:
+3. **Test API from Proxmox**:
+```bash
+ssh root@192.168.1.3 "curl -s http://192.168.1.200:8000/health"
+# Should return health status
+```
 
-1. **Check container DNS config**:
-   ```bash
-   ssh root@192.168.1.3 "pct exec 153 -- cat /etc/resolv.conf"
-   # Should show: nameserver 172.16.10.101 and nameserver 1.1.1.1
-   ```
+4. **Check Firewall**:
+```bash
+ssh root@192.168.1.3 "pct exec 200 -- iptables -L -n"
+# Verify no blocking rules
+```
 
-2. **Test DNS directly**:
-   ```bash
-   ssh root@192.168.1.3 "pct exec 153 -- dig @1.1.1.1 google.com"
-   ```
+### Problem: SSL Certificate Issues
 
-**Solution**: Fix DNS configuration in container network settings.
+**Symptoms**:
+- Certificate expired warnings
+- SSL handshake failures
 
-#### Issue: "Service not reachable from internet"
+**Resolution**:
+- Coolify automatically renews certificates
+- Check Coolify dashboard for certificate status
+- Manually trigger renewal if needed via dashboard
+- Verify DNS points to correct IP
 
-**Symptom**: Cannot access https://gitlab.viljo.se from external network
+### Problem: DNS Not Updating
 
-**Diagnosis**:
+**Symptoms**:
+- Public IP changed but DNS still shows old IP
+- Cannot access services after IP change
 
-1. **Check DNS resolution**:
-   ```bash
-   dig gitlab.viljo.se +short
-   # Should return vmbr2 public IP
-   ```
+**Debugging Steps**:
 
-2. **Check firewall WAN IP**:
-   ```bash
-   ssh root@192.168.1.3 "pct exec 101 -- ip addr show eth0"
-   # Should show public IP from Bahnhof
-   ```
+1. **Check DDNS Timer**:
+```bash
+ssh root@192.168.1.3 "systemctl status loopia-ddns.timer"
+# Should show: active
+```
 
-3. **Check Traefik routing**:
-   ```bash
-   ssh root@192.168.1.3 "cat /etc/traefik/dynamic/services.yml | grep -A10 gitlab"
-   # Should show gitlab router and service
-   ```
+2. **Check Last Run**:
+```bash
+ssh root@192.168.1.3 "systemctl status loopia-ddns.service | tail -20"
+# Shows last execution
+```
 
-4. **Check service container is running**:
-   ```bash
-   ssh root@192.168.1.3 "pct status 153"
-   # Should show: status: running
-   ```
+3. **Check Current IP**:
+```bash
+ssh root@192.168.1.3 "pct exec 200 -- curl -s ifconfig.me"
+# Shows current public IP from internet perspective
+```
 
-5. **Check service is listening**:
-   ```bash
-   ssh root@192.168.1.3 "pct exec 153 -- netstat -tulpn | grep :80"
-   # Should show service listening on port 80
-   ```
+4. **Check DNS**:
+```bash
+dig +short paas.viljo.se @1.1.1.1
+# Should match current public IP
+```
 
-6. **Test from Proxmox host**:
-   ```bash
-   ssh root@192.168.1.3 "curl -I http://172.16.10.153:80"
-   # Should get HTTP response
-   ```
-
-**Solution**: Fix whichever component is broken in the chain above.
+5. **Manually Trigger Update**:
+```bash
+ssh root@192.168.1.3 "systemctl start loopia-ddns.service"
+# Triggers immediate DNS update
+```
 
 ---
 
-## Network Verification Checklist
+## Security Considerations
 
-Use this checklist to verify the network is configured correctly:
+### Current Security Model
 
-### Bridge Configuration
+**Positive Controls**:
+- **SSL Everywhere**: All public services use HTTPS (Let's Encrypt)
+- **Docker Isolation**: Containers isolated from each other
+- **Coolify Proxy**: Central point for rate limiting, SSL termination
+- **SSH Keys Only**: No password authentication
+- **Ansible Vault**: All secrets encrypted
+- **Application Security**: Services implement their own authentication
 
-- [ ] **vmbr0 exists and is active**
-  ```bash
-  ssh root@192.168.1.3 "ip addr show vmbr0"
-  # Should show 192.168.1.3/24
-  ```
+**Known Trade-offs**:
+- **No Firewall Layer**: Coolify directly exposed to internet
+  - Acceptable for single public IP
+  - Application-level security sufficient
+  - Can add firewall later if needed
+- **Single LXC**: All services in one container
+  - Mitigated by Docker isolation
+  - Quick recovery via Ansible
+- **No DMZ**: vmbr3 unused
+  - Can be activated if requirements change
 
-- [ ] **vmbr2 exists and is active**
-  ```bash
-  ssh root@192.168.1.3 "ip addr show vmbr2"
-  # Should show bridge (may have no IP - that's OK)
-  ```
+### Attack Surface Analysis
 
-- [ ] **vmbr3 exists and is active**
-  ```bash
-  ssh root@192.168.1.3 "ip addr show vmbr3"
-  # Should show 172.16.10.1/24
-  ```
+**Exposed to Internet**:
+- Port 80 (HTTP): Redirects to HTTPS
+- Port 443 (HTTPS): Coolify Proxy handles all requests
+- Coolify LXC eth0 public IP
 
-### Firewall Container (LXC 101)
+**Not Exposed**:
+- Proxmox host (no internet access)
+- Coolify management interface (vmbr0 only)
+- Docker container IPs (internal to Coolify LXC)
+- vmbr0 network (management only)
 
-- [ ] **Firewall container is running**
-  ```bash
-  ssh root@192.168.1.3 "pct status 101"
-  # Should show: status: running
-  ```
+**Mitigation Strategies**:
+1. **Coolify Proxy**: First line of defense
+   - SSL termination
+   - Request routing
+   - Can implement rate limiting
+2. **Docker Networks**: Isolation between containers
+3. **Application Security**: Each service manages authentication
+4. **Regular Updates**: Coolify and Docker kept current
+5. **Monitoring**: Coolify dashboard shows container health
 
-- [ ] **Firewall eth0 on vmbr2 with DHCP IP**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 101 -- ip addr show eth0"
-  # Should show IP address from ISP
-  ```
+### Future Hardening Options
 
-- [ ] **Firewall eth1 on vmbr3 with static IP**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 101 -- ip addr show eth1"
-  # Should show 172.16.10.101/24
-  ```
+If security requirements increase:
 
-- [ ] **IP forwarding is enabled**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 101 -- sysctl net.ipv4.ip_forward"
-  # Should show: net.ipv4.ip_forward = 1
-  ```
+1. **Add Firewall Layer**:
+   - Create firewall LXC with eth0→vmbr2, eth1→vmbr3
+   - Move Coolify eth0 from vmbr2 to vmbr3
+   - Configure NAT/routing on firewall
+   - Add iptables/nftables rules
 
-- [ ] **nftables rules are loaded**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 101 -- nft list ruleset | grep -c masquerade"
-  # Should show: 1 (or more)
-  ```
+2. **Activate vmbr3 DMZ**:
+   - Configure vmbr3 network
+   - Move services behind firewall
+   - Implement network segmentation
 
-- [ ] **Firewall can reach internet**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 101 -- ping -c 2 1.1.1.1"
-  # Should succeed
-  ```
+3. **Add Proxmox Firewall**:
+   - Enable Proxmox host firewall
+   - Add rules at bridge level
+   - Additional defense layer
 
-### Service Containers
+4. **Implement fail2ban**:
+   - Install in Coolify LXC
+   - Monitor Coolify Proxy logs
+   - Auto-ban aggressive scanners
 
-- [ ] **Service container is on vmbr3**
-  ```bash
-  ssh root@192.168.1.3 "pct config 153 | grep bridge"
-  # Should show: bridge=vmbr3
-  ```
-
-- [ ] **Service container has correct IP**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 153 -- ip addr show eth0"
-  # Should show 172.16.10.153/24
-  ```
-
-- [ ] **Service container has correct gateway**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 153 -- ip route | grep default"
-  # Should show: default via 172.16.10.101
-  ```
-
-- [ ] **Service container can ping gateway**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 172.16.10.101"
-  # Should succeed
-  ```
-
-- [ ] **Service container can ping internet**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 153 -- ping -c 2 1.1.1.1"
-  # Should succeed
-  ```
-
-- [ ] **Service container can resolve DNS**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 153 -- nslookup google.com"
-  # Should succeed
-  ```
-
-- [ ] **Service container can reach HTTPS sites**
-  ```bash
-  ssh root@192.168.1.3 "pct exec 153 -- curl -I https://google.com"
-  # Should succeed
-  ```
-
-### Traefik and External Access
-
-- [ ] **Traefik is running**
-  ```bash
-  ssh root@192.168.1.3 "systemctl status traefik"
-  # Should show: active (running)
-  ```
-
-- [ ] **Traefik is listening on vmbr3**
-  ```bash
-  ssh root@192.168.1.3 "netstat -tulpn | grep traefik"
-  # Should show listening on 172.16.10.1:80 and :443
-  ```
-
-- [ ] **DNS resolves to vmbr2 IP**
-  ```bash
-  dig gitlab.viljo.se +short
-  # Should return public IP on vmbr2
-  ```
-
-- [ ] **Service is accessible from internet**
-  ```bash
-  curl -I https://gitlab.viljo.se
-  # Should return HTTP 200 or 302
-  ```
+5. **Web Application Firewall**:
+   - Add ModSecurity to Coolify Proxy
+   - OWASP rules for common attacks
+   - Custom rules for specific threats
 
 ---
 
-## Ansible Configuration References
+## Comparison: Documented vs Actual Architecture
 
-### Variable Definitions
+### What Documentation USED TO Describe
 
-**File**: `inventory/group_vars/all/main.yml`
+**Old Architecture (Never Actually Deployed)**:
+- Firewall LXC 101 with nftables
+- vmbr3 as active DMZ network (172.16.10.0/24)
+- 16+ individual service LXC containers
+- Traefik running on Proxmox host
+- NAT/routing between vmbr2 and vmbr3
+- Port forwarding rules (80/443 → Traefik)
 
-```yaml
-management_bridge: vmbr0
-wan_bridge: vmbr2
-public_bridge: vmbr3
-dmz_subnet: 172.16.10.0/24
-dmz_prefix: 24
-dmz_gateway: 172.16.10.101
-dmz_host_ip: 172.16.10.1
-```
+### What ACTUALLY Exists (Current Reality)
 
-### Firewall Configuration
+**Current Architecture (Deployed 2025-11-10)**:
+- Coolify LXC 200 (single container)
+- vmbr2 for WAN (Coolify eth0 public IP)
+- vmbr3 created but DOWN/unused
+- All services as Docker containers
+- Coolify Proxy (built-in, replaces Traefik)
+- No firewall/NAT layer
+- Direct internet exposure
 
-**File**: `inventory/group_vars/all/firewall.yml`
+### Migration Timeline
 
-```yaml
-firewall_container_id: 101
-firewall_hostname: firewall
-firewall_bridge_wan: "{{ wan_bridge }}"      # vmbr2
-firewall_bridge_lan: "{{ public_bridge }}"    # vmbr3
-firewall_wan_ip_config: dhcp
-firewall_lan_ip_address: "{{ dmz_gateway }}"  # 172.16.10.101
-```
-
-### Container Standard Configuration
-
-**Example** (GitLab):
-
-```yaml
-gitlab_container_id: 153
-gitlab_ip: "172.16.10.{{ gitlab_container_id }}"
-gitlab_gateway: "{{ dmz_gateway }}"           # 172.16.10.101
-gitlab_nameserver: "{{ dmz_gateway }}"        # 172.16.10.101
-gitlab_bridge: "{{ public_bridge }}"          # vmbr3
-```
-
-### Traefik Service Routing
-
-**File**: `inventory/group_vars/all/main.yml`
-
-```yaml
-traefik_services:
-  - name: gitlab
-    host: "gitlab.{{ public_domain }}"
-    container_id: "{{ gitlab_container_id }}"  # 153
-    port: 80
-```
-
-This generates backend URL: `http://172.16.10.153:80`
+- **2025-10-18**: vmbr1 connectivity issues identified
+- **2025-10-19**: Decision to adopt Coolify PaaS approach
+- **2025-10-19**: Coolify LXC deployed on vmbr2/vmbr0
+- **2025-10-19**: Individual LXC containers decommissioned
+- **2025-10-20**: Initial (incorrect) documentation created
+- **2025-11-10**: Documentation corrected to match reality
 
 ---
 
-## Summary
+## Operations
 
-### The Three-Bridge Model
+### Daily Operations
 
-1. **vmbr0 (Management)**
-   - Purpose: SSH/management access ONLY
-   - Connected to: Starlink ISP (CGNAT)
-   - Proxmox host: 192.168.1.3
-   - Internet: NO
-   - Containers: NONE
+**Service Deployment**:
+```bash
+# Run Ansible playbook to deploy service
+cd /path/to/ansible
+ansible-playbook -i inventory/production.ini \
+  playbooks/deploy-service-via-api.yml \
+  --vault-password-file=.vault_pass.txt
+```
 
-2. **vmbr2 (WAN)**
-   - Purpose: Internet connection ONLY
-   - Connected to: Bahnhof ISP (public IP)
-   - Containers: Firewall (LXC 101) eth0 ONLY
-   - Internet: YES
-   - DNS points here: *.viljo.se
+**Check Infrastructure Status**:
+```bash
+# Run status check script
+bash /Users/anders/git/Proxmox_config/scripts/check-infrastructure-status.sh
+```
 
-3. **vmbr3 (DMZ)**
-   - Purpose: Service containers
-   - Network: 172.16.10.0/24
-   - Gateway: 172.16.10.101 (firewall)
-   - Containers: ALL services
-   - Internet: Via firewall NAT
+**View Service Logs**:
+```bash
+# Via Coolify dashboard
+open https://paas.viljo.se
 
-### Critical Understanding
+# Via CLI
+ssh root@192.168.1.3 "pct exec 200 -- docker logs service-name"
+```
 
-**The Proxmox host does NOT need internet access.**
+### Backup Strategy
 
-Internet connectivity flows:
-- **Inbound**: vmbr2 → firewall → Traefik → service containers
-- **Outbound**: service containers → firewall → vmbr2 → internet
+**What Gets Backed Up**:
+- Coolify LXC configuration
+- Docker volumes (service data)
+- Ansible vault (secrets)
+- Infrastructure as code (Git repository)
 
-Testing internet from the Proxmox host will FAIL. This is CORRECT behavior.
+**What Doesn't Need Backup**:
+- Docker images (reproducible from registries)
+- Coolify binary (can be reinstalled)
+- Proxmox OS (can be reinstalled)
 
-Test internet connectivity from SERVICE CONTAINERS on vmbr3, not from the Proxmox host.
+### Disaster Recovery
 
-### Common Mistakes to Avoid
+**Scenario: Complete Proxmox Host Failure**
 
-1. ✗ Trying to ping internet from Proxmox host
-2. ✗ Expecting 192.168.1.3 to have internet access
-3. ✗ Thinking vmbr0 is the internet connection
-4. ✗ Testing connectivity from management network
-5. ✗ Assuming lack of internet on Proxmox host is a problem
+1. **Reinstall Proxmox**:
+   - Boot from Proxmox ISO
+   - Configure vmbr0, vmbr2, vmbr3
 
-### The Correct Way to Think About This
+2. **Restore Repository**:
+   - Clone Proxmox_config repository
+   - Configure vault password
 
-- **Management network (vmbr0)**: Your SSH connection to Proxmox - NO internet
-- **Internet network (vmbr2)**: Where internet enters - firewall only
-- **Service network (vmbr3)**: Where services live - internet via firewall
+3. **Run Coolify Deployment**:
+   ```bash
+   ansible-playbook -i inventory/production.ini \
+     playbooks/coolify-deploy.yml \
+     --vault-password-file=.vault_pass.txt
+   ```
 
-**Your workstation → vmbr0 → Proxmox host** (management)
-**Internet → vmbr2 → firewall → vmbr3 → services** (production)
+4. **Deploy Services**:
+   ```bash
+   # Run service deployment playbooks
+   # Coolify will pull Docker images and restore from volumes
+   ```
 
-These are SEPARATE paths. There is NO route from vmbr0 to internet, BY DESIGN.
+5. **Verify DNS**:
+   - DDNS will auto-update within 15 minutes
+   - Or manually trigger update
+
+**Recovery Time Objective**: 1-2 hours for full restoration
 
 ---
 
-## References
+## References and Related Documentation
 
-- [Network Topology](architecture/network-topology.md) - Original topology documentation
-- [ADR-001: Network Topology Change](adr/001-network-topology-change.md) - Decision record for this architecture
-- [Firewall Deployment](deployment/firewall-deployment.md) - Firewall container setup
-- [Container Mapping](architecture/container-mapping.md) - Service container IP allocations
+### Internal Documentation
+- [Network Topology](architecture/network-topology.md) - Detailed topology
+- [ADR-001](adr/001-network-topology-change.md) - Architecture decision record
+- [Container Mapping](architecture/container-mapping.md) - Container assignments
+- [Getting Started](getting-started.md) - Setup guide
+- [DR Runbook](DR_RUNBOOK.md) - Disaster recovery procedures
+
+### Configuration Files
+- `inventory/group_vars/all/main.yml` - Network configuration
+- `inventory/group_vars/all/services.yml` - Service definitions
+- `inventory/group_vars/all/secrets.yml` - Encrypted secrets
+- `scripts/check-infrastructure-status.sh` - Health check script
+
+### External Documentation
+- [Coolify Documentation](https://coolify.io/docs)
+- [Docker Documentation](https://docs.docker.com/)
+- [Proxmox VE Documentation](https://pve.proxmox.com/pve-docs/)
+- [Let's Encrypt Documentation](https://letsencrypt.org/docs/)
 
 ---
 
-**Last Updated**: 2025-10-27
-**Author**: DevOps Infrastructure Team
-**Status**: Authoritative Reference
-**Review Date**: 2026-01-27 (quarterly review)
+## Appendix: Command Reference
+
+### Proxmox Commands
+
+```bash
+# List all containers
+pct list
+
+# Check container status
+pct status 200
+
+# Execute command in container
+pct exec 200 -- <command>
+
+# Enter container console
+pct enter 200
+
+# Check bridge configuration
+ip addr show vmbr0
+ip addr show vmbr2
+ip addr show vmbr3
+```
+
+### Coolify Commands
+
+```bash
+# Check Docker status
+pct exec 200 -- systemctl status docker
+
+# List containers
+pct exec 200 -- docker ps
+
+# Check specific service
+pct exec 200 -- docker ps | grep service-name
+
+# View logs
+pct exec 200 -- docker logs service-name
+
+# Check Coolify Proxy
+pct exec 200 -- docker logs coolify-proxy
+```
+
+### DNS Commands
+
+```bash
+# Check DNS resolution
+dig +short paas.viljo.se @1.1.1.1
+
+# Check all service DNS
+for service in paas nextcloud jellyfin; do
+  echo "$service.viljo.se: $(dig +short $service.viljo.se @1.1.1.1)"
+done
+
+# Trigger DDNS update
+ssh root@192.168.1.3 "systemctl start loopia-ddns.service"
+
+# Check DDNS status
+ssh root@192.168.1.3 "systemctl status loopia-ddns.service"
+```
+
+### Network Diagnostics
+
+```bash
+# Check Coolify public IP
+ssh root@192.168.1.3 "pct exec 200 -- ip addr show eth0 | grep inet"
+
+# Check Coolify management IP
+ssh root@192.168.1.3 "pct exec 200 -- ip addr show eth1 | grep inet"
+
+# Test internet from Coolify
+ssh root@192.168.1.3 "pct exec 200 -- ping -c 2 1.1.1.1"
+
+# Test Coolify API
+curl -s http://192.168.1.200:8000/health
+
+# Test service externally
+curl -I https://paas.viljo.se
+```
+
+---
+
+**Document Maintainer**: Infrastructure Team
+**Review Schedule**: Monthly
+**Next Review**: 2025-12-10
+**Version**: 2.0 (Rewritten for Coolify architecture)

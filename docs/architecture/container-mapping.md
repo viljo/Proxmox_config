@@ -1,204 +1,387 @@
-# Container ID and IP Mapping
+# Container and Service Mapping
 
-Complete reference of all LXC containers in the Proxmox infrastructure.
+**Last Updated**: 2025-11-10
+**Status**: Reflects actual deployed architecture
+**Related**: [Network Topology](network-topology.md) | [ADR-001](../adr/001-network-topology-change.md)
 
-## Mapping Standard
+## Architecture Overview
 
-All containers follow the standardized pattern:
+The infrastructure uses a **simplified single-LXC architecture** with Coolify PaaS:
 
+- **1 LXC Container**: Coolify (ID: 200)
+- **All services**: Run as Docker containers inside Coolify LXC
+- **No individual service LXCs**: Previous multi-container architecture was never deployed
+- **No DMZ network**: vmbr3 created but unused
+
+## LXC Container Inventory
+
+| Container ID | Service | Management IP | Public Interface | Status | Purpose |
+|--------------|---------|---------------|------------------|--------|---------|
+| **200** | Coolify | 192.168.1.200/16 (eth1→vmbr0) | DHCP public IP (eth0→vmbr2) | ✅ Deployed | PaaS platform hosting all services as Docker containers |
+
+### Coolify LXC 200 Details
+
+**Container Type**: Privileged LXC with Docker support
+**OS**: Debian-based with Docker Engine
+**Network Interfaces**:
+- **eth0** → vmbr2 (WAN): Gets public IP via DHCP from ISP - all public service traffic
+- **eth1** → vmbr0 (Management): Static IP 192.168.1.200/16 - Ansible API access
+
+**Resource Allocation**:
+- **CPU**: Depends on Proxmox host allocation
+- **RAM**: Sufficient for Docker engine + all service containers
+- **Disk**: LXC root + Docker volumes
+
+**Services Inside Container**:
+- Docker Engine
+- Coolify API (port 8000 on management interface)
+- Coolify Proxy (built-in reverse proxy with SSL)
+- All application services (deployed as Docker containers)
+
+## Docker Container Services
+
+All services run as **Docker containers** inside Coolify LXC 200, managed via Coolify API.
+
+### Service Deployment Repository
+
+**Location**: `/coolify_service/ansible`
+**Method**: Services deployed via Ansible playbooks that call Coolify API
+**API Endpoint**: `http://192.168.1.200:8000/api/v1`
+
+### Service Categories
+
+#### Infrastructure Services
+- **Coolify Dashboard**: https://paas.viljo.se
+  - Service management interface
+  - Deployment dashboard
+  - Built-in proxy configuration
+
+#### Application Services (Examples)
+Services are deployed dynamically via Coolify API. Check the following for current services:
+
+**Check deployed services**:
+```bash
+# Via Coolify API
+curl -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+  http://192.168.1.200:8000/api/v1/services
+
+# Via Docker in Coolify LXC
+ssh root@192.168.1.3 pct exec 200 -- docker ps
 ```
-Container ID = Last octet of IP address
+
+**Example services** (deployment status may vary):
+- Links Portal: https://links.viljo.se
+- Media services: https://media.viljo.se
+- Cloud storage: https://cloud.viljo.se
+- Collaboration tools
+- Development tools
+
+**Note**: Services are defined in `/coolify_service/ansible` repository, not in this infrastructure repository.
+
+## Network Configuration
+
+### Proxmox Host
+- **IP**: 192.168.1.3/16 on vmbr0
+- **Function**: Hypervisor, Ansible control plane
+- **Internet Access**: No (management network only)
+
+### Coolify LXC 200 - Management Interface (eth1)
+- **Bridge**: vmbr0 (management network)
+- **IP**: 192.168.1.200/16 (static)
+- **Gateway**: 192.168.1.1
+- **Purpose**:
+  - Ansible API access
+  - Coolify API endpoint
+  - Management/monitoring traffic
+
+### Coolify LXC 200 - Public Interface (eth0)
+- **Bridge**: vmbr2 (WAN)
+- **IP**: DHCP from ISP (dynamic public IP)
+- **Purpose**:
+  - All public service traffic
+  - SSL termination via Coolify Proxy
+  - DNS points here (via Loopia DDNS)
+
+### Bridge Status Summary
+
+| Bridge | Network | Purpose | Status | Connected Devices |
+|--------|---------|---------|--------|-------------------|
+| vmbr0 | 192.168.1.0/16 | Management | Active | Proxmox host (192.168.1.3), Coolify eth1 (192.168.1.200) |
+| vmbr2 | DHCP from ISP | WAN/Public | Active | Coolify eth0 (public IP) |
+| vmbr3 | 172.16.10.0/24 | Reserved | DOWN | Created but unused, available for future segmentation |
+
+## DNS and Service Discovery
+
+### Loopia DDNS Service
+
+**Script Location**: `/usr/local/lib/loopia-ddns/update.py` (on Proxmox host)
+**Systemd Service**: `loopia-ddns.service`
+**Systemd Timer**: `loopia-ddns.timer` (every 15 minutes)
+
+**Configuration**:
+```python
+# Script monitors Coolify LXC 200 eth0 interface (vmbr2)
+CONTAINER_ID = 200  # Coolify container
+INTERFACE = "eth0"  # Public interface on vmbr2
+
+# Updates all *.viljo.se DNS records to Coolify public IP
 ```
 
-**Example**: Container ID `53` → IP Address `172.16.10.53`
+**Verification**:
+```bash
+# Check Coolify public IP
+ssh root@192.168.1.3 pct exec 200 -- ip -4 addr show eth0 | grep inet
 
-This convention was established in [ADR-002: Container ID Standardization](../adr/002-container-id-standardization.md).
+# Check DNS resolution (should match above)
+dig +short paas.viljo.se @1.1.1.1
+```
 
-## DMZ Network Configuration
+### Service Access Patterns
 
-- **Network**: 172.16.10.0/24
-- **Gateway**: 172.16.10.1 (Firewall container)
-- **DNS**: 172.16.10.1, 1.1.1.1
-- **Bridge**: vmbr3
+**Public Access** (via vmbr2):
+```
+Internet → ISP Router (DHCP) → vmbr2 → Coolify eth0 → Coolify Proxy → Docker Container
+```
 
-## Container Inventory
+**Management Access** (via vmbr0):
+```
+Ansible → 192.168.1.3 (Proxmox) → vmbr0 → Coolify eth1 (192.168.1.200) → Coolify API
+```
 
-### Infrastructure Services
+## Comparison: Documented vs Actual
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **1** | Firewall | 172.16.10.1 | firewall | `roles/firewall` | N/A (internal router) |
-| **50** | PostgreSQL | 172.16.10.50 | postgres | `roles/postgresql` | N/A (internal database) |
+### What Was Documented (But Never Existed)
 
-### Authentication & Identity
+The previous documentation described a complex architecture that was never deployed:
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **51** | Keycloak | 172.16.10.51 | keycloak | `roles/keycloak` | https://keycloak.viljo.se |
+- ❌ **Firewall LXC (101)**: NAT gateway on vmbr2/vmbr3 - never created
+- ❌ **DMZ Network**: Active vmbr3 (172.16.10.0/24) with service containers - never activated
+- ❌ **Individual Service LXCs**: 16+ containers with IPs like 172.16.10.X - never created
+- ❌ **Traefik on Proxmox**: Reverse proxy on host - never deployed
+- ❌ **Complex NAT/Routing**: Port forwarding rules - never configured
+- ❌ **PostgreSQL LXC (50)**: Shared database container - never created
+- ❌ **Keycloak LXC (51)**: SSO container - never created
 
-### DevOps & Infrastructure
+**Previous container mapping** (all fictional):
+```
+Container 1:   Firewall (172.16.10.1)       [NEVER EXISTED]
+Container 50:  PostgreSQL (172.16.10.50)    [NEVER EXISTED]
+Container 51:  Keycloak (172.16.10.51)      [NEVER EXISTED]
+Container 52:  NetBox (172.16.10.52)        [NEVER EXISTED]
+Container 53:  GitLab (172.16.10.53)        [NEVER EXISTED]
+... (16+ more containers)                   [ALL NEVER EXISTED]
+```
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **52** | NetBox | 172.16.10.52 | netbox | `roles/netbox` | https://netbox.viljo.se |
-| **53** | GitLab | 172.16.10.53 | gitlab | `roles/gitlab` | https://gitlab.viljo.se |
-| **54** | GitLab Runner | 172.16.10.54 | gitlab-runner | `roles/gitlab_runner` | N/A (internal) |
-| **66** | Coolify | 172.16.10.66 | coolify | `roles/coolify` | https://coolify.viljo.se |
+### What Actually Exists
 
-### Collaboration & Productivity
+**Actual deployed architecture** (as of 2025-11-10):
 
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **55** | Nextcloud | 172.16.10.55 | nextcloud | `roles/nextcloud` | https://nextcloud.viljo.se |
-| **56** | Jellyfin | 172.16.10.56 | jellyfin | `roles/jellyfin` | https://jellyfin.viljo.se |
-| **57** | Home Assistant | 172.16.10.57 | homeassistant | `roles/homeassistant` | https://ha.viljo.se |
+- ✅ **Coolify LXC (200)**: Single container hosting everything
+- ✅ **vmbr2 (WAN)**: Coolify eth0 gets public IP directly
+- ✅ **vmbr0 (Management)**: Coolify eth1 for management (192.168.1.200)
+- ✅ **vmbr3**: Created but DOWN (interface exists, no active network)
+- ✅ **Docker Containers**: All services as containers inside Coolify LXC
+- ✅ **Coolify Proxy**: Built-in reverse proxy (replaces Traefik)
+- ✅ **Direct Internet Exposure**: No firewall/NAT layer
 
-### Utilities & Tools
-
-| Container ID | Service Name | IP Address | Hostname | Role | Public URL |
-|--------------|--------------|------------|----------|------|------------|
-| **59** | qBittorrent | 172.16.10.59 | qbittorrent | `roles/qbittorrent` | https://qbit.viljo.se |
-| **60** | Demo Site | 172.16.10.60 | demosite | `roles/demo_site` | https://demosite.viljo.se |
-| **61** | Portainer | 172.16.10.61 | portainer | `roles/portainer` | https://portainer.viljo.se |
-| **62** | Wazuh | 172.16.10.62 | wazuh | `roles/wazuh` | https://wazuh.viljo.se |
-| **64** | OpenMediaVault | 172.16.10.64 | openmediavault | `roles/openmediavault` | https://omv.viljo.se |
-| **65** | Zipline | 172.16.10.65 | zipline | `roles/zipline` | https://zipline.viljo.se |
-| **90** | WireGuard VPN | 172.16.10.90 | wireguard | `roles/wireguard` | N/A (VPN endpoint) |
-
-## Resource Allocation Summary
-
-| Service | CPU Cores | RAM (MB) | Disk (GB) | Notes |
-|---------|-----------|----------|-----------|-------|
-| Firewall | 1 | 512 | 8 | Minimal - routing only |
-| PostgreSQL | 2 | 2048 | 32 | Shared database |
-| Keycloak | 2 | 2048 | 16 | SSO/Authentication |
-| NetBox | 2 | 2048 | 32 | Infrastructure docs |
-| GitLab | 4 | 8192 | 128 | High resource usage |
-| GitLab Runner | 2 | 4096 | 64 | Build executor |
-| Coolify | 2 | 4096 | 64 | Self-hosted PaaS |
-| Nextcloud | 2 | 4096 | 64 | File storage |
-| Jellyfin | 4 | 4096 | 64 | Media streaming |
-| Home Assistant | 2 | 2048 | 32 | IoT automation |
-| qBittorrent | 2 | 2048 | 128 | Torrent client |
-| Demo Site | 1 | 1024 | 8 | Static website |
-| Portainer | 2 | 1024 | 16 | Container management |
-| Wazuh | 4 | 8192 | 64 | Security monitoring |
-| OpenMediaVault | 2 | 2048 | 64 | NAS/Storage |
-| Zipline | 2 | 2048 | 32 | Screenshot sharing |
-| WireGuard | 1 | 512 | 8 | VPN server |
-
-
-**Total Resources**: ~37 cores, ~47GB RAM, ~760GB storage
-
-=======
-## Configuration Files
-
-Each service has configuration in:
-- **Inventory**: `inventory/group_vars/all/<service>.yml`
-- **Role**: `roles/<service>/defaults/main.yml`
-- **Role README**: `roles/<service>/README.md`
-
-## Network Dependencies
-
-### Firewall (Container 1)
-- **Upstream**: vmbr2 (WAN) - DHCP from ISP
-- **Downstream**: vmbr3 (DMZ) - 172.16.10.1/24
-- **Function**: NAT gateway, port forwarding (80/443 → Traefik)
-
-### Traefik (Not a container)
-- **Location**: Runs on Proxmox host
-- **Function**: Reverse proxy, TLS termination
-- **Upstream**: Firewall (172.16.10.1)
-- **Downstream**: All public services on vmbr3
-
-### PostgreSQL (Container 50)
-- **Clients**: Keycloak, NetBox, Nextcloud, GitLab (via socket/TCP)
-
-## Service Categories
-
-### Core Infrastructure (Always Running)
-- Firewall (1)
-- PostgreSQL (50)
-- Keycloak (51)
-
-### DevOps Platform
-- NetBox (52)
-- GitLab (53)
-- GitLab Runner (54)
-- Coolify (66)
-
-### User Applications
-- Nextcloud (55)
-- Jellyfin (56)
-- Home Assistant (57)
-
-### Utilities
-- qBittorrent (59)
-- Demo Site (60) - Testing only
-- Portainer (61) - Container management
-- Wazuh (62)
-- OpenMediaVault (64)
-- Zipline (65)
-- WireGuard VPN (90)
+**Actual container mapping**:
+```
+Container 200: Coolify PaaS                 [DEPLOYED & ACTIVE]
+  ├─ eth0 → vmbr2 (public IP via DHCP)
+  ├─ eth1 → vmbr0 (192.168.1.200)
+  ├─ Docker Engine
+  ├─ Coolify API (port 8000)
+  ├─ Coolify Proxy (reverse proxy)
+  └─ All services (as Docker containers)
+```
 
 ## Quick Reference Commands
 
-### List All Containers
+### Check LXC Container Status
 ```bash
+# List all LXC containers (should only show Coolify 200)
 ssh root@192.168.1.3 pct list
+
+# Check Coolify container status
+ssh root@192.168.1.3 pct status 200
+
+# Check Coolify container config
+ssh root@192.168.1.3 pct config 200
+
+# Enter Coolify container
+ssh root@192.168.1.3 pct enter 200
 ```
 
-### Check Specific Container
+### Check Docker Containers
 ```bash
-ssh root@192.168.1.3 pct status 53  # GitLab
-ssh root@192.168.1.3 pct config 53  # Show config
-ssh root@192.168.1.3 pct enter 53   # Enter container
+# List all Docker containers in Coolify
+ssh root@192.168.1.3 pct exec 200 -- docker ps
+
+# Check specific service
+ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=SERVICE_NAME
+
+# Check Coolify proxy
+ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=coolify-proxy
+
+# View container logs
+ssh root@192.168.1.3 pct exec 200 -- docker logs CONTAINER_NAME
 ```
 
-### Network Testing
+### Check Network Interfaces
 ```bash
-# From Proxmox host
-ping 172.16.10.53  # Ping GitLab
+# Check Coolify public IP (eth0 on vmbr2)
+ssh root@192.168.1.3 pct exec 200 -- ip addr show eth0
 
-# From within a container
-ssh root@192.168.1.3 pct exec 53 -- ping -c 2 1.1.1.1
-ssh root@192.168.1.3 pct exec 53 -- curl -I https://gitlab.viljo.se
+# Check Coolify management IP (eth1 on vmbr0)
+ssh root@192.168.1.3 pct exec 200 -- ip addr show eth1
+
+# Test internet connectivity from Coolify
+ssh root@192.168.1.3 pct exec 200 -- ping -c 2 1.1.1.1
+
+# Test DNS resolution
+ssh root@192.168.1.3 pct exec 200 -- dig +short paas.viljo.se
 ```
 
-## Provisioning Status
+### Check Coolify API
+```bash
+# Check API health (from Proxmox host)
+curl -s http://192.168.1.200:8000/health
 
-| Service | Status | Deployed | Notes |
-|---------|--------|----------|-------|
-| Firewall | ✅ Deployed | Yes | Production |
-| PostgreSQL | ✅ Deployed | Yes | Production |
-| Keycloak | ⚠️ Planned | No | Not yet implemented |
-| NetBox | ✅ Implemented | No | Role complete, ready for deployment |
-| Coolify | ✅ Implemented | No | Role complete, ready for deployment |
-| GitLab | ⚠️ Partial | No | Role complete, not deployed |
-| GitLab Runner | ⚠️ Planned | No | Depends on GitLab |
-| Nextcloud | ⚠️ Planned | No | Not yet implemented |
-| Jellyfin | ⚠️ Planned | No | Not yet implemented |
-| Home Assistant | ⚠️ Planned | No | Not yet implemented |
-| qBittorrent | ⚠️ Planned | No | Not yet implemented |
-| Demo Site | ✅ Deployed | Yes | Testing/validation |
-| Wazuh | ⚠️ Planned | No | Not yet implemented |
-| OpenMediaVault | ⚠️ Planned | No | Not yet implemented |
-| Zipline | ⚠️ Planned | No | Not yet implemented |
-| WireGuard VPN | ⚠️ Planned | No | Not yet implemented |
+# List services via API
+curl -s -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+  http://192.168.1.200:8000/api/v1/services | jq
 
-## Reserved IP Ranges
+# List applications via API
+curl -s -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
+  http://192.168.1.200:8000/api/v1/applications | jq
+```
 
-- **1-49**: Infrastructure and future core services
-- **50-59**: Backend services (databases, auth, etc.)
-- **60-89**: User-facing applications
-- **90-99**: Network services (VPN, DNS, etc.)
+### Service Deployment
+```bash
+# Services are deployed via Ansible playbooks in /coolify_service/ansible
+cd /path/to/coolify_service/ansible
+
+# Deploy a service
+ansible-playbook -i inventory/production.ini \
+  playbooks/deploy-SERVICE-via-api.yml \
+  --vault-password-file=.vault_pass.txt
+```
+
+## Resource Summary
+
+### Current Resource Usage
+
+**Single LXC Container**:
+- Coolify LXC 200: Resources allocated via Proxmox LXC configuration
+
+**Docker Containers**: Variable based on deployed services
+- Each service runs as Docker container with resources managed by Coolify
+- Check current resource usage via Coolify dashboard: https://paas.viljo.se
+
+### Comparison with Previous Documentation
+
+**Old documentation claimed**:
+- 37 CPU cores allocated across 16+ LXC containers
+- 47GB RAM allocated
+- 760GB storage allocated
+
+**Actual reality**:
+- 1 LXC container (Coolify 200)
+- Resources allocated to single LXC
+- Docker containers share resources within Coolify LXC
+- More efficient resource usage than multiple LXCs
+
+## Configuration Files
+
+### Infrastructure Configuration
+- **Services Inventory**: `inventory/group_vars/all/services.yml`
+- **Network Configuration**: `inventory/group_vars/all/main.yml`
+- **Coolify Deployment**: `specs/planned/002-docker-platform-selfservice/`
+
+### Service Configuration
+- **Service Definitions**: `/coolify_service/ansible/` (separate repository)
+- **API Deployment Playbooks**: `/coolify_service/ansible/playbooks/`
+- **Service Variables**: `/coolify_service/ansible/inventory/group_vars/`
+
+## Troubleshooting
+
+### Container Not Found
+If you see references to containers other than 200:
+```bash
+# This is expected - only Coolify container exists
+ssh root@192.168.1.3 pct list
+
+# You should only see:
+# VMID  Status  Name
+# 200   running coolify
+```
+
+### Service Not Accessible
+If a service isn't reachable:
+```bash
+# 1. Check DNS resolution
+dig +short SERVICE.viljo.se @1.1.1.1
+
+# 2. Check Coolify public IP
+ssh root@192.168.1.3 pct exec 200 -- ip -4 addr show eth0 | grep inet
+
+# 3. Check if service container is running
+ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=SERVICE_NAME
+
+# 4. Check Coolify proxy
+ssh root@192.168.1.3 pct exec 200 -- docker logs coolify-proxy | tail -50
+```
+
+### Cannot Access Coolify API
+If you cannot reach the Coolify API:
+```bash
+# 1. Check Coolify management interface
+ssh root@192.168.1.3 pct exec 200 -- ip addr show eth1
+
+# 2. Test API from Proxmox host
+curl -s http://192.168.1.200:8000/health
+
+# 3. Check Coolify container is running
+ssh root@192.168.1.3 pct status 200
+```
+
+## Migration Notes
+
+### If You Need Multi-Container Architecture
+
+If future requirements demand network segmentation or firewall layer:
+
+1. **Activate vmbr3**:
+   - Bring up vmbr3 interface on Proxmox
+   - Configure 172.16.10.0/24 network
+
+2. **Create Firewall LXC**:
+   - Deploy container 101 with eth0→vmbr2, eth1→vmbr3
+   - Configure NAT/routing
+
+3. **Move Coolify to DMZ**:
+   - Move Coolify eth0 from vmbr2 to vmbr3
+   - Assign static IP 172.16.10.200
+   - Update routing through firewall
+
+4. **Update DDNS**:
+   - Change DDNS script to monitor firewall container (101) eth0
+   - Update DNS to point to firewall public IP
+
+5. **Update Documentation**:
+   - Update all references to network topology
+   - Document firewall rules and NAT configuration
 
 ## See Also
 
 - [Network Topology](network-topology.md) - Complete network architecture
-- [Firewall Deployment](../deployment/firewall-deployment.md) - Firewall setup guide
-- [ADR-002](../adr/002-container-id-standardization.md) - Container ID standardization decision
+- [ADR-001: Network Architecture Decision](../adr/001-network-topology-change.md)
+- [Coolify Deployment Spec](../../specs/planned/002-docker-platform-selfservice/)
+- [Infrastructure Status Script](../../scripts/check-infrastructure-status.sh)
+- [Services Configuration](../../inventory/group_vars/all/services.yml)
 
 ---
 
-**Last Updated**: 2025-10-20 during project restructure
+**Maintained By**: Infrastructure Team
+**Review Schedule**: Monthly
+**Next Review**: 2025-12-10
