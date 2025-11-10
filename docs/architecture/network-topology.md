@@ -1,106 +1,293 @@
-# Network Topology Strategy
+# Network Topology - Simplified Coolify Architecture
 
-**IMPORTANT**: For comprehensive network architecture documentation including troubleshooting and common mistakes, see [NETWORK_ARCHITECTURE.md](../NETWORK_ARCHITECTURE.md).
-
-## CRITICAL: Bridge Usage Policy
-
-**⚠️ IMPORTANT - Public Service Access:**
-
-- **vmbr0 (br0)** - **MANAGEMENT ONLY (Starlink - CGNAT)**: Used exclusively for administrative access to the Proxmox host. **Behind CGNAT - cannot host public services**. NOT for service traffic or DNS.
-- **vmbr2 (br2)** - **PUBLIC INTERNET (Bahnhof - NOT CGNAT)**: Used for all public service access, DNS records, and WAN connectivity. The firewall container (101) WAN interface on this bridge provides the **publicly routable IP address** that DNS must point to.
-- **vmbr3 (br3)** - **DMZ**: Internal communication between services. Not directly accessible from internet.
-
-**ISP Details**:
-- **vmbr0 (Starlink)**: Behind Carrier-Grade NAT (CGNAT). Inbound connections from internet are NOT possible. Only suitable for outbound management traffic.
-- **vmbr2 (Bahnhof)**: Direct public IP assignment (NOT CGNAT). Fully routable from internet. **Required for hosting public services**.
-
-**DNS Configuration**: All DNS records (*.viljo.se) MUST point to the public IP address on vmbr2 (br2) obtained from the firewall container's WAN interface (Bahnhof connection). The Loopia DDNS script automatically reads this IP from container 101 eth0 and updates DNS records accordingly.
-
-**Why This Matters**:
-1. Starlink (vmbr0) uses CGNAT - services hosted here cannot be reached from internet
-2. Bahnhof (vmbr2) provides direct public IP - services must use this connection
-3. Testing or configuring services using the Starlink/vmbr0 IP will fail from internet
+**Last Updated**: 2025-11-10
+**Status**: Accurate as of deployment
+**Related**: [ADR-001: Network Architecture](../adr/001-network-topology-change.md) | [NETWORK_ARCHITECTURE.md](../NETWORK_ARCHITECTURE.md)
 
 ## Overview
-The Proxmox host exposes three bridges that strictly separate management, WAN, and internal DMZ traffic:
 
-| Bridge | Addressing | Purpose | DNS Usage | ISP/CGNAT | Notes |
-|--------|------------|---------|-----------|-----------|-------|
-| `vmbr0` | 192.168.1.0/24 (Starlink DHCP) | **Management ONLY** | ❌ Never | Starlink (CGNAT) | Proxmox management IP `192.168.1.3`. **Cannot host public services** due to CGNAT. |
-| `vmbr2` | DHCP (Bahnhof) | **WAN/Public Internet** | ✅ Always | Bahnhof (Public IP) | Publicly routable IP on firewall container 101 eth0. **All DNS records point here**. |
-| `vmbr3` | 172.16.10.0/24 (static) | **Service DMZ** | ❌ Never | Internal only | Backplane for all application LXCs. Routed/NATed by firewall LXC (101). |
+The infrastructure uses a simplified network topology with Coolify PaaS managing all services in Docker containers within a single LXC container. This eliminates the complexity of multiple LXC containers, firewall/NAT layers, and DMZ networks.
 
-Traefik runs on the Proxmox host and accepts traffic from vmbr2 (Bahnhof public IP) after it passes through the firewall container's DNAT rules. All service containers sit on the private `vmbr3` segment and are published through Traefik routes.
+## Bridge Configuration
 
-## DNS Synchronization with vmbr2 (br2)
+| Bridge | Network | Purpose | Status | Connected Devices |
+|--------|---------|---------|--------|-------------------|
+| **vmbr0** | 192.168.1.0/16 | Management | Active | Proxmox host (192.168.1.3), Coolify LXC management interface (192.168.1.200) |
+| **vmbr2** | DHCP from ISP | WAN/Public Internet | Active | Coolify LXC public interface (DHCP public IP) |
+| **vmbr3** | 172.16.10.0/24 | Reserved (unused) | DOWN | Created but not active, available for future segmentation |
 
-The Loopia DDNS automation ensures DNS records always point to the correct public IP on vmbr2:
+## Network Flow
+
+```
+                           Internet
+                              ↓
+                      ISP Router (DHCP)
+                              ↓
+                    ┌─────────────────────┐
+                    │   vmbr2 (WAN)       │
+                    │   Bridge on Proxmox │
+                    └──────────┬──────────┘
+                              ↓
+              ┌───────────────────────────────┐
+              │   Coolify LXC 200 (eth0)      │
+              │   Public IP via DHCP          │
+              │                               │
+              │  ┌─────────────────────────┐  │
+              │  │   Coolify Proxy         │  │
+              │  │   (Built-in reverse     │  │
+              │  │    proxy with SSL)      │  │
+              │  └───────────┬─────────────┘  │
+              │              ↓                 │
+              │  ┌─────────────────────────┐  │
+              │  │   Docker Containers     │  │
+              │  │   (All services)        │  │
+              │  └─────────────────────────┘  │
+              └───────────────┬───────────────┘
+                              │
+                    Coolify LXC 200 (eth1)
+                    192.168.1.200/16
+                              ↓
+                    ┌─────────────────────┐
+                    │   vmbr0 (Management)│
+                    │   192.168.1.0/16    │
+                    └──────────┬──────────┘
+                              ↓
+                    Proxmox Host (192.168.1.3)
+                    Ansible API Access
+```
+
+## Architecture Details
+
+### Proxmox Host
+- **IP Address**: 192.168.1.3/16 on vmbr0
+- **Purpose**: Hypervisor management, Ansible control plane
+- **Network**: Management only (vmbr0)
+
+### Coolify LXC Container (ID: 200)
+- **Container Type**: Privileged LXC with Docker support
+- **Interfaces**:
+  - **eth0** → vmbr2: Public IP via DHCP from ISP
+  - **eth1** → vmbr0: Static IP 192.168.1.200/16 for management
+- **Services**:
+  - Docker Engine
+  - Coolify API (port 8000 on management interface)
+  - Coolify Proxy (built-in reverse proxy, replaces Traefik)
+  - All application services as Docker containers
+
+### Service Architecture
+
+**No individual LXC containers** - all services run as Docker containers inside Coolify LXC:
+- Coolify manages container lifecycle via API
+- Coolify Proxy handles SSL termination and routing
+- Services deployed via Ansible playbooks calling Coolify API
+- Service definitions in separate repository: `/coolify_service/ansible`
+
+## DNS Configuration
+
+### Loopia DDNS Service
 
 **Script Location**: `/usr/local/lib/loopia-ddns/update.py`
 **Update Frequency**: Every 15 minutes (systemd timer)
-**IP Source**: Container 101 (firewall) eth0 interface on vmbr2
+**IP Source**: Coolify LXC 200 eth0 interface on vmbr2
+**DNS Records**: All *.viljo.se subdomains point to Coolify public IP
 
 **How It Works**:
 ```python
-CONTAINER_ID = 101  # Firewall container
-INTERFACE = "eth0"  # WAN interface on vmbr2
+# Script reads public IP from Coolify LXC eth0 (vmbr2)
+CONTAINER_ID = 200  # Coolify container
+INTERFACE = "eth0"  # Public interface on vmbr2
 
-# Reads public IP from firewall's WAN interface
+# Get current public IP
 ip_output = subprocess.check_output([
     "pct", "exec", str(CONTAINER_ID), "--",
     "ip", "-4", "-o", "addr", "show", "dev", INTERFACE
 ])
 current_ip = ip_output.split()[3].split('/')[0]
 
-# Updates all DNS records (*.viljo.se) to this IP
+# Update all DNS records to this IP via Loopia API
 ```
-
-**Why This Is Correct**: The firewall container (101) has its WAN interface (eth0) connected to vmbr2, which receives the ISP's public IP via DHCP. This is the IP address that receives all inbound traffic from the internet. The script correctly queries this interface and updates DNS records accordingly.
 
 **Verification**:
 ```bash
-# Check firewall WAN IP (should match DNS)
-pct exec 101 -- ip -4 addr show eth0 | grep inet
+# Check Coolify public IP (should match DNS)
+pct exec 200 -- ip -4 addr show eth0 | grep inet
 
 # Check DNS resolution (should match above)
-dig +short mattermost.viljo.se @1.1.1.1
+dig +short paas.viljo.se @1.1.1.1
 ```
 
-## Implementation Status
-### Completed
-- `vmbr0` remains the 192.168.1.0/24 management bridge (admin access only). `vmbr2` (WAN) stays on DHCP and feeds the firewall LXC WAN interface (public internet). `vmbr3` static bridge `(172.16.10.2/24)` carries the DMZ (internal services).
-- All service inventories (`inventory/group_vars/all/*.yml`) use 172.16.10.x addresses, the firewall gateway (`172.16.10.1`), and DMZ DNS (`172.16.10.1`, `1.1.1.1`).
-- `roles/firewall` builds LXC 101: `eth0 → vmbr2 (DHCP)`, `eth1 → vmbr3 (172.16.10.1/24)`, applies nftables masquerade and forwards WAN 80/443 to Traefik on vmbr2.
-- `roles/dmz_cleanup`, `roles/gitlab`, `roles/traefik`, etc., recreate service containers on vmbr3; containers use `eth0 → vmbr3` with default route via `172.16.10.1`.
-- All LXC roles reference the Debian 13 "Trixie" template (`{{ debian_template_image }}`) so new containers track the latest release.
-- `ansible-playbook playbooks/site.yml --tags loopia_ddns` installs a timer on the Proxmox host that calls the Loopia API every 15 minutes using the firewall's vmbr2 WAN IP.
-- `loopia_ddns` state stored in `/var/lib/loopia-ddns`, script at `/usr/local/lib/loopia-ddns/update.py`, systemd timer ensures public DNS follows the firewall's DHCP lease on vmbr2.
-### Outstanding
-- Consider decommissioning the old `vmbr1` if it’s no longer needed; currently it still shows a legacy DHCP lease but is link-down.
-- Extend nftables (Firewall LXC) to allow additional inbound ports if services like SSH/SMTP are required from WAN.
-- Optionally mirror ddns updates inside the firewall LXC if Proxmox-level timer isn’t desired.
-- Finalise documentation of Traefik host validation from outside network once DNS propagation completes.
+## Key Architectural Decisions
 
-**Outstanding**
-- Rebuild the affected LXCs (`pct destroy` + rerun the Ansible roles) so they pick up the new addressing.
-- Re-render Traefik once backend services are online to clear the 404 responses.
-- Validate outbound connectivity from each container and exercise HTTPS frontends through Traefik.
+### Why This Design?
 
-## Migration Runbook
-1. **Deploy the firewall LXC**
-   * Run `ansible-playbook playbooks/site.yml --tags firewall` (or `playbooks/dmz-rebuild.yml --tags firewall`) to create the Debian firewall container on `vmbr2`/`vmbr3`.
-   * The role installs nftables, enables IP forwarding, masquerades 172.16.10.0/24 to the WAN, and DNATs TCP/80+443 towards the Traefik host IP (`{{ dmz_host_ip }}`).
-   * Adjust `inventory/group_vars/all/firewall.yml` if additional ports or rules are required.
-2. **Recreate Containers**
-   * Run `ansible-playbook playbooks/dmz-rebuild.yml --tags dmz_cleanup` to purge the legacy 192.168.1.x LXCs (or skip the tag to rebuild everything in one go).
-   * Rerun the full rebuild (`ansible-playbook playbooks/dmz-rebuild.yml`) or targeted tags (`ansible-playbook playbooks/site.yml --tags gitlab,nextcloud,postgres,...`) so each role provisions a clean container on `vmbr3`.
-3. **Verify Connectivity**
-   * Within each container: check `ip addr show eth0`, `ip route`, `ping 1.1.1.1`, and `apt-get update`.
-   * From the Proxmox host: ensure `vmbr3` shows the static addressing (`{{ dmz_host_ip }}`/`{{ dmz_netmask }}`) and that the firewall container responds at `{{ dmz_gateway }}`.
-4. **Update Traefik & DNS**
-   * Execute `ansible-playbook playbooks/site.yml --tags traefik`.
-   * Confirm Loopia DNS automation still resolves the public IP on `vmbr2`.
-   * Validate `curl -Ik https://<service>.{{ public_domain }}` for each published application.
+**Simplification Over Complexity**:
+- **Before**: 16+ LXC containers, firewall LXC, DMZ network, complex NAT/routing
+- **After**: 1 LXC container (Coolify), all services as Docker containers
+- **Result**: Easier management, faster deployments, lower resource usage
 
-## Summary
-Inventory and role defaults now align with the planned 172.16.10.0/24 DMZ on `vmbr3`, while `vmbr2` remains the WAN uplink and `vmbr0` handles management. The firewall LXC provides routing/NAT plus HTTPS forwarding to Traefik, so rebuilding the application containers immediately restores service without exposing additional public IPs.
+**Direct Internet Exposure**:
+- Coolify LXC directly receives public IP on vmbr2
+- No firewall/NAT layer (firewall container never deployed)
+- Security provided by:
+  - Coolify Proxy (reverse proxy with SSL)
+  - Docker network isolation
+  - Application-level security
+  - Proxmox host firewall (if configured)
+
+**vmbr3 Unused**:
+- Created during initial planning but never activated
+- Interface exists on Proxmox but is DOWN (no carrier)
+- Reserved for future network segmentation if needed
+- Not currently part of traffic flow
+
+## Service Management
+
+### Deployment Method
+
+Services are deployed via Ansible playbooks that call the Coolify API:
+
+```yaml
+# Example: Deploy service to Coolify
+- name: Create service in Coolify
+  uri:
+    url: "http://192.168.1.200:8000/api/v1/services"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ coolify_api_token }}"
+    body_format: json
+    body:
+      name: "service-name"
+      fqdn: "service.viljo.se"
+      docker_compose: "{{ docker_compose_content }}"
+```
+
+### Service Discovery
+
+All services accessible via:
+- **Public**: https://service.viljo.se (via vmbr2 public IP)
+- **Coolify Dashboard**: https://paas.viljo.se
+- **Coolify API**: http://192.168.1.200:8000/api/v1 (management network)
+
+## Comparison with Documented vs Actual
+
+### What Documentation Described (But Never Existed)
+
+- Firewall LXC 101 on vmbr2/vmbr3
+- DMZ network on vmbr3 (172.16.10.0/24)
+- NAT/routing between vmbr2 and vmbr3
+- Traefik running on Proxmox host
+- 16+ individual service LXC containers on vmbr3
+- Port forwarding rules (80/443 → Traefik)
+
+### What Actually Exists
+
+- Coolify LXC 200 with eth0 on vmbr2 (public IP)
+- Coolify LXC 200 with eth1 on vmbr0 (management IP)
+- vmbr3 created but DOWN/unused
+- Coolify Proxy (built-in, replaces Traefik)
+- All services as Docker containers inside Coolify LXC
+- No firewall container, no DMZ, no NAT layer
+
+## Troubleshooting
+
+### Check Coolify Public IP
+```bash
+# From Proxmox host
+pct exec 200 -- ip addr show eth0
+
+# Should show public IP from ISP DHCP
+```
+
+### Check Coolify Management IP
+```bash
+# From Proxmox host
+pct exec 200 -- ip addr show eth1
+
+# Should show 192.168.1.200/16
+```
+
+### Check Docker Containers
+```bash
+# List all running containers
+pct exec 200 -- docker ps
+
+# Check Coolify proxy
+pct exec 200 -- docker ps --filter name=coolify-proxy
+```
+
+### Check DNS Resolution
+```bash
+# From Proxmox or any machine
+dig +short paas.viljo.se @1.1.1.1
+
+# Should match Coolify public IP on eth0
+```
+
+### Check Coolify API
+```bash
+# From Proxmox host
+curl -s http://192.168.1.200:8000/health
+
+# Should return {"status": "ok"}
+```
+
+## Security Considerations
+
+### Current Security Model
+
+**Positive Security Controls**:
+- Docker network isolation between containers
+- Coolify Proxy SSL termination (Let's Encrypt)
+- Application-level authentication
+- Ansible Vault for secrets management
+- SSH key-based authentication only
+
+**Known Trade-offs**:
+- **No firewall/NAT layer**: Coolify directly exposed to internet
+  - Acceptable: Single public IP, application security sufficient
+- **Single LXC container**: All services in one failure domain
+  - Mitigated: Docker container isolation, quick Ansible-based recovery
+- **No network segmentation**: vmbr3 unused
+  - Acceptable: Can be activated later if requirements change
+
+### Future Hardening Options
+
+If security requirements change:
+1. **Activate vmbr3**: Move Coolify eth0 to vmbr3, create firewall LXC
+2. **Add firewall rules**: Configure Proxmox host firewall
+3. **Implement fail2ban**: Rate limiting on Coolify LXC
+4. **Network segmentation**: Separate Docker networks per service type
+
+## Migration Notes
+
+### From Documented to Actual (This Update)
+
+- Removed references to firewall LXC 101
+- Removed references to vmbr3 DMZ network usage
+- Removed references to Traefik on Proxmox host
+- Updated DDNS script references (container 101 → 200)
+- Updated to reflect Coolify PaaS architecture
+- Documented vmbr3 as unused/reserved
+
+### For Future Migrations
+
+If implementing firewall/DMZ architecture:
+1. Create firewall LXC with eth0→vmbr2, eth1→vmbr3
+2. Move Coolify LXC eth0 from vmbr2 to vmbr3
+3. Configure NAT/routing on firewall LXC
+4. Update DDNS to monitor firewall WAN IP
+5. Update DNS to point to firewall public IP
+
+## References
+
+- [ADR-001: Network Architecture Decision](../adr/001-network-topology-change.md)
+- [Coolify Deployment Spec](../../specs/planned/002-docker-platform-selfservice)
+- [Infrastructure Status Script](../../scripts/check-infrastructure-status.sh)
+- [Services Configuration](../../inventory/group_vars/all/services.yml)
+- [Main Configuration](../../inventory/group_vars/all/main.yml)
+
+---
+
+**Maintained By**: Infrastructure Team
+**Review Schedule**: Monthly
+**Next Review**: 2025-12-10
