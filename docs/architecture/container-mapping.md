@@ -9,15 +9,22 @@
 The infrastructure uses a **simplified single-LXC architecture**:
 
 - **1 LXC Container**: Containers (ID: 200)
+- **1 VM**: Ollama LLM (ID: 201)
 - **All services**: Run as Docker containers managed by Traefik reverse proxy
 - **No individual service LXCs**: Previous multi-container architecture was never deployed
-- **No DMZ network**: vmbr3 created but unused
+- **vmbr3 network**: Active (172.31.31.0/24) - used for Ollama VM
 
 ## LXC Container Inventory
 
 | Container ID | Service | Management IP | Public Interface | Status | Purpose |
 |--------------|---------|---------------|------------------|--------|---------|
 | **200** | Containers | 192.168.1.200/16 (eth1→vmbr0) | DHCP public IP (eth0→vmbr2) | ✅ Deployed | Docker host for all application services with Traefik reverse proxy |
+
+## VM Inventory
+
+| VM ID | Service | Network | Status | Purpose |
+|-------|---------|---------|--------|---------|
+| **201** | Ollama | 172.31.31.x/24 (vmbr3) | ⚠️ Incomplete | LLM inference server (boot issues - needs repair) |
 
 ### Containers LXC 200 Details
 
@@ -96,13 +103,20 @@ ssh root@192.168.1.3 pct exec 200 -- docker logs traefik --tail 50
   - SSL termination via Traefik
   - DNS points here (via Loopia DDNS)
 
+### Ollama VM 201 - Internal Network (vmbr3)
+- **Bridge**: vmbr3 (internal network)
+- **IP**: Unknown (DHCP on 172.31.31.0/24 network)
+- **Purpose**:
+  - LLM inference server for local AI workloads
+  - Internal use only (not exposed publicly)
+
 ### Bridge Status Summary
 
 | Bridge | Network | Purpose | Status | Connected Devices |
 |--------|---------|---------|--------|-------------------|
 | vmbr0 | 192.168.1.0/16 | Management | Active | Proxmox host (192.168.1.3), Containers eth1 (192.168.1.200) |
 | vmbr2 | DHCP from ISP | WAN/Public | Active | Containers eth0 (public IP) |
-| vmbr3 | 172.16.10.0/24 | Reserved | DOWN | Created but unused, available for future segmentation |
+| vmbr3 | 172.31.31.0/24 | Internal VMs | Active | Ollama VM 201 (IP unknown - needs configuration) |
 
 ## DNS and Service Discovery
 

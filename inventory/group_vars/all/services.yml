@@ -73,4 +73,12 @@ infrastructure_services:
     note: "Protected by OAuth2-Proxy (GitLab SSO)"
 
 # Infrastructure services (not exposed externally)
-infrastructure_services_internal: []
+infrastructure_services_internal:
+  - name: Ollama LLM
+    type: vm
+    vmid: 201
+    icon: "🤖"
+    description: Ollama LLM inference server
+    network: vmbr3 (172.31.31.0/24)
+    status: incomplete
+    note: "VM exists but has boot configuration issues - needs disk repair and network configuration"
