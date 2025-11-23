@@ -24,6 +24,9 @@ SERVICES=(
     "Jitsi Meet:meet.viljo.se"
     "Cloud Storage:cloud.viljo.se"
     "Media Services:media.viljo.se"
+    "Torrent:torrent.viljo.se"
+    "Webtop:webtop.viljo.se"
+    "Zipline:zipline.viljo.se"
     "OAuth2 Proxy:auth.viljo.se"
 )
 

@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  oauth2-proxy-{{ item.name }}:
+    image: {{ oauth2_proxy_docker_image }}
+    container_name: oauth2-proxy-{{ item.name }}
+    restart: unless-stopped
+
+    environment:
+      # Provider Configuration
+      - OAUTH2_PROXY_PROVIDER={{ oauth2_proxy_provider }}
+      - OAUTH2_PROXY_CLIENT_ID={{ oauth2_proxy_client_id }}
+      - OAUTH2_PROXY_CLIENT_SECRET={{ oauth2_proxy_client_secret }}
+      - OAUTH2_PROXY_REDIRECT_URL={{ oauth2_proxy_redirect_url }}
+
+      # OIDC Configuration
+      - OAUTH2_PROXY_OIDC_ISSUER_URL={{ oauth2_proxy_oidc_issuer_url }}
+      - OAUTH2_PROXY_SCOPE={{ oauth2_proxy_scope }}
+
+      # Cookie Configuration
+      - OAUTH2_PROXY_COOKIE_SECRET={{ oauth2_proxy_cookie_secret }}
+      - OAUTH2_PROXY_COOKIE_SECURE={{ oauth2_proxy_cookie_secure | lower }}
+      - OAUTH2_PROXY_COOKIE_HTTPONLY={{ oauth2_proxy_cookie_httponly | lower }}
+      - OAUTH2_PROXY_COOKIE_SAMESITE={{ oauth2_proxy_cookie_samesite }}
+      - OAUTH2_PROXY_COOKIE_DOMAINS={{ oauth2_proxy_cookie_domains }}
+
+      # Email Domain Restriction
+      - OAUTH2_PROXY_EMAIL_DOMAINS={{ oauth2_proxy_email_domains }}
+
+      # Upstream Configuration
+      - OAUTH2_PROXY_UPSTREAMS={{ item.upstream }}
+
+      # HTTP Server Configuration
+      - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:{{ oauth2_proxy_service_port }}
+
+      # Logging
+      - OAUTH2_PROXY_STANDARD_LOGGING={{ oauth2_proxy_logging_enabled | lower }}
+      - OAUTH2_PROXY_AUTH_LOGGING={{ oauth2_proxy_auth_logging | lower }}
+      - OAUTH2_PROXY_REQUEST_LOGGING={{ oauth2_proxy_request_logging | lower }}
+
+      # Auto-redirect
+      - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON={{ oauth2_proxy_skip_provider_button | lower }}
+      - OAUTH2_PROXY_PASS_HOST_HEADER={{ oauth2_proxy_pass_host_header | lower }}
+
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+
+      # Router for {{ item.subdomain }}.{{ public_domain }} -> {{ item.description }}
+      - "traefik.http.routers.oauth2-{{ item.name }}.rule=Host(`{{ item.subdomain }}.{{ public_domain }}`)"
+      - "traefik.http.routers.oauth2-{{ item.name }}.entrypoints=websecure"
+      - "traefik.http.routers.oauth2-{{ item.name }}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.oauth2-{{ item.name }}.service=oauth2-proxy-{{ item.name }}"
+      - "traefik.http.services.oauth2-proxy-{{ item.name }}.loadbalancer.server.port={{ oauth2_proxy_service_port }}"
+
+{% if item.name == 'meet' %}
+      # Auth router (shared callback endpoint)
+      - "traefik.http.routers.oauth2-proxy.rule=Host(`auth.{{ public_domain }}`) || Host(`{{ item.subdomain }}.{{ public_domain }}`) && PathPrefix(`/oauth2`)"
+      - "traefik.http.routers.oauth2-proxy.entrypoints=websecure"
+      - "traefik.http.routers.oauth2-proxy.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.oauth2-proxy.service=oauth2-proxy-{{ item.name }}"
+{% endif %}
+
+      # Watchtower: Disable automatic updates
+      - "com.centurylinklabs.watchtower.enable={{ oauth2_proxy_watchtower_enabled | lower }}"
+
+    networks:
+      - {{ oauth2_proxy_traefik_network }}
+      - {{ oauth2_proxy_backend_network }}
+
+    deploy:
+      resources:
+        limits:
+          cpus: '{{ oauth2_proxy_cpu_limit }}'
+          memory: {{ oauth2_proxy_memory_limit }}
+
+networks:
+  {{ oauth2_proxy_traefik_network }}:
+    external: true
+  {{ oauth2_proxy_backend_network }}:
+    external: true

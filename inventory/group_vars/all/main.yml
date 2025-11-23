@@ -19,6 +19,12 @@ loopia_dns_records:
     ttl: 600
   - host: auth
     ttl: 600
+  - host: torrent
+    ttl: 600
+  - host: webtop
+    ttl: 600
+  - host: zipline
+    ttl: 600
 management_bridge: vmbr0
 wan_bridge: vmbr2
 public_bridge: vmbr3

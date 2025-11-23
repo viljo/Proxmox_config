@@ -1,0 +1,59 @@
+---
+# OAuth2-Proxy Deployment Tasks
+# Deploys multiple oauth2-proxy instances for SSO authentication
+
+- name: "Create oauth2-proxy directories"
+  ansible.builtin.command:
+    cmd: "pct exec {{ oauth2_proxy_container_id }} -- mkdir -p {{ oauth2_proxy_base_path }}/oauth2-proxy-{{ item.name }}"
+  loop: "{{ oauth2_proxy_services }}"
+  changed_when: true
+
+- name: "Deploy oauth2-proxy docker-compose files"
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "/tmp/oauth2-proxy-{{ item.name }}-compose.yml"
+    mode: '0644'
+  loop: "{{ oauth2_proxy_services }}"
+  register: compose_templates
+
+- name: "Copy docker-compose files to container"
+  ansible.builtin.command:
+    cmd: >
+      bash -c "cat /tmp/oauth2-proxy-{{ item.item.name }}-compose.yml |
+      pct exec {{ oauth2_proxy_container_id }} --
+      bash -c 'cat > {{ oauth2_proxy_base_path }}/oauth2-proxy-{{ item.item.name }}/docker-compose.yml'"
+  loop: "{{ compose_templates.results }}"
+  when: item.changed or item is changed
+  changed_when: true
+
+- name: "Deploy oauth2-proxy containers"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ oauth2_proxy_container_id }} --
+      bash -c 'cd {{ oauth2_proxy_base_path }}/oauth2-proxy-{{ item.name }} && docker compose up -d'
+  loop: "{{ oauth2_proxy_services }}"
+  changed_when: true
+  register: deploy_result
+
+- name: "Wait for oauth2-proxy containers to be healthy"
+  ansible.builtin.command:
+    cmd: "pct exec {{ oauth2_proxy_container_id }} -- docker ps --filter name=oauth2-proxy-{{ item.name }} --filter health=healthy --format '{{{{.Names}}}}'"
+  loop: "{{ oauth2_proxy_services }}"
+  register: health_check
+  retries: 10
+  delay: 3
+  until: health_check.stdout != ""
+  changed_when: false
+  failed_when: false
+
+- name: "Display deployment status"
+  ansible.builtin.debug:
+    msg:
+      - "=== OAuth2-Proxy Deployment Results ==="
+      - "{% for service in oauth2_proxy_services %}"
+      - "  {{ service.subdomain }}.{{ public_domain }} ({{ service.name }}): {% if deploy_result.results[loop.index0].rc == 0 %}✅ DEPLOYED{% else %}❌ FAILED{% endif %}"
+      - "{% endfor %}"
+      - ""
+      - "Provider: {{ oauth2_proxy_provider }} ({{ oauth2_proxy_oidc_issuer_url }})"
+      - "Auth endpoint: {{ oauth2_proxy_external_url }}"
+      - "Cookie domain: {{ oauth2_proxy_cookie_domains }}"

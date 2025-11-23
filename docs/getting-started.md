@@ -238,12 +238,31 @@ ansible-playbook -i inventory playbooks/site.yml -vvv
 ssh root@192.168.1.3 journalctl -f
 ```
 
+## SSO Authentication
+
+All public services are protected by GitLab.com SSO using oauth2-proxy:
+
+```bash
+# Deploy OAuth2-Proxy SSO
+ansible-playbook playbooks/oauth2-proxy-deploy.yml
+
+# Protected services:
+# - meet.viljo.se (Jitsi Meet)
+# - media.viljo.se (Jellyfin)
+# - torrent.viljo.se (qBittorrent)
+```
+
+Users log in once with their GitLab account (@viljo.se email required) and the session is shared across all services.
+
+**Learn more**: [OAuth2-Proxy Automation](oauth2-proxy-automation.md)
+
 ## Next Steps
 
 1. **Review Architecture** - [Network Topology](architecture/network-topology.md)
 2. **Deploy Services** - [Deployment Guide](deployment/)
-3. **Learn Operations** - [Operations Guide](operations/)
-4. **Understand Decisions** - [Architecture Decision Records](adr/)
+3. **Configure SSO** - [OAuth2-Proxy Automation](oauth2-proxy-automation.md)
+4. **Learn Operations** - [Operations Guide](operations/)
+5. **Understand Decisions** - [Architecture Decision Records](adr/)
 
 ## Additional Resources
 
