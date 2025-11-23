@@ -8,8 +8,8 @@ This directory contains feature specifications for infrastructure enhancements a
 
 | Spec ID | Feature Name | Status | Deployed | Notes |
 |---------|--------------|--------|----------|-------|
-| [004](completed/004-demo-website/) | Demo Website | ✅ Complete | Yes | Validation website for Traefik/DNS |
 | [010](completed/010-links-portal/) | Links Portal & Matrix Landing | ✅ Complete | Yes | Service directory at links.viljo.se + matrix animation at viljo.se |
+| [011](completed/011-ollama-llm-vm/) | Ollama LLM VM | ✅ Complete | Yes | LLM inference server (VM 201, Ubuntu 24.04, Ollama v0.13.0) |
 
 ### 🚧 Active
 
@@ -126,10 +126,10 @@ All new public-facing services MUST comply with the following requirements:
 ### Service Registry Requirement
 
 **SRR-001**: ALL new public-facing services MUST be added to the links portal
-- Service entry MUST be added to `roles/demo_site/templates/links.html.j2`
-- Entry MUST include: service name, description, icon/emoji, and full URL
+- Service entry MUST be added to `inventory/group_vars/all/services.yml`
+- Entry MUST include: service name, description, icon/emoji, subdomain, and status
 - Service MUST be added to appropriate logical grouping
-- When service is deprecated or removed, entry MUST be removed from links page
+- When service is deprecated or removed, entry MUST be updated in services.yml
 
 **Purpose**: Ensures users have a centralized directory to discover all available services.
 
@@ -187,6 +187,6 @@ This ensures:
 
 ---
 
-**Last Updated**: 2025-10-22
+**Last Updated**: 2025-11-23
 **Total Specs**: 10 (2 completed, 1 active, 7 planned)
 

@@ -110,15 +110,17 @@ bash scripts/check-infrastructure-status.sh
 Proxmox_config/
 ├── inventory/              # Ansible inventory and variables
 │   ├── hosts.yml          # Proxmox host definition
-│   └── group_vars/all/    # Service configuration (24 files)
+│   └── group_vars/all/    # Service configuration
 ├── playbooks/             # Ansible playbooks
-│   ├── site.yml          # Main deployment playbook
-│   └── demo-site-*.yml   # Demo site playbooks
-├── roles/                 # Ansible roles (24 roles)
-│   ├── firewall/         # Firewall LXC (container ID: 1)
-│   ├── demo_site/        # Demo website (ID: 60)
-│   ├── gitlab/           # GitLab (ID: 53)
-│   └── ...               # 21 other roles
+│   ├── media-services-deploy.yml   # Jellyfin + qBittorrent
+│   ├── oauth2-proxy-deploy.yml     # OAuth2-Proxy SSO
+│   ├── loopia-dns-deploy.yml       # DNS updates
+│   └── ollama-vm-deploy.yml        # Ollama LLM VM
+├── roles/                 # Ansible roles
+│   ├── jellyfin/         # Media streaming service
+│   ├── qbittorrent/      # BitTorrent client
+│   ├── oauth2_proxy/     # SSO authentication
+│   └── ollama_vm/        # LLM inference VM
 ├── docs/                  # Documentation (you are here)
 └── specs/                 # Feature specifications
 ```
@@ -167,9 +169,11 @@ ansible-vault edit inventory/group_vars/all/secrets.yml
 ### Destroy and Rebuild Service
 
 ```bash
-# Example: Rebuild demo site
-ansible-playbook -i inventory playbooks/demo-site-teardown.yml
-ansible-playbook -i inventory playbooks/demo-site-deploy.yml
+# Example: Redeploy media services
+ansible-playbook playbooks/media-services-deploy.yml
+
+# Example: Redeploy OAuth2-Proxy SSO
+ansible-playbook playbooks/oauth2-proxy-deploy.yml
 ```
 
 ### Check Container Status

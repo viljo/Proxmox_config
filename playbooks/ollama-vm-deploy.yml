@@ -1,0 +1,223 @@
+---
+# Playbook: Deploy Ollama LLM VM
+# Description: Deploy Ubuntu 24.04 VM with Ollama LLM inference server
+# Spec: specs/completed/011-ollama-llm-vm
+
+- name: Deploy Ollama LLM VM
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    vm_id: 201
+    vm_name: ollama
+    vm_memory: 16384  # 16GB RAM
+    vm_cores: 8
+    vm_disk_size: 64G
+    vm_ip: 172.31.31.201
+    vm_gateway: 172.31.31.1
+    vm_netmask: 24
+    vm_bridge: vmbr3
+    ubuntu_cloud_image_url: "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+    ubuntu_cloud_image_file: "/var/lib/vz/template/iso/ubuntu-24.04-cloudimg-amd64.img"
+    test_model: "qwen2.5:0.5b"
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Ollama LLM VM Deployment"
+          - "=========================================="
+          - "This playbook will deploy:"
+          - "- Ubuntu 24.04 LTS VM (cloud image)"
+          - "- Ollama LLM inference server"
+          - "- Test model: {{ test_model }}"
+          - ""
+          - "VM Configuration:"
+          - "  VM ID: {{ vm_id }}"
+          - "  Name: {{ vm_name }}"
+          - "  CPU: {{ vm_cores }} cores"
+          - "  RAM: {{ vm_memory }}MB ({{ (vm_memory / 1024) | int }}GB)"
+          - "  Disk: {{ vm_disk_size }}"
+          - "  Network: {{ vm_bridge }} ({{ vm_ip }}/{{ vm_netmask }})"
+          - "  Gateway: {{ vm_gateway }}"
+          - ""
+          - "Access: SSH from Proxmox host only"
+          - "=========================================="
+
+  tasks:
+    - name: Check if VM already exists
+      ansible.builtin.command: "qm status {{ vm_id }}"
+      register: vm_status
+      failed_when: false
+      changed_when: false
+
+    - name: Stop existing VM if running
+      ansible.builtin.command: "qm stop {{ vm_id }}"
+      when: vm_status.rc == 0 and 'running' in vm_status.stdout
+      changed_when: true
+
+    - name: Download Ubuntu 24.04 cloud image
+      ansible.builtin.get_url:
+        url: "{{ ubuntu_cloud_image_url }}"
+        dest: "{{ ubuntu_cloud_image_file }}"
+        mode: '0644'
+      when: vm_status.rc != 0
+
+    - name: Create new VM
+      ansible.builtin.command: >
+        qm create {{ vm_id }}
+        --name {{ vm_name }}
+        --memory {{ vm_memory }}
+        --cores {{ vm_cores }}
+        --net0 virtio,bridge={{ vm_bridge }}
+        --scsihw virtio-scsi-pci
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Import cloud image as disk
+      ansible.builtin.command: >
+        qm importdisk {{ vm_id }} {{ ubuntu_cloud_image_file }} local-lvm
+      when: vm_status.rc != 0
+      register: import_result
+      changed_when: true
+
+    - name: Attach disk to VM
+      ansible.builtin.command: >
+        qm set {{ vm_id }} --scsi0 local-lvm:vm-{{ vm_id }}-disk-0
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Resize disk
+      ansible.builtin.command: >
+        qm resize {{ vm_id }} scsi0 {{ vm_disk_size }}
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Configure cloud-init drive
+      ansible.builtin.command: >
+        qm set {{ vm_id }} --ide2 local-lvm:cloudinit
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Set boot order to disk
+      ansible.builtin.command: >
+        qm set {{ vm_id }} --boot order=scsi0
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Configure cloud-init network
+      ansible.builtin.command: >
+        qm set {{ vm_id }}
+        --ipconfig0 ip={{ vm_ip }}/{{ vm_netmask }},gw={{ vm_gateway }}
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Configure cloud-init user
+      ansible.builtin.command: >
+        qm set {{ vm_id }} --ciuser root
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Configure cloud-init SSH keys
+      ansible.builtin.command: >
+        qm set {{ vm_id }} --sshkeys /root/.ssh/authorized_keys
+      when: vm_status.rc != 0
+      changed_when: true
+
+    - name: Start VM
+      ansible.builtin.command: "qm start {{ vm_id }}"
+      changed_when: true
+
+    - name: Wait for VM to boot
+      ansible.builtin.wait_for:
+        timeout: 60
+      delegate_to: localhost
+
+    - name: Wait for SSH to be available
+      ansible.builtin.wait_for:
+        host: "{{ vm_ip }}"
+        port: 22
+        timeout: 120
+      delegate_to: localhost
+      failed_when: false
+
+    - name: Install Ollama
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          root@{{ vm_ip }} 'curl -fsSL https://ollama.com/install.sh | sh'
+      changed_when: true
+
+    - name: Verify Ollama installation
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          root@{{ vm_ip }} 'ollama --version'
+      register: ollama_version
+      changed_when: false
+
+    - name: Pull test model
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          root@{{ vm_ip }} 'ollama pull {{ test_model }}'
+      changed_when: true
+
+    - name: Test Ollama functionality
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          root@{{ vm_ip }} 'ollama run {{ test_model }} "Calculate 2+2. Give only the number." 2>/dev/null | head -5'
+      register: ollama_test
+      changed_when: false
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Ollama LLM VM Deployment Complete"
+          - "=========================================="
+          - ""
+          - "✅ VM Created:"
+          - "  VM ID: {{ vm_id }}"
+          - "  Name: {{ vm_name }}"
+          - "  IP: {{ vm_ip }}/{{ vm_netmask }}"
+          - "  Gateway: {{ vm_gateway }}"
+          - ""
+          - "✅ Ollama Installed:"
+          - "  Version: {{ ollama_version.stdout | trim }}"
+          - "  Service: Running and enabled on boot"
+          - ""
+          - "✅ Test Model Downloaded:"
+          - "  Model: {{ test_model }}"
+          - "  Test Result: {{ ollama_test.stdout | trim }}"
+          - ""
+          - "=========================================="
+          - "NEXT STEPS"
+          - "=========================================="
+          - ""
+          - "1. Access VM from Proxmox host:"
+          - "   ssh root@{{ vm_ip }}"
+          - ""
+          - "2. Run model inference:"
+          - "   ssh root@{{ vm_ip }} 'ollama run {{ test_model }} \"your prompt\"'"
+          - ""
+          - "3. Download additional models:"
+          - "   ssh root@{{ vm_ip }} 'ollama pull MODEL_NAME'"
+          - "   Popular models: llama3.2:3b, mistral:7b, phi3:mini"
+          - ""
+          - "4. List downloaded models:"
+          - "   ssh root@{{ vm_ip }} 'ollama list'"
+          - ""
+          - "5. Check service status:"
+          - "   ssh root@{{ vm_ip }} 'systemctl status ollama'"
+          - ""
+          - "=========================================="
+
+    - name: Final success message
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SUCCESS! Ollama LLM VM is Running"
+          - "=========================================="
+          - "VM is accessible from Proxmox host at {{ vm_ip }}"
+          - "Ollama service is running with {{ test_model }} model"
+          - "=========================================="
