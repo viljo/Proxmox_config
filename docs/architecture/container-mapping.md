@@ -24,7 +24,7 @@ The infrastructure uses a **simplified single-LXC architecture**:
 
 | VM ID | Service | Network | Status | Purpose |
 |-------|---------|---------|--------|---------|
-| **201** | Ollama | 172.31.31.x/24 (vmbr3) | ⚠️ Incomplete | LLM inference server (boot issues - needs repair) |
+| **201** | Ollama | 172.31.31.201/24 (vmbr3) | ✅ Deployed | LLM inference server (Ubuntu 24.04, Ollama v0.13.0) |
 
 ### Containers LXC 200 Details
 
@@ -105,10 +105,15 @@ ssh root@192.168.1.3 pct exec 200 -- docker logs traefik --tail 50
 
 ### Ollama VM 201 - Internal Network (vmbr3)
 - **Bridge**: vmbr3 (internal network)
-- **IP**: Unknown (DHCP on 172.31.31.0/24 network)
+- **IP**: 172.31.31.201/24 (static via cloud-init)
+- **Gateway**: 172.31.31.1
+- **OS**: Ubuntu 24.04 LTS (kernel 6.8.0-87-generic)
+- **Resources**: 16GB RAM, 8 CPU cores, 64GB disk
+- **Software**: Ollama v0.13.0
 - **Purpose**:
   - LLM inference server for local AI workloads
-  - Internal use only (not exposed publicly)
+  - Internal use only (accessible from Proxmox host)
+  - Tested with qwen2.5:0.5b model (397MB)
 
 ### Bridge Status Summary
 
@@ -116,7 +121,7 @@ ssh root@192.168.1.3 pct exec 200 -- docker logs traefik --tail 50
 |--------|---------|---------|--------|-------------------|
 | vmbr0 | 192.168.1.0/16 | Management | Active | Proxmox host (192.168.1.3), Containers eth1 (192.168.1.200) |
 | vmbr2 | DHCP from ISP | WAN/Public | Active | Containers eth0 (public IP) |
-| vmbr3 | 172.31.31.0/24 | Internal VMs | Active | Ollama VM 201 (IP unknown - needs configuration) |
+| vmbr3 | 172.31.31.0/24 | Internal VMs | Active | Ollama VM 201 (172.31.31.201) |
 
 ## DNS and Service Discovery
 

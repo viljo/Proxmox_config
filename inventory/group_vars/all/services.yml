@@ -80,5 +80,6 @@ infrastructure_services_internal:
     icon: "🤖"
     description: Ollama LLM inference server
     network: vmbr3 (172.31.31.0/24)
-    status: incomplete
-    note: "VM exists but has boot configuration issues - needs disk repair and network configuration"
+    ip: 172.31.31.201/24
+    status: deployed_working
+    note: "Running Ubuntu 24.04 with Ollama v0.13.0, accessible from Proxmox host, tested with qwen2.5:0.5b model"

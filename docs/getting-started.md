@@ -193,9 +193,9 @@ ssh root@192.168.1.3 pct exec 200 -- docker ps  # List services
 | Zipline | Docker | https://zipline.viljo.se |
 | Webtop (SSO) | Docker | https://webtop.viljo.se |
 | Mailhog (SSO) | Docker | https://mail.viljo.se |
-| Ollama LLM | VM | Internal only (needs repair) |
+| Ollama LLM | VM | Internal only (172.31.31.201) |
 
-All Docker services run in LXC 200, managed by Traefik reverse proxy. Ollama LLM runs in VM 201 on internal network (vmbr3).
+All Docker services run in LXC 200, managed by Traefik reverse proxy. Ollama LLM runs in VM 201 on internal network (vmbr3) - accessible from Proxmox host.
 
 ## Troubleshooting
 
