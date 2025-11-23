@@ -45,6 +45,25 @@
         - /srv/media/music
 
   tasks:
+    - name: Configure NAT port forwarding for qBittorrent
+      ansible.builtin.shell: |
+        # Add NAT rules for BitTorrent port 6881 (TCP/UDP)
+        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport 6881 -j DNAT --to-destination 172.31.31.10:6881 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport 6881 -j DNAT --to-destination 172.31.31.10:6881
+
+        iptables -t nat -C PREROUTING -i vmbr2 -p udp --dport 6881 -j DNAT --to-destination 172.31.31.10:6881 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p udp --dport 6881 -j DNAT --to-destination 172.31.31.10:6881
+
+        # Save rules persistently
+        mkdir -p /etc/iptables
+        iptables-save > /etc/iptables/rules.v4
+      args:
+        executable: /bin/bash
+      changed_when: false
+      tags:
+        - qbittorrent
+        - firewall
+
     - name: Deploy qBittorrent BitTorrent Client
       ansible.builtin.import_role:
         name: qbittorrent
@@ -71,7 +90,8 @@
           - "  External URL: https://torrent.{{ public_domain }}"
           - "  Username: admin"
           - "  Password: {{ vault_qbittorrent_root_password }}"
-          - "  Torrent Port: 6881 (TCP/UDP) - Exposed for peer connections"
+          - "  Torrent Port: 6881 (TCP/UDP)"
+          - "  NAT Forwarding: Public IP → 172.31.31.10:6881 (Configured)"
           - "  Authentication: qBittorrent native (no SSO)"
           - ""
           - "✅ Jellyfin Media Server:"
@@ -90,11 +110,11 @@
           - "   d. Set password to: {{ vault_qbittorrent_root_password }}"
           - "   e. Click Save"
           - ""
-          - "2. Verify Port Forwarding (OPTIONAL for better performance):"
-          - "   a. Check router forwards port 6881 (TCP/UDP) to LXC 200"
-          - "   b. Test at: https://torrent.{{ public_domain }}"
-          - "   c. Go to Tools → Options → Connection"
-          - "   d. Verify 'Port used for incoming connections: 6881'"
+          - "2. Verify NAT Port Forwarding (Configured Automatically):"
+          - "   a. Check NAT rules: iptables -t nat -L PREROUTING -n -v | grep 6881"
+          - "   b. Should show: vmbr2:6881 → 172.31.31.10:6881 (TCP/UDP)"
+          - "   c. Test port at: https://www.yougetsignal.com/tools/open-ports/"
+          - "   d. Or use qBittorrent: Tools → Options → Connection → Test Port"
           - ""
           - "3. Configure Jellyfin Media Libraries:"
           - "   a. Access: https://media.{{ public_domain }}/web/index.html#!/dashboard"
