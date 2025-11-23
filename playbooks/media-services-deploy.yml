@@ -6,9 +6,8 @@
 #   - specs/planned/009-bittorrent-client
 
 - name: Deploy Media Services Stack
-  hosts: proxmox_hosts
-  become: true
-  gather_facts: true
+  hosts: proxmox_admin
+  gather_facts: false
 
   vars:
     deployment_services:
@@ -73,27 +72,13 @@
         - downloads
 
     - name: Deploy Jellyfin Media Server
-      ansible.builtin.import_role:
+      ansible.builtin.include_role:
         name: jellyfin
       tags:
         - jellyfin
         - media
 
   post_tasks:
-    - name: Wait for qBittorrent to be ready
-      ansible.builtin.wait_for:
-        host: "{{ qbittorrent_ip_address }}"
-        port: "{{ qbittorrent_web_port }}"
-        timeout: 60
-      when: not ansible_check_mode
-
-    - name: Wait for Jellyfin to be ready
-      ansible.builtin.wait_for:
-        host: "{{ jellyfin_ip_address }}"
-        port: "{{ jellyfin_service_port }}"
-        timeout: 60
-      when: not ansible_check_mode
-
     - name: Display deployment summary
       ansible.builtin.debug:
         msg:
@@ -101,117 +86,41 @@
           - "Media Services Stack Deployment Complete"
           - "=========================================="
           - ""
-          - "qBittorrent BitTorrent Client:"
-          - "  Container ID: {{ qbittorrent_container_id }}"
-          - "  IP Address: {{ qbittorrent_ip_address }}"
-          - "  Internal URL: http://{{ qbittorrent_ip_address }}:{{ qbittorrent_web_port }}"
-          - "  External URL: https://qbittorrent.{{ public_domain }}"
-          - "  Default credentials: admin / (check logs)"
+          - "✅ qBittorrent BitTorrent Client:"
+          - "  External URL: https://torrent.{{ public_domain }}"
+          - "  Protected by: OAuth2-Proxy (GitLab SSO)"
           - ""
-          - "Jellyfin Media Server:"
-          - "  Container ID: {{ jellyfin_container_id }}"
-          - "  IP Address: {{ jellyfin_ip_address }}"
-          - "  Internal URL: http://{{ jellyfin_ip_address }}:{{ jellyfin_service_port }}"
-          - "  External URL: https://jellyfin.{{ public_domain }}"
-          - "  Setup wizard: Complete on first access"
+          - "✅ Jellyfin Media Server:"
+          - "  External URL: https://media.{{ public_domain }}"
+          - "  Protected by: OAuth2-Proxy (GitLab SSO)"
+          - "  Admin user: {{ jellyfin_admin_username }}"
+          - "  Wizard: {% if jellyfin_skip_wizard %}Automatically completed{% else %}Manual setup required{% endif %}"
           - ""
           - "=========================================="
           - "NEXT STEPS"
           - "=========================================="
           - ""
-          - "1. Configure Traefik Routing:"
-          - "   - Both services should already be in traefik_services"
-          - "   - Verify routing with: curl -I https://jellyfin.{{ public_domain }}"
-          - "   - Verify routing with: curl -I https://qbittorrent.{{ public_domain }}"
+          - "1. Access Services (SSO Protected):"
+          - "   - qBittorrent: https://torrent.{{ public_domain }}"
+          - "   - Jellyfin: https://media.{{ public_domain }}"
+          - "   - Login with GitLab.com account (@viljo.se email required)"
           - ""
-          - "2. Configure qBittorrent:"
-          - "   a. Access: https://qbittorrent.{{ public_domain }}"
-          - "   b. Login with default credentials (admin)"
-          - "   c. CHANGE PASSWORD IMMEDIATELY"
-          - "   d. Configure download paths:"
-          - "      - Default save: {{ qbittorrent_complete_dir }}"
-          - "      - Incomplete: {{ qbittorrent_incomplete_dir }}"
-          - "   e. Set bandwidth limits"
-          - "   f. Configure categories (movies, tv, music)"
-          - "   g. Optional: Set up RSS feeds"
-          - ""
-          - "3. Configure Jellyfin:"
-          - "   a. Access: https://jellyfin.{{ public_domain }}"
-          - "   b. Complete setup wizard"
-          - "   c. Create admin account"
-          - "   d. Add media libraries:"
+          - "2. Configure Jellyfin Media Libraries:"
+          - "   a. Access: https://media.{{ public_domain }}/web/index.html#!/dashboard"
+          - "   b. Go to Dashboard → Libraries"
+          - "   c. Add media libraries:"
           - "      - Movies: /media/movies"
           - "      - TV Shows: /media/tv"
           - "      - Music: /media/music"
           - "      - Downloads: /media/downloads"
-          - "   e. Configure transcoding (CPU or GPU)"
-          - "   f. Optional: Configure LDAP/OIDC via Keycloak"
           - ""
-          - "4. Test Integration:"
+          - "3. Test Media Workflow:"
           - "   a. Download a test file (e.g., Ubuntu ISO) via qBittorrent"
-          - "   b. Verify file appears in {{ qbittorrent_complete_dir }}"
+          - "   b. Wait for download to complete"
           - "   c. Trigger Jellyfin library scan"
-          - "   d. Verify file appears in Jellyfin Downloads library"
-          - ""
-          - "5. Optional Security Enhancements:"
-          - "   - Enable Traefik forward auth for SSO"
-          - "   - Configure VPN for qBittorrent traffic"
-          - "   - Set up firewall rules for BitTorrent ports"
-          - "   - Configure fail2ban for web interface protection"
-          - ""
-          - "6. Monitoring Setup:"
-          - "   - Add to Zabbix monitoring"
-          - "   - Configure disk space alerts"
-          - "   - Monitor bandwidth usage"
-          - "   - Set up backup jobs"
+          - "   d. Verify file appears in Jellyfin"
           - ""
           - "=========================================="
-          - "STORAGE LAYOUT"
-          - "=========================================="
-          - ""
-          - "Host (Proxmox):"
-          - "  /srv/media/               - Root media directory"
-          - "  /srv/media/downloads/     - qBittorrent download storage"
-          - "  /srv/media/movies/        - Organized movie files"
-          - "  /srv/media/tv/            - Organized TV show files"
-          - "  /srv/media/music/         - Music library"
-          - ""
-          - "qBittorrent Container (ID: {{ qbittorrent_container_id }}):"
-          - "  /srv/downloads/           - Mount of host downloads"
-          - "  /srv/downloads/incomplete/ - Active downloads"
-          - "  /srv/downloads/complete/  - Completed downloads"
-          - ""
-          - "Jellyfin Container (ID: {{ jellyfin_container_id }}):"
-          - "  /media/movies/            - Mount of host movies"
-          - "  /media/tv/                - Mount of host TV shows"
-          - "  /media/music/             - Mount of host music"
-          - "  /media/downloads/         - Mount of completed downloads"
-          - ""
-          - "=========================================="
-          - "WORKFLOW EXAMPLE"
-          - "=========================================="
-          - ""
-          - "1. User adds torrent to qBittorrent"
-          - "2. File downloads to /srv/downloads/incomplete/"
-          - "3. When complete, moves to /srv/downloads/complete/"
-          - "4. User (or automation) organizes file:"
-          - "   - Move movie to /srv/media/movies/"
-          - "   - Move TV show to /srv/media/tv/"
-          - "5. Jellyfin scans library (manual or automatic)"
-          - "6. Media appears in Jellyfin with metadata"
-          - "7. User streams via https://jellyfin.{{ public_domain }}"
-          - ""
-          - "=========================================="
-
-    - name: Verify all services are running
-      ansible.builtin.command:
-        cmd: pct status {{ item.container_id }}
-      loop: "{{ deployment_services }}"
-      register: service_status
-      changed_when: false
-      failed_when: "'running' not in service_status.stdout"
-      loop_control:
-        label: "{{ item.name }}"
 
     - name: Final success message
       ansible.builtin.debug:
@@ -219,6 +128,6 @@
           - "=========================================="
           - "SUCCESS! Media Services Stack is Running"
           - "=========================================="
-          - "All services are operational and ready for configuration."
-          - "Follow the next steps above to complete setup."
+          - "All services are deployed and protected by SSO."
+          - "Follow the next steps above to complete configuration."
           - "=========================================="

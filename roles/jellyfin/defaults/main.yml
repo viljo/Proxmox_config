@@ -1,0 +1,84 @@
+---
+# Jellyfin Role Default Variables
+
+# ================================================================================
+# CONTAINER CONFIGURATION
+# ================================================================================
+
+jellyfin_container_id: 200  # Coolify LXC container ID
+jellyfin_base_path: /opt/docker-stack
+jellyfin_service_name: jellyfin
+jellyfin_service_port: 8096
+
+# ================================================================================
+# DOCKER IMAGE
+# ================================================================================
+
+jellyfin_docker_image: linuxserver/jellyfin:latest
+
+# ================================================================================
+# ENVIRONMENT VARIABLES
+# ================================================================================
+
+jellyfin_puid: 1000
+jellyfin_pgid: 1000
+jellyfin_timezone: Europe/Stockholm
+
+# ================================================================================
+# VOLUME PATHS
+# ================================================================================
+
+jellyfin_config_path: "{{ jellyfin_base_path }}/{{ jellyfin_service_name }}/config"
+jellyfin_media_path: "{{ jellyfin_base_path }}/{{ jellyfin_service_name }}/media"
+
+# ================================================================================
+# NETWORK CONFIGURATION
+# ================================================================================
+
+jellyfin_networks:
+  - traefik_public
+  - backend
+
+# ================================================================================
+# RESOURCE LIMITS
+# ================================================================================
+
+jellyfin_cpu_limit: "4.0"
+jellyfin_memory_limit: 4G
+
+# ================================================================================
+# TRAEFIK CONFIGURATION
+# ================================================================================
+
+jellyfin_subdomain: media
+jellyfin_enable_traefik: false  # Disabled because oauth2-proxy handles routing
+
+# ================================================================================
+# STARTUP WIZARD CONFIGURATION
+# ================================================================================
+
+jellyfin_skip_wizard: true
+jellyfin_admin_username: admin
+jellyfin_admin_password: "{{ vault_jellyfin_admin_password | default('changeme') }}"
+jellyfin_server_name: "Jellyfin Media Server"
+jellyfin_ui_culture: en-US
+jellyfin_metadata_language: en
+jellyfin_metadata_country: US
+
+# ================================================================================
+# MEDIA LIBRARY CONFIGURATION
+# ================================================================================
+
+jellyfin_media_libraries:
+  - name: Movies
+    path: /media/movies
+    type: movies
+  - name: TV Shows
+    path: /media/tv
+    type: tvshows
+  - name: Music
+    path: /media/music
+    type: music
+  - name: Downloads
+    path: /media/downloads
+    type: mixed

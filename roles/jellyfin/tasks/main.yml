@@ -1,0 +1,183 @@
+---
+# Jellyfin Media Server Deployment Tasks
+
+# ================================================================================
+# PREREQUISITES
+# ================================================================================
+
+- name: "Create Jellyfin directories"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      mkdir -p {{ jellyfin_base_path }}/{{ jellyfin_service_name }}
+  changed_when: true
+
+- name: "Create Jellyfin config and media directories"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      mkdir -p {{ jellyfin_config_path }} {{ jellyfin_media_path }}
+  changed_when: true
+
+- name: "Create media subdirectories"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      mkdir -p {{ jellyfin_media_path }}/movies {{ jellyfin_media_path }}/tv {{ jellyfin_media_path }}/music {{ jellyfin_media_path }}/downloads
+  changed_when: true
+
+# ================================================================================
+# DOCKER COMPOSE DEPLOYMENT
+# ================================================================================
+
+- name: "Deploy Jellyfin docker-compose.yml"
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /tmp/jellyfin-compose-{{ inventory_hostname }}.yml
+    mode: '0644'
+  delegate_to: localhost
+
+- name: "Transfer docker-compose.yml to Proxmox host"
+  ansible.builtin.copy:
+    src: /tmp/jellyfin-compose-{{ inventory_hostname }}.yml
+    dest: /tmp/jellyfin-compose.yml
+    mode: '0644'
+
+- name: "Move docker-compose.yml into container"
+  ansible.builtin.command:
+    cmd: >
+      pct push {{ jellyfin_container_id }}
+      /tmp/jellyfin-compose.yml
+      {{ jellyfin_base_path }}/{{ jellyfin_service_name }}/docker-compose.yml
+  changed_when: true
+  register: compose_result
+
+- name: "Stop existing Jellyfin container (if running)"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      bash -c 'cd {{ jellyfin_base_path }}/{{ jellyfin_service_name }} && docker compose down || true'
+  changed_when: true
+  failed_when: false
+
+- name: "Start Jellyfin container"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      bash -c 'cd {{ jellyfin_base_path }}/{{ jellyfin_service_name }} && docker compose up -d'
+  changed_when: true
+  register: deploy_result
+
+# ================================================================================
+# WAIT FOR JELLYFIN TO START
+# ================================================================================
+
+- name: "Wait for Jellyfin to be ready (max 60s)"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      docker exec {{ jellyfin_service_name }}
+      bash -c 'for i in {1..30}; do curl -sf http://localhost:{{ jellyfin_service_port }}/health && exit 0 || sleep 2; done; exit 1'
+  register: health_check
+  retries: 3
+  delay: 10
+  until: health_check.rc == 0
+  changed_when: false
+  failed_when: false
+
+# ================================================================================
+# AUTOMATED WIZARD COMPLETION
+# ================================================================================
+
+- name: "Check if startup wizard is completed"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      cat {{ jellyfin_config_path }}/system.xml
+  register: system_xml
+  changed_when: false
+
+- name: "Complete startup wizard if needed"
+  when: >
+    jellyfin_skip_wizard and
+    '<IsStartupWizardCompleted>false</IsStartupWizardCompleted>' in system_xml.stdout
+  block:
+    - name: "Step 1: Set preferred metadata language"
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ jellyfin_container_id }} --
+          docker exec {{ jellyfin_service_name}}
+          curl -X POST "http://localhost:{{ jellyfin_service_port }}/Startup/Configuration"
+          -H "Content-Type: application/json"
+          -d '{"UICulture":"{{ jellyfin_ui_culture }}","MetadataCountryCode":"{{ jellyfin_metadata_country }}","PreferredMetadataLanguage":"{{ jellyfin_metadata_language }}"}'
+      register: wizard_step1
+      failed_when: false
+      changed_when: wizard_step1.rc == 0
+
+    - name: "Step 2: Create admin user"
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ jellyfin_container_id }} --
+          docker exec {{ jellyfin_service_name }}
+          curl -X POST "http://localhost:{{ jellyfin_service_port }}/Startup/User"
+          -H "Content-Type: application/json"
+          -d '{"Name":"{{ jellyfin_admin_username }}","Password":"{{ jellyfin_admin_password }}"}'
+      register: wizard_step2
+      failed_when: false
+      changed_when: wizard_step2.rc == 0
+      no_log: true  # Hide password from logs
+
+    - name: "Step 3: Complete wizard"
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ jellyfin_container_id }} --
+          docker exec {{ jellyfin_service_name }}
+          curl -X POST "http://localhost:{{ jellyfin_service_port }}/Startup/Complete"
+      register: wizard_step3
+      failed_when: false
+      changed_when: wizard_step3.rc == 0
+
+    - name: "Verify wizard completion"
+      ansible.builtin.command:
+        cmd: >
+          pct exec {{ jellyfin_container_id }} --
+          cat {{ jellyfin_config_path }}/system.xml
+      register: system_xml_final
+      changed_when: false
+      failed_when: "'<IsStartupWizardCompleted>true</IsStartupWizardCompleted>' not in system_xml_final.stdout"
+
+- name: "Display wizard completion status"
+  ansible.builtin.debug:
+    msg: >
+      {% if '<IsStartupWizardCompleted>true</IsStartupWizardCompleted>' in system_xml_final.stdout | default(system_xml.stdout) %}
+      ✅ Jellyfin startup wizard is completed
+      {% else %}
+      ⚠️  Jellyfin startup wizard needs manual completion at https://{{ jellyfin_subdomain }}.{{ public_domain }}
+      {% endif %}
+
+# ================================================================================
+# VERIFICATION
+# ================================================================================
+
+- name: "Verify Jellyfin container is running"
+  ansible.builtin.command:
+    cmd: >
+      pct exec {{ jellyfin_container_id }} --
+      docker ps --filter name={{ jellyfin_service_name }} --format '{{ '{{' }}.Status{{ '}}' }}'
+  register: container_status
+  changed_when: false
+  failed_when: "'Up' not in container_status.stdout"
+
+- name: "Display deployment summary"
+  ansible.builtin.debug:
+    msg:
+      - "✅ Jellyfin Media Server deployed successfully"
+      - "  Container: {{ jellyfin_container_id }} (Coolify LXC)"
+      - "  Service: {{ jellyfin_service_name }}"
+      - "  Port: {{ jellyfin_service_port }}"
+      - "  External URL: https://{{ jellyfin_subdomain }}.{{ public_domain }}"
+      - "  Admin user: {{ jellyfin_admin_username }}"
+      - "  Wizard completed: {% if '<IsStartupWizardCompleted>true</IsStartupWizardCompleted>' in system_xml_final.stdout | default(system_xml.stdout) %}YES{% else %}NO (manual setup required){% endif %}"
+      - ""
+      - "Media libraries can be configured at:"
+      - "  https://{{ jellyfin_subdomain }}.{{ public_domain }}/web/index.html#!/dashboard"

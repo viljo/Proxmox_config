@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  {{ jellyfin_service_name }}:
+    image: {{ jellyfin_docker_image }}
+    container_name: {{ jellyfin_service_name }}
+    restart: unless-stopped
+
+    environment:
+      - PUID={{ jellyfin_puid }}
+      - PGID={{ jellyfin_pgid }}
+      - TZ={{ jellyfin_timezone }}
+
+    volumes:
+      - {{ jellyfin_config_path }}:/config
+      - {{ jellyfin_media_path }}:/media
+
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable={{ jellyfin_enable_traefik | lower }}"
+
+{% if jellyfin_enable_traefik %}
+      # Router configuration
+      - "traefik.http.routers.{{ jellyfin_service_name }}.rule=Host(`{{ jellyfin_subdomain }}.{{ public_domain }}`)"
+      - "traefik.http.routers.{{ jellyfin_service_name }}.entrypoints=websecure"
+      - "traefik.http.routers.{{ jellyfin_service_name }}.tls.certresolver=letsencrypt"
+
+      # Service configuration
+      - "traefik.http.services.{{ jellyfin_service_name }}.loadbalancer.server.port={{ jellyfin_service_port }}"
+{% endif %}
+
+      # Watchtower: Enable automatic updates
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    networks:
+{% for network in jellyfin_networks %}
+      - {{ network }}
+{% endfor %}
+
+    deploy:
+      resources:
+        limits:
+          cpus: '{{ jellyfin_cpu_limit }}'
+          memory: {{ jellyfin_memory_limit }}
+
+networks:
+{% for network in jellyfin_networks %}
+  {{ network }}:
+    external: true
+{% endfor %}
