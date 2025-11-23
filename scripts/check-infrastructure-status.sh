@@ -171,8 +171,46 @@ else
 fi
 echo ""
 
+# Check LLM API Access
+echo -e "${BLUE}[6] Checking LLM API Access${NC}"
+
+# Test direct Ollama API (list models)
+OLLAMA_MODELS=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no root@192.168.1.3 \
+    "timeout 5 curl -s http://172.31.31.201:11434/api/tags 2>/dev/null" 2>/dev/null)
+
+if echo "$OLLAMA_MODELS" | grep -q "models"; then
+    MODEL_COUNT=$(echo "$OLLAMA_MODELS" | grep -o '"name"' | wc -l | tr -d ' ')
+    if [ "$MODEL_COUNT" -gt 0 ]; then
+        # Extract first model name
+        FIRST_MODEL=$(echo "$OLLAMA_MODELS" | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+        print_result "Ollama API" "PASS" "($MODEL_COUNT models, including $FIRST_MODEL)"
+    else
+        print_result "Ollama API" "WARN" "(API responds but no models loaded)"
+    fi
+else
+    print_result "Ollama API" "FAIL" "(cannot list models)"
+fi
+
+# Verify Open WebUI can connect to Ollama (check if Open WebUI is running and connected)
+WEBUI_OLLAMA_CHECK=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no root@192.168.1.3 \
+    "pct exec 200 -- docker logs open-webui 2>&1 | grep -i 'ollama.*172.31.31.201' | tail -1" 2>/dev/null)
+
+if [ -n "$WEBUI_OLLAMA_CHECK" ]; then
+    print_result "Open WebUI → Ollama" "PASS" "(connection configured)"
+else
+    # Alternative check: verify the environment variable is set
+    OLLAMA_URL=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no root@192.168.1.3 \
+        "pct exec 200 -- docker inspect open-webui --format '{{.Config.Env}}' | grep OLLAMA_BASE_URL" 2>/dev/null)
+    if echo "$OLLAMA_URL" | grep -q "172.31.31.201"; then
+        print_result "Open WebUI → Ollama" "PASS" "(configured via OLLAMA_BASE_URL)"
+    else
+        print_result "Open WebUI → Ollama" "WARN" "(connection not verified)"
+    fi
+fi
+echo ""
+
 # Check HTTP to HTTPS redirect
-echo -e "${BLUE}[6] Checking HTTP to HTTPS Redirect${NC}"
+echo -e "${BLUE}[7] Checking HTTP to HTTPS Redirect${NC}"
 # Test with first working service
 WORKING_DOMAIN=""
 for service_entry in "${SERVICES[@]}"; do
