@@ -28,6 +28,12 @@ SERVICES=(
     "Zipline:zipline.viljo.se"
     "Webtop (SSO):webtop.viljo.se"
     "Mailhog (SSO):mail.viljo.se"
+    "Open WebUI:llm.viljo.se"
+)
+
+# SSH endpoints to check
+SSH_ENDPOINTS=(
+    "proxmox.viljo.se:22"
 )
 
 echo -e "${BLUE}======================================${NC}"
@@ -139,8 +145,34 @@ for service_entry in "${SERVICES[@]}"; do
 done
 echo ""
 
+# Check SSH accessibility
+echo -e "${BLUE}[4] Checking SSH Access${NC}"
+for ssh_entry in "${SSH_ENDPOINTS[@]}"; do
+    IFS=: read -r host port <<< "$ssh_entry"
+
+    # Check if port is open
+    if timeout 5 bash -c "cat < /dev/null > /dev/tcp/$host/$port" 2>/dev/null; then
+        print_result "SSH: $host" "PASS" "(port $port open)"
+    else
+        print_result "SSH: $host" "FAIL" "(port $port not accessible)"
+    fi
+done
+echo ""
+
+# Check internal VM connectivity (Ollama LLM)
+echo -e "${BLUE}[5] Checking Internal VMs${NC}"
+# Test Ollama VM from Proxmox host
+OLLAMA_TEST=$(ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no root@192.168.1.3 "timeout 5 curl -s http://172.31.31.201:11434/api/version 2>/dev/null" 2>/dev/null)
+if echo "$OLLAMA_TEST" | grep -q "version"; then
+    OLLAMA_VERSION=$(echo "$OLLAMA_TEST" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+    print_result "Ollama LLM VM" "PASS" "(172.31.31.201, version $OLLAMA_VERSION)"
+else
+    print_result "Ollama LLM VM" "FAIL" "(172.31.31.201:11434 not responding)"
+fi
+echo ""
+
 # Check HTTP to HTTPS redirect
-echo -e "${BLUE}[4] Checking HTTP to HTTPS Redirect${NC}"
+echo -e "${BLUE}[6] Checking HTTP to HTTPS Redirect${NC}"
 # Test with first working service
 WORKING_DOMAIN=""
 for service_entry in "${SERVICES[@]}"; do

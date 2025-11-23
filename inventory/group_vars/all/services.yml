@@ -72,6 +72,14 @@ infrastructure_services:
     status: deployed_working
     note: "Protected by OAuth2-Proxy (GitLab SSO)"
 
+  - name: Open WebUI
+    slug: llm
+    icon: "🤖"
+    description: LLM web interface (connected to Ollama VM)
+    subdomain: llm
+    status: planned
+    note: "To be deployed - will provide web interface to Ollama LLM (VM 201)"
+
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:
   - name: Ollama LLM
