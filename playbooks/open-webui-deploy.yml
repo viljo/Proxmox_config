@@ -35,7 +35,12 @@
           - "  Domain: {{ service_domain }}"
           - "  Ollama API: {{ ollama_api_url }}"
           - "  Deploy Path: {{ deploy_path }}"
-          - "  Authentication: Disabled (public access)"
+          - "  Authentication: Disabled (OAuth2-proxy handles auth)"
+          - ""
+          - "IMPORTANT:"
+          - "  This playbook deploys Open WebUI WITHOUT authentication."
+          - "  To protect with OAuth, also deploy:"
+          - "    ansible-playbook playbooks/oauth2-proxy-llm-deploy.yml"
           - ""
           - "Traefik Integration:"
           - "  - Automatic HTTPS via Let's Encrypt"
@@ -63,31 +68,28 @@
 
               environment:
                 - OLLAMA_BASE_URL={{ ollama_api_url }}
+                # Disable Open WebUI auth - OAuth2-proxy handles authentication
                 - WEBUI_AUTH=false
                 - WEBUI_NAME=Viljo LLM
                 - WEBUI_SECRET_KEY={{ webui_secret_key }}
                 - DATA_DIR=/app/backend/data
+                # Enable API key authentication for API endpoints
+                - ENABLE_API_KEY=true
+                # Disable local signup and login form
+                - ENABLE_SIGNUP=false
+                - ENABLE_LOGIN_FORM=false
 
               volumes:
                 - {{ deploy_path }}/data:/app/backend/data
 
               labels:
-                # Enable Traefik
-                - "traefik.enable=true"
-
-                # HTTP router
-                - "traefik.http.routers.open-webui.rule=Host(`{{ service_domain }}`)"
-                - "traefik.http.routers.open-webui.entrypoints=websecure"
-                - "traefik.http.routers.open-webui.tls.certresolver=letsencrypt"
-
-                # Service
-                - "traefik.http.services.open-webui.loadbalancer.server.port=8080"
+                # Disable Traefik - OAuth2-proxy handles routing
+                - "traefik.enable=false"
 
                 # Watchtower
                 - "com.centurylinklabs.watchtower.enable=true"
 
               networks:
-                - traefik_public
                 - backend
 
               deploy:
@@ -97,8 +99,6 @@
                     memory: 2G
 
           networks:
-            traefik_public:
-              external: true
             backend:
               external: true
 

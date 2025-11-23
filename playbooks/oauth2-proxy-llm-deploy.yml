@@ -1,0 +1,254 @@
+---
+# Playbook: Deploy OAuth2-Proxy for Open WebUI
+# Description: Deploy OAuth2-proxy to protect Open WebUI web interface with GitLab SSO
+# Prerequisites:
+#   - Open WebUI deployed (playbooks/open-webui-deploy.yml)
+#   - GitLab OAuth application configured
+#   - DNS record for llm.viljo.se
+
+- name: Deploy OAuth2-Proxy for Open WebUI
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    lxc_id: 200
+    service_name: oauth2-proxy-llm
+    service_subdomain: llm
+    service_domain: "{{ service_subdomain }}.{{ public_domain }}"
+    deploy_path: "/opt/docker-stack/oauth2-proxy-llm"
+
+    # OAuth2-Proxy GitLab configuration
+    gitlab_client_id: "60eef15e33f36fd80aee4a1c001d3f9e597ac568cb565ecc595e2ff08f17d9ce"
+    gitlab_client_secret: "gloas-dfbc98646d9e57dd52e6ae9a1c364a9908b3ed82d44bc47a023977065693fe3a"
+    oauth_redirect_url: "https://auth.{{ public_domain }}/oauth2/callback"
+    oauth_cookie_secret: "MB35WU2a50Pli2HZyQtKyAvBViwMvXBzn1IVO_abhUA="
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "OAuth2-Proxy for Open WebUI Deployment"
+          - "=========================================="
+          - "This playbook will deploy:"
+          - "- OAuth2-proxy container (GitLab SSO)"
+          - "- Protection for Open WebUI web interface"
+          - "- API endpoints remain accessible with API keys"
+          - ""
+          - "Configuration:"
+          - "  LXC: {{ lxc_id }} (Containers)"
+          - "  Domain: {{ service_domain }}"
+          - "  Provider: GitLab OIDC (gitlab.com)"
+          - "  Email Domain: {{ public_domain }}"
+          - "  Deploy Path: {{ deploy_path }}"
+          - ""
+          - "Authentication Flow:"
+          - "  Web UI: OAuth2-proxy → GitLab SSO"
+          - "  API: Direct access with API keys (skips OAuth)"
+          - ""
+          - "Traefik Integration:"
+          - "  - Automatic HTTPS via Let's Encrypt"
+          - "  - Routing: Host(`{{ service_domain }}`)"
+          - "  - Skips auth for /api/* paths"
+          - "=========================================="
+
+  tasks:
+    - name: Create deployment directory
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- mkdir -p {{ deploy_path }}
+      changed_when: true
+
+    - name: Create docker-compose.yml
+      ansible.builtin.copy:
+        dest: /tmp/oauth2-proxy-llm-compose.yml
+        mode: '0644'
+        content: |
+          version: '3.8'
+
+          services:
+            oauth2-proxy-llm:
+              image: quay.io/oauth2-proxy/oauth2-proxy:latest
+              container_name: oauth2-proxy-llm
+              restart: unless-stopped
+
+              environment:
+                # Provider Configuration
+                - OAUTH2_PROXY_PROVIDER=gitlab
+                - OAUTH2_PROXY_CLIENT_ID={{ gitlab_client_id }}
+                - OAUTH2_PROXY_CLIENT_SECRET={{ gitlab_client_secret }}
+                - OAUTH2_PROXY_REDIRECT_URL={{ oauth_redirect_url }}
+
+                # OIDC Configuration
+                - OAUTH2_PROXY_OIDC_ISSUER_URL=https://gitlab.com
+                - OAUTH2_PROXY_SCOPE=openid email profile
+
+                # Cookie Configuration
+                - OAUTH2_PROXY_COOKIE_SECRET={{ oauth_cookie_secret }}
+                - OAUTH2_PROXY_COOKIE_SECURE=true
+                - OAUTH2_PROXY_COOKIE_HTTPONLY=true
+                - OAUTH2_PROXY_COOKIE_SAMESITE=lax
+                - OAUTH2_PROXY_COOKIE_DOMAINS=.{{ public_domain }}
+
+                # Email Domain Restriction
+                - OAUTH2_PROXY_EMAIL_DOMAINS={{ public_domain }}
+
+                # Upstream Configuration (Open WebUI)
+                - OAUTH2_PROXY_UPSTREAMS=http://open-webui:8080
+
+                # HTTP Server Configuration
+                - OAUTH2_PROXY_HTTP_ADDRESS=0.0.0.0:4180
+
+                # Logging
+                - OAUTH2_PROXY_STANDARD_LOGGING=true
+                - OAUTH2_PROXY_AUTH_LOGGING=true
+                - OAUTH2_PROXY_REQUEST_LOGGING=true
+
+                # Auto-redirect
+                - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON=true
+                - OAUTH2_PROXY_PASS_HOST_HEADER=true
+
+                # Pass authentication headers to upstream
+                - OAUTH2_PROXY_SET_XAUTHREQUEST=true
+                - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
+                - OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER=true
+                - OAUTH2_PROXY_PASS_USER_HEADERS=true
+                - OAUTH2_PROXY_PREFER_EMAIL_TO_USER=true
+
+                # Set custom headers for Open WebUI
+                - OAUTH2_PROXY_SET_AUTHORIZATION_HEADER=true
+                - OAUTH2_PROXY_TRUSTED_IPS=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+
+                # Skip authentication for API endpoints
+                - OAUTH2_PROXY_SKIP_AUTH_REGEX=^/api/.*
+
+              labels:
+                # Enable Traefik for this service
+                - "traefik.enable=true"
+
+                # Router for llm.viljo.se web UI (protected by OAuth)
+                - "traefik.http.routers.oauth2-llm.rule=Host(`{{ service_domain }}`)"
+                - "traefik.http.routers.oauth2-llm.entrypoints=websecure"
+                - "traefik.http.routers.oauth2-llm.tls.certresolver=letsencrypt"
+                - "traefik.http.routers.oauth2-llm.service=oauth2-proxy-llm"
+                - "traefik.http.services.oauth2-proxy-llm.loadbalancer.server.port=4180"
+
+                # Watchtower: Disable automatic updates
+                - "com.centurylinklabs.watchtower.enable=false"
+
+              networks:
+                - traefik_public
+                - backend
+
+              deploy:
+                resources:
+                  limits:
+                    cpus: '0.5'
+                    memory: 256M
+
+          networks:
+            traefik_public:
+              external: true
+            backend:
+              external: true
+
+    - name: Copy docker-compose.yml to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/oauth2-proxy-llm-compose.yml {{ deploy_path }}/docker-compose.yml
+      changed_when: true
+
+    - name: Deploy OAuth2-Proxy container
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c 'cd {{ deploy_path }} && docker compose up -d'
+      changed_when: true
+
+    - name: Wait for container to start
+      ansible.builtin.wait_for:
+        timeout: 10
+      delegate_to: localhost
+
+    - name: Check container status
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- docker ps --filter name=oauth2-proxy-llm --format "{{ '{{' }}.Status{{ '}}' }}"
+      register: container_status
+      changed_when: false
+
+    - name: Check HTTPS endpoint
+      ansible.builtin.uri:
+        url: "https://{{ service_domain }}"
+        method: GET
+        validate_certs: true
+        status_code: [200, 302]
+        follow_redirects: none
+      register: https_check
+      delegate_to: localhost
+      failed_when: false
+      retries: 6
+      delay: 10
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "OAuth2-Proxy Deployment Complete"
+          - "=========================================="
+          - ""
+          - "✅ Container Deployed:"
+          - "  Status: {{ container_status.stdout }}"
+          - "  Image: quay.io/oauth2-proxy/oauth2-proxy:latest"
+          - "  Port: 4180"
+          - ""
+          - "✅ OAuth Configuration:"
+          - "  Provider: GitLab OIDC (gitlab.com)"
+          - "  Redirect URL: {{ oauth_redirect_url }}"
+          - "  Email Domain: {{ public_domain }}"
+          - "  API Skip Regex: ^/api/.*"
+          - ""
+          - "✅ HTTPS Access:"
+          - "  URL: https://{{ service_domain }}"
+          - "  Status: {{ 'OAuth redirect working' if https_check.status == 302 else 'Direct access' if https_check.status == 200 else 'Pending DNS propagation' }}"
+          - "  SSL: Let's Encrypt"
+          - ""
+          - "=========================================="
+          - "AUTHENTICATION FLOW"
+          - "=========================================="
+          - ""
+          - "Web UI Access:"
+          - "1. Visit https://{{ service_domain }}"
+          - "2. OAuth2-proxy redirects to GitLab"
+          - "3. Sign in with @{{ public_domain }} email"
+          - "4. Redirect back to Open WebUI (authenticated)"
+          - ""
+          - "API Access (bypasses OAuth):"
+          - "1. Generate API key in Open WebUI settings"
+          - "2. Use Bearer token authentication:"
+          - "   curl https://{{ service_domain }}/api/models \\"
+          - "     -H 'Authorization: Bearer YOUR_API_KEY'"
+          - ""
+          - "=========================================="
+          - "TESTING"
+          - "=========================================="
+          - ""
+          - "1. Test web UI OAuth redirect:"
+          - "   curl -I https://{{ service_domain }}"
+          - "   (Should return 302 to gitlab.com)"
+          - ""
+          - "2. Test API access (no OAuth):"
+          - "   curl https://{{ service_domain }}/api/config"
+          - "   (Should return JSON config)"
+          - ""
+          - "3. Check OAuth2-proxy logs:"
+          - "   pct exec {{ lxc_id }} -- docker logs oauth2-proxy-llm --tail 50"
+          - ""
+          - "=========================================="
+
+    - name: Final success message
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SUCCESS! OAuth2-Proxy Deployed"
+          - "=========================================="
+          - "Web UI: Protected by GitLab SSO"
+          - "API: Accessible with API keys"
+          - "Domain: https://{{ service_domain }}"
+          - "=========================================="
