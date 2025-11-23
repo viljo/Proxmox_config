@@ -21,7 +21,6 @@ This directory contains feature specifications for infrastructure enhancements a
 
 | Spec ID | Feature Name | Priority | Complexity | Notes |
 |---------|--------------|----------|------------|-------|
-| [001](planned/001-gitlab-oauth-keycloak/) | GitLab.com OAuth via Keycloak | Medium | Medium | SSO using GitLab.com accounts |
 | [002](planned/002-docker-platform-selfservice/) | Docker Platform Self-Service | Low | High | Container provisioning API |
 | [003](planned/003-external-ssh-admin/) | External SSH Admin Access | High | Low | SSH via viljo.se domain |
 | [005](planned/005-webtop-browser/) | Webtop Browser | Medium | Medium | Browser-in-browser service |

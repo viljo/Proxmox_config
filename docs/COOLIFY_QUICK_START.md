@@ -1,3 +1,4 @@
+> **⚠️ OUTDATED**: This document references Keycloak SSO which is no longer used, and Coolify PaaS which was never fully deployed. Current architecture uses Docker containers in LXC 200 with Traefik reverse proxy and OAuth2-Proxy + GitLab SSO. See docs/oauth2-proxy-automation.md and docs/getting-started.md
 # Coolify Quick Start Guide
 
 ## What is Coolify?

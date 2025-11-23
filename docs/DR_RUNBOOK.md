@@ -240,9 +240,9 @@ ansible-playbook -i inventory/hosts.yml playbooks/restore-infrastructure.yml \
 ```
 
 **What This Restores**:
-- PostgreSQL databases (keycloak, gitlab, nextcloud, mattermost)
+- PostgreSQL databases (application data)
 - Redis persistence data
-- Docker volumes (Keycloak, GitLab, Nextcloud, Mattermost, Webtop)
+- Docker volumes (all services)
 
 **⚠️ If data restore fails**:
 - Check database connectivity: `pct exec 150 -- su - postgres -c 'psql -l'`
@@ -255,42 +255,17 @@ ansible-playbook -i inventory/hosts.yml playbooks/restore-infrastructure.yml \
 **Objective**: Confirm all critical services are operational
 
 ```bash
-# 1. PostgreSQL
-echo "=== PostgreSQL ==="
-pct exec 150 -- su - postgres -c 'psql -l' | grep -E 'keycloak|gitlab|nextcloud|mattermost'
+# 1. Coolify Container Status
+echo "=== Coolify Container ==="
+pct status 200
+pct exec 200 -- docker ps
 
-# 2. Redis
-echo "=== Redis ==="
-pct exec 158 -- systemctl status redis-server | head -5
-pct exec 158 -- redis-cli ping
-
-# 3. Docker Services
-echo "=== Keycloak ==="
-pct exec 151 -- docker ps | grep keycloak
-
-echo "=== GitLab ==="
-pct exec 153 -- docker ps | grep gitlab  # May fail if container 153 not restored
-
-echo "=== Nextcloud ==="
-pct exec 155 -- docker ps | grep nextcloud
-
-echo "=== Mattermost ==="
-pct exec 163 -- docker ps | grep mattermost
-
-echo "=== Webtop ==="
-pct exec 170 -- docker ps | grep webtop
-
-echo "=== Demo Site ==="
-pct exec 160 -- docker ps | grep -E 'links|matrix'
-
-# 4. External Access (from control machine)
+# 2. External Access (from control machine)
 echo "=== External Access ==="
-curl -I https://keycloak.viljo.se
-curl -I https://gitlab.viljo.se
-curl -I https://nextcloud.viljo.se
-curl -I https://mattermost.viljo.se
-curl -I https://browser.viljo.se
-curl -I https://demosite.viljo.se
+curl -I https://links.viljo.se
+curl -I https://meet.viljo.se
+curl -I https://cloud.viljo.se
+curl -I https://media.viljo.se
 ```
 
 **Success Criteria**:

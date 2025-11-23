@@ -1,17 +1,17 @@
 # Getting Started
 
-Quick start guide for deploying and managing the Proxmox infrastructure with Coolify PaaS.
+Quick start guide for deploying and managing the Proxmox infrastructure.
 
 ## Architecture Overview
 
-This infrastructure uses **Coolify PaaS** in a single LXC container (ID: 200) to host all services as Docker containers. This simplified architecture eliminates the complexity of managing multiple LXC containers.
+This infrastructure uses a single LXC container (ID: 200) to host all services as Docker containers managed by Traefik reverse proxy. This simplified architecture eliminates the complexity of managing multiple LXC containers.
 
 **Key Components**:
 - **Proxmox VE 9**: Hypervisor (192.168.1.3 on vmbr0)
-- **Coolify LXC 200**: Single container hosting all services
+- **Docker LXC 200**: Single container hosting all services
   - Management interface: 192.168.1.200/16 (eth1 on vmbr0)
   - Public interface: DHCP public IP (eth0 on vmbr2)
-- **Services**: Deployed via Coolify API using Ansible
+- **Services**: Docker containers with Traefik reverse proxy
 
 For complete architecture details, see [Network Topology](architecture/network-topology.md).
 
@@ -26,7 +26,6 @@ For complete architecture details, see [Network Topology](architecture/network-t
 ### Required Access
 - SSH access to Proxmox host as root
 - Ansible Vault password (`.vault_pass.txt` or entered manually)
-- Coolify API token (for service deployments)
 
 ## Initial Setup
 
@@ -74,42 +73,34 @@ proxmox_admin | SUCCESS => {
 
 ## Basic Usage
 
-### Deploy Coolify Infrastructure
+### Deploy Services
 
-This repository manages the Proxmox infrastructure and Coolify deployment:
-
-```bash
-# Deploy Coolify LXC container to Proxmox
-ansible-playbook -i inventory/production.ini playbooks/coolify-deploy.yml
-```
-
-### Deploy Application Services
-
-Application services (GitLab, Nextcloud, media services, etc.) are deployed via the `/coolify_service/ansible` repository using Coolify API:
+Services are deployed as Docker containers in LXC 200 using Ansible roles:
 
 ```bash
-# Services are in separate repository
-cd /path/to/coolify_service/ansible
+# Deploy media services (Jellyfin + qBittorrent)
+ansible-playbook playbooks/media-services-deploy.yml
 
-# Deploy a service via Coolify API
-ansible-playbook -i inventory/production.ini \
-  playbooks/deploy-SERVICE-via-api.yml \
-  --vault-password-file=.vault_pass.txt
+# Deploy OAuth2-Proxy SSO
+ansible-playbook playbooks/oauth2-proxy-deploy.yml
+
+# Deploy DNS updates
+ansible-playbook playbooks/loopia-dns-deploy.yml
 ```
 
 ### Verify Infrastructure
 
 ```bash
-# Check Coolify container status
+# Check Docker LXC container status
 ssh root@192.168.1.3 pct status 200
-
-# Check Coolify API
-curl -s http://192.168.1.200:8000/health
 
 # Check Docker containers
 ssh root@192.168.1.3 pct exec 200 -- docker ps
 
-# Check infrastructure status
+# Check Traefik reverse proxy
+ssh root@192.168.1.3 pct exec 200 -- docker logs traefik --tail 50
+
+# Check infrastructure status (E2E tests)
 bash scripts/check-infrastructure-status.sh
 ```
 
@@ -151,9 +142,7 @@ See [Network Topology](architecture/network-topology.md) for details.
 All containers follow the pattern: **Container ID = Last octet of IP address**
 
 Example:
-- Firewall: ID `1` → IP `172.16.10.1`
-- GitLab: ID `53` → IP `172.16.10.53`
-- Demo Site: ID `60` → IP `172.16.10.60`
+- Docker Host: ID `200` → IP `192.168.1.200` (management interface)
 
 See [Container Mapping](architecture/container-mapping.md) for the complete list.
 
@@ -188,20 +177,24 @@ ansible-playbook -i inventory playbooks/demo-site-deploy.yml
 ```bash
 # On Proxmox host
 ssh root@192.168.1.3 pct list
-ssh root@192.168.1.3 pct status 60  # Demo site
+ssh root@192.168.1.3 pct status 200  # Docker host
+ssh root@192.168.1.3 pct exec 200 -- docker ps  # List services
 ```
 
 ## Key Services
 
-| Service | Container ID | IP Address | URL |
-|---------|--------------|------------|-----|
-| Firewall | 1 | 172.16.10.1 | N/A (internal) |
-| PostgreSQL | 50 | 172.16.10.50 | N/A (internal) |
-| Keycloak | 51 | 172.16.10.51 | https://keycloak.viljo.se |
-| NetBox | 52 | 172.16.10.52 | https://netbox.viljo.se |
-| Demo Site | 60 | 172.16.10.60 | https://demosite.viljo.se |
+| Service | Type | Access |
+|---------|------|--------|
+| Links Portal | Docker | https://links.viljo.se |
+| Jitsi Meet | Docker | https://meet.viljo.se |
+| Nextcloud | Docker | https://cloud.viljo.se |
+| Jellyfin | Docker | https://media.viljo.se |
+| qBittorrent | Docker | https://torrent.viljo.se |
+| Zipline | Docker | https://zipline.viljo.se |
+| Webtop (SSO) | Docker | https://webtop.viljo.se |
+| Mailhog (SSO) | Docker | https://mail.viljo.se |
 
-See [Container Mapping](architecture/container-mapping.md) for all 16 services.
+All services run as Docker containers in LXC 200, managed by Traefik reverse proxy.
 
 ## Troubleshooting
 

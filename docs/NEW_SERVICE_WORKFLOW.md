@@ -1,3 +1,4 @@
+> **⚠️ OUTDATED**: This document references Keycloak SSO which is no longer used. Current SSO uses OAuth2-Proxy + GitLab. Current architecture uses Docker containers in LXC 200 with Traefik reverse proxy. See docs/oauth2-proxy-automation.md and docs/getting-started.md
 # Test-Driven Service Deployment Workflow
 
 **Purpose**: Forcing routine to ensure every new service is properly automated, tested, backed up, and can be restored.

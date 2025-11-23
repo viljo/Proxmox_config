@@ -159,15 +159,11 @@ The previous documentation described a complex architecture that was never deplo
 - ❌ **Individual Service LXCs**: 16+ containers with IPs like 172.16.10.X - never created
 - ❌ **Traefik on Proxmox**: Reverse proxy on host - never deployed
 - ❌ **Complex NAT/Routing**: Port forwarding rules - never configured
-- ❌ **PostgreSQL LXC (50)**: Shared database container - never created
-- ❌ **Keycloak LXC (51)**: SSO container - never created
 
 **Previous container mapping** (all fictional):
 ```
 Container 1:   Firewall (172.16.10.1)       [NEVER EXISTED]
 Container 50:  PostgreSQL (172.16.10.50)    [NEVER EXISTED]
-Container 51:  Keycloak (172.16.10.51)      [NEVER EXISTED]
-Container 52:  NetBox (172.16.10.52)        [NEVER EXISTED]
 Container 53:  GitLab (172.16.10.53)        [NEVER EXISTED]
 ... (16+ more containers)                   [ALL NEVER EXISTED]
 ```

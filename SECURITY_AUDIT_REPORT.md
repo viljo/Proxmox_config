@@ -5,6 +5,8 @@
 **Repository**: Proxmox_config
 **Branch**: main
 
+> **⚠️ NOTE**: This audit report references services (Keycloak, NetBox, Demo Site) that have been removed from the infrastructure as of 2025-11-23. Current architecture uses a single Docker LXC (200) with Traefik reverse proxy and OAuth2-Proxy + GitLab SSO.
+
 ---
 
 ## Executive Summary
