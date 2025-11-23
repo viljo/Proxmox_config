@@ -161,12 +161,41 @@
           root@{{ vm_ip }} 'ollama pull {{ test_model }}'
       changed_when: true
 
+    - name: Configure Ollama to listen on all interfaces
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          root@{{ vm_ip }} 'mkdir -p /etc/systemd/system/ollama.service.d && \
+          cat > /etc/systemd/system/ollama.service.d/override.conf << EOL
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+EOL'
+      changed_when: true
+
+    - name: Reload systemd and restart Ollama
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          root@{{ vm_ip }} 'systemctl daemon-reload && systemctl restart ollama'
+      changed_when: true
+
+    - name: Wait for Ollama API to be available
+      ansible.builtin.shell: |
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          root@{{ vm_ip }} 'timeout 30 bash -c "until curl -s http://localhost:11434/api/version >/dev/null; do sleep 1; done"'
+      changed_when: false
+
     - name: Test Ollama functionality
       ansible.builtin.shell: |
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
           root@{{ vm_ip }} 'ollama run {{ test_model }} "Calculate 2+2. Give only the number." 2>/dev/null | head -5'
       register: ollama_test
       changed_when: false
+
+    - name: Verify network accessibility
+      ansible.builtin.shell: |
+        curl -s http://{{ vm_ip }}:11434/api/version
+      register: ollama_api_test
+      changed_when: false
+      delegate_to: localhost
 
   post_tasks:
     - name: Display deployment summary
@@ -185,6 +214,8 @@
           - "✅ Ollama Installed:"
           - "  Version: {{ ollama_version.stdout | trim }}"
           - "  Service: Running and enabled on boot"
+          - "  Network: Listening on 0.0.0.0:11434"
+          - "  API: {{ ollama_api_test.stdout | trim }}"
           - ""
           - "✅ Test Model Downloaded:"
           - "  Model: {{ test_model }}"

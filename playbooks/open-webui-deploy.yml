@@ -1,0 +1,194 @@
+---
+# Playbook: Deploy Open WebUI
+# Description: Deploy Open WebUI web interface for Ollama LLM
+# Prerequisites:
+#   - Ollama VM deployed and running (172.31.31.201:11434)
+#   - LXC 200 "Containers" with Docker and Traefik
+#   - DNS record for llm.viljo.se pointing to public IP
+
+- name: Deploy Open WebUI
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    lxc_id: 200
+    service_name: open-webui
+    service_subdomain: llm
+    service_domain: "{{ service_subdomain }}.{{ public_domain }}"
+    ollama_api_url: "http://172.31.31.201:11434"
+    deploy_path: "/opt/docker-stack/open-webui"
+    webui_secret_key: "{{ vault_open_webui_secret_key | default('change-me-to-random-secret') }}"
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Open WebUI Deployment"
+          - "=========================================="
+          - "This playbook will deploy:"
+          - "- Open WebUI container (ghcr.io/open-webui/open-webui:main)"
+          - "- Web interface for Ollama LLM"
+          - ""
+          - "Configuration:"
+          - "  LXC: {{ lxc_id }} (Containers)"
+          - "  Domain: {{ service_domain }}"
+          - "  Ollama API: {{ ollama_api_url }}"
+          - "  Deploy Path: {{ deploy_path }}"
+          - "  Authentication: Disabled (public access)"
+          - ""
+          - "Traefik Integration:"
+          - "  - Automatic HTTPS via Let's Encrypt"
+          - "  - Routing: Host(`{{ service_domain }}`)"
+          - "=========================================="
+
+  tasks:
+    - name: Create deployment directory
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- mkdir -p {{ deploy_path }}/data
+      changed_when: true
+
+    - name: Create docker-compose.yml
+      ansible.builtin.copy:
+        dest: /tmp/open-webui-compose.yml
+        mode: '0644'
+        content: |
+          version: '3.8'
+
+          services:
+            open-webui:
+              image: ghcr.io/open-webui/open-webui:main
+              container_name: open-webui
+              restart: unless-stopped
+
+              environment:
+                - OLLAMA_BASE_URL={{ ollama_api_url }}
+                - WEBUI_AUTH=false
+                - WEBUI_NAME=Viljo LLM
+                - WEBUI_SECRET_KEY={{ webui_secret_key }}
+                - DATA_DIR=/app/backend/data
+
+              volumes:
+                - {{ deploy_path }}/data:/app/backend/data
+
+              labels:
+                # Enable Traefik
+                - "traefik.enable=true"
+
+                # HTTP router
+                - "traefik.http.routers.open-webui.rule=Host(`{{ service_domain }}`)"
+                - "traefik.http.routers.open-webui.entrypoints=websecure"
+                - "traefik.http.routers.open-webui.tls.certresolver=letsencrypt"
+
+                # Service
+                - "traefik.http.services.open-webui.loadbalancer.server.port=8080"
+
+                # Watchtower
+                - "com.centurylinklabs.watchtower.enable=true"
+
+              networks:
+                - traefik_public
+                - backend
+
+              deploy:
+                resources:
+                  limits:
+                    cpus: '2.0'
+                    memory: 2G
+
+          networks:
+            traefik_public:
+              external: true
+            backend:
+              external: true
+
+    - name: Copy docker-compose.yml to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/open-webui-compose.yml {{ deploy_path }}/docker-compose.yml
+      changed_when: true
+
+    - name: Deploy Open WebUI container
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c 'cd {{ deploy_path }} && docker compose up -d'
+      changed_when: true
+
+    - name: Wait for container to start
+      ansible.builtin.wait_for:
+        timeout: 30
+      delegate_to: localhost
+
+    - name: Check container status
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- docker ps --filter name=open-webui --format "{{ '{{' }}.Status{{ '}}' }}"
+      register: container_status
+      changed_when: false
+
+    - name: Verify Ollama connectivity from container
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- docker exec open-webui curl -sf {{ ollama_api_url }}/api/version
+      register: ollama_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check HTTPS endpoint
+      ansible.builtin.uri:
+        url: "https://{{ service_domain }}"
+        method: GET
+        validate_certs: true
+        status_code: 200
+      register: https_check
+      delegate_to: localhost
+      failed_when: false
+      retries: 6
+      delay: 10
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Open WebUI Deployment Complete"
+          - "=========================================="
+          - ""
+          - "✅ Container Deployed:"
+          - "  Status: {{ container_status.stdout }}"
+          - "  Image: ghcr.io/open-webui/open-webui:main"
+          - "  Port: 8080 (internal)"
+          - ""
+          - "✅ Ollama Connection:"
+          - "  API URL: {{ ollama_api_url }}"
+          - "  Status: {{ 'Connected' if ollama_check.rc == 0 else 'Failed - check Ollama VM' }}"
+          - "  {% if ollama_check.rc == 0 %}Version: {{ ollama_check.stdout }}{% endif %}"
+          - ""
+          - "✅ HTTPS Access:"
+          - "  URL: https://{{ service_domain }}"
+          - "  Status: {{ 'Available' if https_check.status == 200 else 'Pending (may need DNS propagation)' }}"
+          - "  SSL: Let's Encrypt"
+          - ""
+          - "=========================================="
+          - "NEXT STEPS"
+          - "=========================================="
+          - ""
+          - "1. Access Open WebUI:"
+          - "   https://{{ service_domain }}"
+          - ""
+          - "2. Start chatting with available models:"
+          - "   - Model list will auto-populate from Ollama"
+          - ""
+          - "3. Check container logs if needed:"
+          - "   pct exec {{ lxc_id }} -- docker logs open-webui"
+          - ""
+          - "4. Update container (automatic via Watchtower):"
+          - "   docker pull ghcr.io/open-webui/open-webui:main"
+          - ""
+          - "=========================================="
+
+    - name: Final success message
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SUCCESS! Open WebUI is Running"
+          - "=========================================="
+          - "Access at: https://{{ service_domain }}"
+          - "Connected to: Ollama VM (172.31.31.201)"
+          - "=========================================="

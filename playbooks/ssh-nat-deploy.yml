@@ -1,0 +1,156 @@
+---
+# Playbook: Configure SSH NAT Port Forwarding
+# Description: Configure iptables NAT to forward external SSH (port 22) to Proxmox host
+# Architecture: Direct NAT on Proxmox host (no firewall container)
+#
+# Network Flow:
+#   Internet → vmbr2 (WAN, public IP) → NAT → 192.168.1.3:22 (Proxmox host SSH)
+#
+# Usage:
+#   ansible-playbook playbooks/ssh-nat-deploy.yml
+
+- name: Configure SSH NAT Port Forwarding
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    wan_interface: vmbr2
+    mgmt_interface: vmbr0
+    proxmox_mgmt_ip: "{{ management_ip }}"
+    ssh_port: 22
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SSH NAT Port Forwarding Configuration"
+          - "=========================================="
+          - "This playbook will configure:"
+          - "- iptables NAT rule for SSH port forwarding"
+          - "- Persistent iptables rules via iptables-persistent"
+          - ""
+          - "Network Configuration:"
+          - "  WAN Interface: {{ wan_interface }}"
+          - "  Management Interface: {{ mgmt_interface }}"
+          - "  Proxmox Host IP: {{ proxmox_mgmt_ip }}"
+          - "  SSH Port: {{ ssh_port }}"
+          - ""
+          - "NAT Rule:"
+          - "  {{ wan_interface }}:{{ ssh_port }} → {{ proxmox_mgmt_ip }}:{{ ssh_port }}"
+          - ""
+          - "DNS Records Required:"
+          - "  - proxmox.{{ public_domain }} → <public IP>"
+          - "  - ssh.{{ public_domain }} → <public IP>"
+          - "=========================================="
+
+  tasks:
+    - name: Install iptables-persistent
+      ansible.builtin.apt:
+        name: iptables-persistent
+        state: present
+        update_cache: true
+
+    - name: Check if NAT rule already exists
+      ansible.builtin.shell: |
+        iptables -t nat -L PREROUTING -n -v | grep -q "dpt:{{ ssh_port }} to:{{ proxmox_mgmt_ip }}:{{ ssh_port }}"
+      register: nat_rule_check
+      changed_when: false
+      failed_when: false
+
+    - name: Add SSH NAT rule
+      ansible.builtin.command: >
+        iptables -t nat -A PREROUTING
+        -i {{ wan_interface }}
+        -p tcp --dport {{ ssh_port }}
+        -j DNAT --to-destination {{ proxmox_mgmt_ip }}:{{ ssh_port }}
+      when: nat_rule_check.rc != 0
+      changed_when: true
+
+    - name: Enable IP forwarding
+      ansible.posix.sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        state: present
+        sysctl_set: true
+        reload: true
+
+    - name: Save iptables rules
+      ansible.builtin.command: iptables-save > /etc/iptables/rules.v4
+      changed_when: true
+
+    - name: Verify NAT rule is active
+      ansible.builtin.shell: |
+        iptables -t nat -L PREROUTING -n -v | grep "dpt:{{ ssh_port }}"
+      register: nat_verify
+      changed_when: false
+
+    - name: Get current WAN IP
+      ansible.builtin.shell: |
+        ip -4 addr show {{ wan_interface }} | grep inet | awk '{print $2}' | cut -d/ -f1
+      register: wan_ip
+      changed_when: false
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SSH NAT Configuration Complete"
+          - "=========================================="
+          - ""
+          - "✅ NAT Rule Configured:"
+          - "  {{ nat_verify.stdout }}"
+          - ""
+          - "✅ IP Forwarding:"
+          - "  Status: Enabled (net.ipv4.ip_forward=1)"
+          - ""
+          - "✅ Persistent Rules:"
+          - "  Saved to: /etc/iptables/rules.v4"
+          - "  Service: iptables-persistent (enabled)"
+          - ""
+          - "✅ WAN Configuration:"
+          - "  Interface: {{ wan_interface }}"
+          - "  IP Address: {{ wan_ip.stdout }}"
+          - ""
+          - "=========================================="
+          - "TESTING"
+          - "=========================================="
+          - ""
+          - "1. Test from external network:"
+          - "   ssh -p {{ ssh_port }} root@<public-ip>"
+          - "   ssh -p {{ ssh_port }} root@proxmox.{{ public_domain }}"
+          - ""
+          - "2. Verify NAT rule:"
+          - "   iptables -t nat -L PREROUTING -n -v | grep {{ ssh_port }}"
+          - ""
+          - "3. Monitor connection attempts:"
+          - "   tail -f /var/log/auth.log"
+          - ""
+          - "4. Check DNS propagation:"
+          - "   dig +short proxmox.{{ public_domain }} @1.1.1.1"
+          - "   dig +short ssh.{{ public_domain }} @1.1.1.1"
+          - ""
+          - "=========================================="
+          - "SECURITY NOTES"
+          - "=========================================="
+          - ""
+          - "- SSH uses key-based authentication only"
+          - "- Password authentication is disabled"
+          - "- Configure fail2ban for brute-force protection"
+          - "- Monitor /var/log/auth.log for unauthorized access attempts"
+          - ""
+          - "To configure SSH hardening and fail2ban:"
+          - "  ansible-playbook playbooks/external-ssh-access.yml"
+          - ""
+          - "=========================================="
+
+    - name: Final success message
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SUCCESS! SSH NAT Configured"
+          - "=========================================="
+          - "External SSH access enabled on port {{ ssh_port }}"
+          - "NAT: {{ wan_interface }}:{{ ssh_port }} → {{ proxmox_mgmt_ip }}:{{ ssh_port }}"
+          - "=========================================="
