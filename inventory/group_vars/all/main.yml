@@ -9,7 +9,20 @@ loopia_dns_interface: "{{ wan_bridge }}"
 loopia_dns_records:
   - host: "@"
     ttl: 600
-  - host: paas  # Coolify PaaS platform
+  - host: links
+    ttl: 600
+  - host: meet
+    ttl: 600
+  - host: cloud
+    ttl: 600
+  - host: media
+    ttl: 600
+  - host: keycloak
+    ttl: 600
+  - host: netbox
+    ttl: 600
+  - host: demosite
+    ttl: 600
 management_bridge: vmbr0
 wan_bridge: vmbr2
 public_bridge: vmbr3

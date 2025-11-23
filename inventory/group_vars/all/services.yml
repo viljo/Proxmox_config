@@ -1,7 +1,6 @@
 ---
 # Single Source of Truth for Infrastructure Services
-# This file defines only currently deployed services
-# Services managed via Coolify API are tracked in the Coolify deployment repository
+# This file defines currently deployed and accessible services
 
 infrastructure_services:
 
@@ -9,16 +8,65 @@ infrastructure_services:
   # DEPLOYED & WORKING - Services that are running and accessible
   # ==================================================================
 
-  - name: Coolify
-    slug: coolify
-    icon: "🚀"
-    description: Self-hosted PaaS platform for deploying services
-    subdomain: paas
-    container_id: 200
+  - name: Links Portal
+    slug: links
+    icon: "🔗"
+    description: Service directory and landing page
+    subdomain: links
     status: deployed_working
-    spec: specs/planned/002-docker-platform-selfservice
-    note: "All other services are deployed via Coolify API"
+    note: "HTML landing page with service links"
 
-# Infrastructure services (not shown on links page)
-# Note: All infrastructure is consolidated in Coolify LXC (200)
+  - name: Jitsi Meet
+    slug: meet
+    icon: "📹"
+    description: Video conferencing service
+    subdomain: meet
+    status: deployed_working
+    note: "Authentication required for access"
+
+  - name: Cloud Storage
+    slug: cloud
+    icon: "☁️"
+    description: Cloud file storage and synchronization
+    subdomain: cloud
+    status: deployed_working
+    note: "Redirects to login page"
+
+  - name: Media Services
+    slug: media
+    icon: "🎬"
+    description: Media streaming and management
+    subdomain: media
+    status: deployed_working
+    note: "Authentication required for access"
+
+  # ==================================================================
+  # INFRASTRUCTURE SERVICES - Requiring DNS configuration
+  # ==================================================================
+
+  - name: Keycloak
+    slug: keycloak
+    icon: "🔐"
+    description: Identity and access management (SSO)
+    subdomain: keycloak
+    status: needs_dns_config
+    note: "SSO provider for other services"
+
+  - name: NetBox
+    slug: netbox
+    icon: "📊"
+    description: Infrastructure management and documentation
+    subdomain: netbox
+    status: needs_dns_config
+    note: "IPAM and DCIM tool"
+
+  - name: Demo Site
+    slug: demosite
+    icon: "🎨"
+    description: Demo website for testing
+    subdomain: demosite
+    status: needs_dns_config
+    note: "Static demo site"
+
+# Infrastructure services (not exposed externally)
 infrastructure_services_internal: []
