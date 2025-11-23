@@ -22,12 +22,12 @@ FAILED_CHECKS=0
 SERVICES=(
     "Links Portal:links.viljo.se"
     "Jitsi Meet:meet.viljo.se"
-    "Cloud Storage:cloud.viljo.se"
-    "Media Services:media.viljo.se"
-    "Torrent:torrent.viljo.se"
-    "Webtop:webtop.viljo.se"
+    "Nextcloud:cloud.viljo.se"
+    "Jellyfin:media.viljo.se"
+    "qBittorrent:torrent.viljo.se"
     "Zipline:zipline.viljo.se"
-    "OAuth2 Proxy:auth.viljo.se"
+    "Webtop (SSO):webtop.viljo.se"
+    "Mailhog (SSO):mail.viljo.se"
 )
 
 echo -e "${BLUE}======================================${NC}"

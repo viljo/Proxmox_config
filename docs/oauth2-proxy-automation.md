@@ -2,7 +2,13 @@
 
 ## Overview
 
-This automation deploys GitLab.com SSO authentication for public services using oauth2-proxy in reverse proxy mode.
+This automation deploys GitLab.com SSO authentication for selected internal services using oauth2-proxy in reverse proxy mode.
+
+**Currently protected services:**
+- **webtop.viljo.se** - Webtop development environment
+- **mail.viljo.se** - Mailhog email testing
+
+Most public services (Jellyfin, Jitsi, qBittorrent, Nextcloud, Zipline) are directly accessible and use their own authentication.
 
 ## Architecture
 

@@ -240,19 +240,20 @@ ssh root@192.168.1.3 journalctl -f
 
 ## SSO Authentication
 
-All public services are protected by GitLab.com SSO using oauth2-proxy:
+Selected internal services are protected by GitLab.com SSO using oauth2-proxy:
 
 ```bash
 # Deploy OAuth2-Proxy SSO
 ansible-playbook playbooks/oauth2-proxy-deploy.yml
 
-# Protected services:
-# - meet.viljo.se (Jitsi Meet)
-# - media.viljo.se (Jellyfin)
-# - torrent.viljo.se (qBittorrent)
+# SSO Protected services:
+# - webtop.viljo.se (Webtop development environment)
+# - mail.viljo.se (Mailhog email testing)
 ```
 
-Users log in once with their GitLab account (@viljo.se email required) and the session is shared across all services.
+Users log in with their GitLab account (@viljo.se email required) to access protected services.
+
+Most public services (Jellyfin, Jitsi, qBittorrent, Nextcloud, Zipline) are directly accessible and use their own authentication.
 
 **Learn more**: [OAuth2-Proxy Automation](oauth2-proxy-automation.md)
 

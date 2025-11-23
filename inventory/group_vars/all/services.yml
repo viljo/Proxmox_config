@@ -14,7 +14,7 @@ infrastructure_services:
     description: Service directory and landing page
     subdomain: links
     status: deployed_working
-    note: "HTML landing page with service links"
+    note: "Public landing page, no authentication"
 
   - name: Jitsi Meet
     slug: meet
@@ -22,24 +22,55 @@ infrastructure_services:
     description: Video conferencing service
     subdomain: meet
     status: deployed_working
-    note: "Authentication required for access"
+    note: "Directly accessible, uses own authentication"
 
-  - name: Cloud Storage
+  - name: Nextcloud
     slug: cloud
     icon: "☁️"
     description: Cloud file storage and synchronization
     subdomain: cloud
     status: deployed_working
-    note: "Redirects to login page"
+    note: "Directly accessible, uses own authentication"
 
-  - name: Media Services
+  - name: Jellyfin
     slug: media
     icon: "🎬"
     description: Media streaming and management
     subdomain: media
     status: deployed_working
-    note: "Authentication required for access"
+    note: "Directly accessible, uses own authentication"
+
+  - name: qBittorrent
+    slug: torrent
+    icon: "⬇️"
+    description: BitTorrent client
+    subdomain: torrent
+    status: deployed_working
+    note: "Directly accessible, uses own authentication"
+
+  - name: Zipline
+    slug: zipline
+    icon: "📎"
+    description: File sharing service
+    subdomain: zipline
+    status: deployed_working
+    note: "Directly accessible, uses own authentication"
+
+  - name: Webtop
+    slug: webtop
+    icon: "💻"
+    description: Browser-based desktop environment
+    subdomain: webtop
+    status: deployed_working
+    note: "Protected by OAuth2-Proxy (GitLab SSO)"
+
+  - name: Mailhog
+    slug: mail
+    icon: "📧"
+    description: Email testing tool
+    subdomain: mail
+    status: deployed_working
+    note: "Protected by OAuth2-Proxy (GitLab SSO)"
 
 # Infrastructure services (not exposed externally)
-# SSO is provided by oauth2-proxy + GitLab.com (no Keycloak needed)
 infrastructure_services_internal: []

@@ -9,17 +9,6 @@
   hosts: proxmox_admin
   gather_facts: false
 
-  vars:
-    deployment_services:
-      - name: qBittorrent
-        container_id: "{{ qbittorrent_container_id }}"
-        ip: "{{ qbittorrent_ip_address }}"
-        domain: "qbittorrent.{{ public_domain }}"
-      - name: Jellyfin
-        container_id: "{{ jellyfin_container_id }}"
-        ip: "{{ jellyfin_ip_address }}"
-        domain: "jellyfin.{{ public_domain }}"
-
   pre_tasks:
     - name: Display deployment plan
       ansible.builtin.debug:
@@ -28,26 +17,13 @@
           - "Media Services Stack Deployment"
           - "=========================================="
           - "This playbook will deploy:"
-          - "1. qBittorrent (ID: {{ qbittorrent_container_id }}) - BitTorrent client"
-          - "2. Jellyfin (ID: {{ jellyfin_container_id }}) - Media server"
+          - "1. qBittorrent - BitTorrent client (torrent.{{ public_domain }})"
+          - "2. Jellyfin - Media server (media.{{ public_domain }})"
           - ""
-          - "Integration:"
-          - "  - qBittorrent downloads to: {{ qbittorrent_complete_dir }}"
-          - "  - Jellyfin accesses media from: /media/downloads"
-          - "  - Shared storage on host: {{ qbittorrent_host_download_path }}"
+          - "Deployment target: Coolify LXC 200"
+          - "All services deployed as Docker containers"
+          - "Directly accessible (no SSO protection)"
           - "=========================================="
-
-    - name: Validate all required variables
-      ansible.builtin.assert:
-        that:
-          - jellyfin_container_id is defined
-          - qbittorrent_container_id is defined
-          - jellyfin_ip_address is defined
-          - qbittorrent_ip_address is defined
-          - jellyfin_root_password is defined
-          - qbittorrent_root_password is defined
-        fail_msg: "Required configuration variables are missing"
-        success_msg: "All required variables are defined"
 
     - name: Ensure host media storage directory exists
       ansible.builtin.file:
@@ -100,10 +76,10 @@
           - "NEXT STEPS"
           - "=========================================="
           - ""
-          - "1. Access Services (SSO Protected):"
+          - "1. Access Services (Directly Accessible):"
           - "   - qBittorrent: https://torrent.{{ public_domain }}"
           - "   - Jellyfin: https://media.{{ public_domain }}"
-          - "   - Login with GitLab.com account (@viljo.se email required)"
+          - "   - Each service uses its own authentication"
           - ""
           - "2. Configure Jellyfin Media Libraries:"
           - "   a. Access: https://media.{{ public_domain }}/web/index.html#!/dashboard"
@@ -128,6 +104,6 @@
           - "=========================================="
           - "SUCCESS! Media Services Stack is Running"
           - "=========================================="
-          - "All services are deployed and protected by SSO."
+          - "All services are deployed and directly accessible."
           - "Follow the next steps above to complete configuration."
           - "=========================================="
