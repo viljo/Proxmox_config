@@ -77,8 +77,8 @@ infrastructure_services:
     icon: "🤖"
     description: LLM web interface (connected to Ollama VM)
     subdomain: llm
-    status: planned
-    note: "To be deployed - will provide web interface to Ollama LLM (VM 201)"
+    status: deployed_working
+    note: "Connected to Ollama LLM VM (172.31.31.201:11434), no authentication required"
 
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:
