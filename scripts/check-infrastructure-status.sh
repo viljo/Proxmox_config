@@ -25,8 +25,6 @@ SERVICES=(
     "Cloud Storage:cloud.viljo.se"
     "Media Services:media.viljo.se"
     "Keycloak:keycloak.viljo.se"
-    "NetBox:netbox.viljo.se"
-    "Demo Site:demosite.viljo.se"
 )
 
 echo -e "${BLUE}======================================${NC}"

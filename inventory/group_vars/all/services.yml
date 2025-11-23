@@ -41,7 +41,7 @@ infrastructure_services:
     note: "Authentication required for access"
 
   # ==================================================================
-  # INFRASTRUCTURE SERVICES - Requiring DNS configuration
+  # INFRASTRUCTURE SERVICES - SSO Provider
   # ==================================================================
 
   - name: Keycloak
@@ -49,24 +49,8 @@ infrastructure_services:
     icon: "🔐"
     description: Identity and access management (SSO)
     subdomain: keycloak
-    status: needs_dns_config
+    status: deployed_working
     note: "SSO provider for other services"
-
-  - name: NetBox
-    slug: netbox
-    icon: "📊"
-    description: Infrastructure management and documentation
-    subdomain: netbox
-    status: needs_dns_config
-    note: "IPAM and DCIM tool"
-
-  - name: Demo Site
-    slug: demosite
-    icon: "🎨"
-    description: Demo website for testing
-    subdomain: demosite
-    status: needs_dns_config
-    note: "Static demo site"
 
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal: []

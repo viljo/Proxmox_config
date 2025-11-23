@@ -1,0 +1,226 @@
+---
+# Loopia DNS Deployment Playbook
+# Automatically deploys DNS records from loopia_dns_records in inventory
+# Uses Loopia XML-RPC API to create/update A records
+#
+# Usage:
+#   ansible-playbook playbooks/loopia-dns-deploy.yml --ask-vault-pass
+#
+# Prerequisites:
+#   - Loopia API credentials in vault (vault_loopia_api_user, vault_loopia_api_password)
+#   - DNS records defined in inventory/group_vars/all/main.yml
+#   - Python xmlrpc.client module (standard library)
+
+- name: Deploy DNS Records to Loopia
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    loopia_api_url: "https://api.loopia.se/RPCSERV"
+    domain: "{{ public_domain }}"
+
+  tasks:
+    - name: Display deployment information
+      ansible.builtin.debug:
+        msg: |
+          ================================================================================
+          Loopia DNS Deployment
+          ================================================================================
+
+          Domain: {{ domain }}
+          API User: {{ loopia_api_user }}
+          Records to deploy: {{ loopia_dns_records | length }}
+
+          DNS Records:
+          {% for record in loopia_dns_records %}
+          - {{ record.host if record.host != '@' else '(root)' }}.{{ domain }} (TTL: {{ record.ttl | default(600) }})
+          {% endfor %}
+
+    - name: Get current public IP address
+      ansible.builtin.uri:
+        url: https://api.ipify.org?format=json
+        return_content: true
+      register: public_ip_result
+
+    - name: Set public IP fact
+      ansible.builtin.set_fact:
+        current_public_ip: "{{ public_ip_result.json.ip }}"
+
+    - name: Display target IP
+      ansible.builtin.debug:
+        msg: "Will point all DNS records to: {{ current_public_ip }}"
+
+    - name: Create Python script for Loopia API interaction
+      ansible.builtin.copy:
+        content: |
+          #!/usr/bin/env python3
+          import xmlrpc.client
+          import sys
+          import json
+
+          def update_dns_record(api_url, username, password, domain, subdomain, ip, ttl):
+              """Update or create a DNS A record via Loopia API"""
+
+              server = xmlrpc.client.ServerProxy(api_url)
+
+              # Convert @ to empty string for root domain
+              subdomain = "" if subdomain == "@" else subdomain
+
+              try:
+                  # Get existing zone records
+                  records = server.getZoneRecords(username, password, domain, subdomain)
+
+                  # Check if A record already exists
+                  a_record_exists = False
+                  for record in records:
+                      if record.get('type') == 'A':
+                          a_record_exists = True
+                          current_ip = record.get('rdata')
+
+                          if current_ip == ip:
+                              print(json.dumps({
+                                  "changed": False,
+                                  "msg": f"DNS record {subdomain}.{domain} already points to {ip}",
+                                  "subdomain": subdomain,
+                                  "ip": ip
+                              }))
+                              return 0
+                          break
+
+                  # Prepare record data
+                  record_data = {
+                      'type': 'A',
+                      'ttl': ttl,
+                      'priority': 0,
+                      'rdata': ip
+                  }
+
+                  if a_record_exists:
+                      # Update existing record by removing and adding
+                      # Get record ID from existing records
+                      record_id = None
+                      for idx, record in enumerate(records):
+                          if record.get('type') == 'A':
+                              record_id = record.get('record_id', idx)
+                              break
+
+                      if record_id is not None:
+                          try:
+                              server.removeZoneRecord(username, password, domain, subdomain, record_id)
+                          except Exception:
+                              # If removal fails, try to add anyway
+                              pass
+
+                  # Add new A record
+                  result = server.addZoneRecord(username, password, domain, subdomain, record_data)
+
+                  if result == "OK":
+                      action = "updated" if a_record_exists else "created"
+                      print(json.dumps({
+                          "changed": True,
+                          "msg": f"DNS record {subdomain}.{domain} {action} → {ip}",
+                          "subdomain": subdomain,
+                          "ip": ip,
+                          "action": action
+                      }))
+                      return 0
+                  else:
+                      print(json.dumps({
+                          "failed": True,
+                          "msg": f"Failed to update DNS record: {result}",
+                          "subdomain": subdomain
+                      }), file=sys.stderr)
+                      return 1
+
+              except Exception as e:
+                  print(json.dumps({
+                      "failed": True,
+                      "msg": f"Error: {str(e)}",
+                      "subdomain": subdomain
+                  }), file=sys.stderr)
+                  return 1
+
+          if __name__ == "__main__":
+              if len(sys.argv) != 8:
+                  print("Usage: script.py <api_url> <username> <password> <domain> <subdomain> <ip> <ttl>")
+                  sys.exit(1)
+
+              api_url = sys.argv[1]
+              username = sys.argv[2]
+              password = sys.argv[3]
+              domain = sys.argv[4]
+              subdomain = sys.argv[5]
+              ip = sys.argv[6]
+              ttl = int(sys.argv[7])
+
+              sys.exit(update_dns_record(api_url, username, password, domain, subdomain, ip, ttl))
+        dest: /tmp/loopia_dns_update.py
+        mode: '0700'
+
+    - name: Deploy DNS records to Loopia
+      ansible.builtin.command:
+        cmd: >
+          python3 /tmp/loopia_dns_update.py
+          "{{ loopia_api_url }}"
+          "{{ loopia_api_user }}"
+          "{{ loopia_api_password }}"
+          "{{ domain }}"
+          "{{ item.host }}"
+          "{{ current_public_ip }}"
+          "{{ item.ttl | default(600) }}"
+      loop: "{{ loopia_dns_records }}"
+      register: dns_update_results
+      changed_when: "'\"changed\": true' in dns_update_result.stdout"
+      failed_when: dns_update_result.rc != 0
+      loop_control:
+        loop_var: item
+        label: "{{ item.host }}.{{ domain }}"
+      vars:
+        dns_update_result: "{{ dns_update_results }}"
+
+    - name: Parse and display results
+      ansible.builtin.set_fact:
+        dns_results: "{{ dns_update_results.results | map(attribute='stdout') | map('from_json') | list }}"
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg: |
+          ================================================================================
+          DNS Deployment Summary
+          ================================================================================
+
+          Public IP: {{ current_public_ip }}
+
+          {% set changed_count = dns_results | selectattr('changed', 'equalto', true) | list | length %}
+          {% set unchanged_count = dns_results | selectattr('changed', 'equalto', false) | list | length %}
+          Results:
+          - Updated/Created: {{ changed_count }}
+          - Already correct: {{ unchanged_count }}
+          - Total records: {{ dns_results | length }}
+
+          Details:
+          {% for result in dns_results %}
+          {{ '✓' if result.changed else '→' }} {{ result.subdomain if result.subdomain else '@' }}.{{ domain }} → {{ result.ip }}{% if result.changed %} ({{ result.action }}){% endif %}
+
+          {% endfor %}
+
+          Next Steps:
+          1. Wait 1-5 minutes for DNS propagation
+          2. Verify: dig +short <subdomain>.{{ domain }} @1.1.1.1
+          3. Run E2E tests: ./scripts/check-infrastructure-status.sh
+
+          ================================================================================
+
+    - name: Clean up temporary script
+      ansible.builtin.file:
+        path: /tmp/loopia_dns_update.py
+        state: absent
+
+    - name: Display DNS verification commands
+      ansible.builtin.debug:
+        msg: |
+          Verify DNS propagation with:
+          {% for record in loopia_dns_records %}
+          dig +short {{ record.host }}.{{ domain }} @1.1.1.1
+          {% endfor %}
