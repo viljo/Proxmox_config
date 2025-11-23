@@ -78,6 +78,10 @@
                 # Disable local signup and login form
                 - ENABLE_SIGNUP=false
                 - ENABLE_LOGIN_FORM=false
+                # Default model
+                - DEFAULT_MODELS=qwen2.5:0.5b
+                # API Information Banner
+                - 'WEBUI_BANNERS=[{"id":"api-info","type":"info","title":"API Access Available","content":"OpenAI-compatible API: https://{{ service_domain }}/v1 | Generate your API key in Settings → Account","dismissible":false}]'
 
               volumes:
                 - {{ deploy_path }}/data:/app/backend/data
