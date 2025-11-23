@@ -12,8 +12,7 @@
 #   - Python xmlrpc.client module (standard library)
 
 - name: Deploy DNS Records to Loopia
-  hosts: localhost
-  connection: local
+  hosts: proxmox_admin
   gather_facts: false
 
   vars:

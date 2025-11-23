@@ -199,7 +199,6 @@ ssh root@192.168.1.3 pct status 60  # Demo site
 | PostgreSQL | 50 | 172.16.10.50 | N/A (internal) |
 | Keycloak | 51 | 172.16.10.51 | https://keycloak.viljo.se |
 | NetBox | 52 | 172.16.10.52 | https://netbox.viljo.se |
-| GitLab | 53 | 172.16.10.53 | https://gitlab.viljo.se |
 | Demo Site | 60 | 172.16.10.60 | https://demosite.viljo.se |
 
 See [Container Mapping](architecture/container-mapping.md) for all 16 services.

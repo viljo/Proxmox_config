@@ -40,17 +40,6 @@ infrastructure_services:
     status: deployed_working
     note: "Authentication required for access"
 
-  # ==================================================================
-  # INFRASTRUCTURE SERVICES - SSO Provider
-  # ==================================================================
-
-  - name: Keycloak
-    slug: keycloak
-    icon: "🔐"
-    description: Identity and access management (SSO)
-    subdomain: keycloak
-    status: deployed_working
-    note: "SSO provider for other services"
-
 # Infrastructure services (not exposed externally)
+# SSO is provided by oauth2-proxy + GitLab.com (no Keycloak needed)
 infrastructure_services_internal: []

@@ -24,7 +24,7 @@ SERVICES=(
     "Jitsi Meet:meet.viljo.se"
     "Cloud Storage:cloud.viljo.se"
     "Media Services:media.viljo.se"
-    "Keycloak:keycloak.viljo.se"
+    "OAuth2 Proxy:auth.viljo.se"
 )
 
 echo -e "${BLUE}======================================${NC}"
