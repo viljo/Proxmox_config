@@ -42,6 +42,12 @@ services:
       - OAUTH2_PROXY_SKIP_PROVIDER_BUTTON={{ oauth2_proxy_skip_provider_button | lower }}
       - OAUTH2_PROXY_PASS_HOST_HEADER={{ oauth2_proxy_pass_host_header | lower }}
 
+      # Pass authentication headers to upstream
+      - OAUTH2_PROXY_SET_XAUTHREQUEST={{ oauth2_proxy_set_xauthrequest | lower }}
+      - OAUTH2_PROXY_PASS_ACCESS_TOKEN={{ oauth2_proxy_pass_access_token | lower }}
+      - OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER={{ oauth2_proxy_pass_authorization_header | lower }}
+      - OAUTH2_PROXY_PASS_USER_HEADERS={{ oauth2_proxy_pass_user_headers | lower }}
+
     labels:
       # Enable Traefik for this service
       - "traefik.enable=true"

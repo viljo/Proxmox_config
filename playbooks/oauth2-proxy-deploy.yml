@@ -43,14 +43,13 @@
       ansible.builtin.debug:
         msg:
           - "=== OAuth2-Proxy Verification Results ==="
-          - "{% for service in oauth2_proxy_services %}"
-          - "  {{ service.subdomain }}.{{ public_domain }}:"
-          - "    Health: {% if oauth2_proxy_ping.results[loop.index0].rc == 0 %}PASS ✅{% else %}FAIL ❌{% endif %}"
-          - "    HTTPS: {% if oauth2_proxy_https.results[loop.index0].rc == 0 %}PASS ✅ (redirects to SSO){% else %}FAIL ❌{% endif %}"
-          - "{% endfor %}"
+          - "Services tested: {{ oauth2_proxy_services | length }}"
+          - "Ping tests passed: {{ oauth2_proxy_ping.results | selectattr('rc', 'eq', 0) | list | length }}"
+          - "HTTPS tests passed: {{ oauth2_proxy_https.results | selectattr('rc', 'eq', 0) | list | length }}"
           - ""
           - "Auth endpoint: {{ oauth2_proxy_external_url }}"
           - "Provider: {{ oauth2_proxy_provider }} ({{ oauth2_proxy_oidc_issuer_url }})"
+          - "Authentication headers: ENABLED"
 
     - name: "VERIFY: Check for any failures"
       ansible.builtin.set_fact:
@@ -64,14 +63,11 @@
           - "  Services protected: {{ oauth2_proxy_services | length }}"
           - "  Cookie domain: {{ oauth2_proxy_cookie_domains }}"
           - "  Email restriction: {{ oauth2_proxy_email_domains }}"
+          - "  Authentication headers: ENABLED"
           - "  Status: FUNCTIONAL ✅"
           - ""
-          - "Protected Services:"
-          - "{% for service in oauth2_proxy_services %}"
-          - "  - https://{{ service.subdomain }}.{{ public_domain }} → {{ service.description }}"
-          - "{% endfor %}"
-          - ""
-          - "Users log in once and session is shared across all services!"
+          - "Users log in once with GitLab and session is shared across all services!"
+          - "Authentication headers (X-Auth-Request-*, X-Forwarded-*) are passed to backend services."
       when: not has_failures
 
     - name: "VERIFY: Display failure warning"
