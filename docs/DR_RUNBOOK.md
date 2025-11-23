@@ -294,7 +294,7 @@ systemctl status loopia-ddns | head -10
 systemctl restart loopia-ddns
 
 # Verify DNS resolution
-for domain in keycloak gitlab nextcloud mattermost browser demosite ssh; do
+for domain in gitlab nextcloud mattermost browser ssh; do
   echo "$domain.viljo.se -> $(dig +short $domain.viljo.se A @1.1.1.1)"
 done
 ```
@@ -412,14 +412,8 @@ Use if automated restoration fails.
 
 ```bash
 # Copy backup to PostgreSQL container
+# Keycloak database removed - no longer in use
 TIMESTAMP="20251023T234308"
-pct push 150 /var/backups/infrastructure/$TIMESTAMP/postgresql/keycloak_$TIMESTAMP.dump /tmp/keycloak.dump
-
-# Restore database (inside container)
-pct exec 150 -- su - postgres -c "pg_restore -d keycloak --clean --if-exists --no-owner --no-acl /tmp/keycloak.dump"
-
-# Cleanup
-pct exec 150 -- rm /tmp/keycloak.dump
 ```
 
 ### Redis Manual Restore

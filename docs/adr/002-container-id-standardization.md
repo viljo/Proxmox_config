@@ -1,9 +1,11 @@
 # ADR-002: Container ID Standardization (ID = IP Last Octet)
 
-**Status**: Implemented
+**Status**: Historical (Architecture Never Deployed)
 **Date**: 2025-10-20
 **Decision Makers**: Infrastructure Team
 **Related**: [Container Mapping](../architecture/container-mapping.md)
+
+**⚠️ HISTORICAL DOCUMENT**: This ADR describes a multi-container architecture that was planned but never deployed. The actual infrastructure uses a single LXC container (ID 200) running all services as Docker containers. Some services mentioned (Keycloak, NetBox, Demo Site) no longer exist.
 
 ## Context
 
@@ -44,8 +46,8 @@ IP last octet >= 100
 | Firewall | **101** | 172.16.10.**101** | .101 = Gateway |
 | Bastion | **110** | 192.168.1.**110** | .110 = SSH Gateway |
 | PostgreSQL | **150** | 172.16.10.**150** | .150 = Backend services |
-| Keycloak | **151** | 172.16.10.**151** | .151 = Auth |
-| NetBox | **152** | 172.16.10.**152** | .152 = Infrastructure docs |
+| ~~Keycloak~~ | ~~**151**~~ | ~~172.16.10.**151**~~ | ~~.151 = Auth (removed)~~ |
+| ~~NetBox~~ | ~~**152**~~ | ~~172.16.10.**152**~~ | ~~.152 = Infrastructure docs (removed)~~ |
 | GitLab | **153** | 172.16.10.**153** | .153 = DevOps |
 | GitLab Runner | **154** | 172.16.10.**154** | .154 = CI runner |
 | Nextcloud | **155** | 172.16.10.**155** | .155 = Files |
@@ -53,7 +55,7 @@ IP last octet >= 100
 | Home Assistant | **157** | 172.16.10.**157** | .157 = IoT |
 | Redis | **158** | 172.16.10.**158** | .158 = Cache |
 | qBittorrent | **159** | 172.16.10.**159** | .159 = Torrents |
-| Demo Site | **160** | 172.16.10.**160** | .160 = Demo |
+| ~~Demo Site~~ | ~~**160**~~ | ~~172.16.10.**160**~~ | ~~.160 = Demo (replaced with Links portal)~~ |
 | Wazuh | **162** | 172.16.10.**162** | .162 = Security |
 | Mattermost | **163** | 172.16.10.**163** | .163 = Team Chat |
 | OpenMediaVault | **164** | 172.16.10.**164** | .164 = NAS |
@@ -124,15 +126,15 @@ Key changes:
 - `bastion.yml`: N/A → 110
 - `postgresql.yml`: 1990 → 50 → 150
 - `redis.yml`: N/A → 158
-- `keycloak.yml`: 2000 → 51 → 151
-- `netbox.yml`: 2150 → 52 → 152
+- ~~`keycloak.yml`: 2000 → 51 → 151 (service removed)~~
+- ~~`netbox.yml`: 2150 → 52 → 152 (service removed)~~
 - `gitlab.yml`: 2050 → 53 → 153
 - `gitlab_runner.yml`: 2051 → 54 → 154
 - `nextcloud.yml`: 2040 → 55 → 155
 - `jellyfin.yml`: 2010 → 56 → 156
 - `homeassistant.yml`: 2030 → 57 → 157
 - `qbittorrent.yml`: 2070 → 59 → 159
-- `demo_site.yml`: 2300 → 60 → 160
+- ~~`demo_site.yml`: 2300 → 60 → 160 (replaced with Links portal)~~
 - `wazuh.yml`: 2080 → 62 → 162
 - `mattermost.yml`: N/A → 63 → 163
 - `openmediavault.yml`: 2020 → 64 → 164
@@ -168,8 +170,8 @@ To maintain organization, services are grouped by IP range:
 |-------|---------|---------------|
 | .100-.109 | Core infrastructure | Firewall (101) |
 | .110-.149 | Management/admin services | Bastion (110) |
-| .150-.159 | Backend services | PostgreSQL (150), Keycloak (151), NetBox (152), GitLab (153-154), Nextcloud (155), Jellyfin (156), Home Assistant (157), Redis (158), qBittorrent (159) |
-| .160-.179 | User/collaboration applications | Demo Site (160), Mattermost (163), OpenMediaVault (164), Zipline (165), Webtop (170) |
+| .150-.159 | Backend services | PostgreSQL (150), GitLab (153-154), Nextcloud (155), Jellyfin (156), Home Assistant (157), Redis (158), qBittorrent (159) |
+| .160-.179 | User/collaboration applications | Mattermost (163), OpenMediaVault (164), Zipline (165), Webtop (170) |
 | .180-.189 | Security/monitoring services | Wazuh (162) |
 | .190-.199 | Network services | WireGuard VPN (190) |
 

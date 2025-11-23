@@ -20,7 +20,7 @@ All files in `inventory/group_vars/all/*.yml` that define infrastructure topolog
 - `dmz.yml` - DMZ subnet configuration
 - `firewall.yml` - Firewall rules and port forwarding
 - `postgresql.yml` - Database server topology (not passwords!)
-- Service definition files: `gitlab.yml`, `nextcloud.yml`, `keycloak.yml`, etc.
+- Service definition files: `gitlab.yml`, `nextcloud.yml`, etc.
 
 **Proxmox Configuration:**
 - `inventory/group_vars/proxmox_hosts/proxmox_api.yml` - API settings (references vault)
