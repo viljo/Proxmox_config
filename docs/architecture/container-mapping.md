@@ -1,15 +1,15 @@
 # Container and Service Mapping
 
-**Last Updated**: 2025-11-10
+**Last Updated**: 2025-11-23
 **Status**: Reflects actual deployed architecture
 **Related**: [Network Topology](network-topology.md) | [ADR-001](../adr/001-network-topology-change.md)
 
 ## Architecture Overview
 
-The infrastructure uses a **simplified single-LXC architecture** with Coolify PaaS:
+The infrastructure uses a **simplified single-LXC architecture**:
 
-- **1 LXC Container**: Coolify (ID: 200)
-- **All services**: Run as Docker containers inside Coolify LXC
+- **1 LXC Container**: Containers (ID: 200)
+- **All services**: Run as Docker containers managed by Traefik reverse proxy
 - **No individual service LXCs**: Previous multi-container architecture was never deployed
 - **No DMZ network**: vmbr3 created but unused
 
@@ -17,15 +17,15 @@ The infrastructure uses a **simplified single-LXC architecture** with Coolify Pa
 
 | Container ID | Service | Management IP | Public Interface | Status | Purpose |
 |--------------|---------|---------------|------------------|--------|---------|
-| **200** | Coolify | 192.168.1.200/16 (eth1→vmbr0) | DHCP public IP (eth0→vmbr2) | ✅ Deployed | PaaS platform hosting all services as Docker containers |
+| **200** | Containers | 192.168.1.200/16 (eth1→vmbr0) | DHCP public IP (eth0→vmbr2) | ✅ Deployed | Docker host for all application services with Traefik reverse proxy |
 
-### Coolify LXC 200 Details
+### Containers LXC 200 Details
 
 **Container Type**: Privileged LXC with Docker support
 **OS**: Debian-based with Docker Engine
 **Network Interfaces**:
 - **eth0** → vmbr2 (WAN): Gets public IP via DHCP from ISP - all public service traffic
-- **eth1** → vmbr0 (Management): Static IP 192.168.1.200/16 - Ansible API access
+- **eth1** → vmbr0 (Management): Static IP 192.168.1.200/16 - Ansible management access
 
 **Resource Allocation**:
 - **CPU**: Depends on Proxmox host allocation
@@ -34,49 +34,43 @@ The infrastructure uses a **simplified single-LXC architecture** with Coolify Pa
 
 **Services Inside Container**:
 - Docker Engine
-- Coolify API (port 8000 on management interface)
-- Coolify Proxy (built-in reverse proxy with SSL)
+- Traefik (reverse proxy with automatic SSL via Let's Encrypt)
+- OAuth2-Proxy instances (for SSO-protected services)
 - All application services (deployed as Docker containers)
 
 ## Docker Container Services
 
-All services run as **Docker containers** inside Coolify LXC 200, managed via Coolify API.
+All services run as **Docker containers** inside LXC 200, managed by Traefik reverse proxy.
 
-### Service Deployment Repository
+### Service Deployment
 
-**Location**: `/coolify_service/ansible`
-**Method**: Services deployed via Ansible playbooks that call Coolify API
-**API Endpoint**: `http://192.168.1.200:8000/api/v1`
+**Method**: Ansible playbooks deploy Docker Compose stacks directly to LXC 200
+**Management**: SSH to Proxmox host, then `pct exec 200` commands
 
 ### Service Categories
 
-#### Infrastructure Services
-- **Coolify Dashboard**: https://paas.viljo.se
-  - Service management interface
-  - Deployment dashboard
-  - Built-in proxy configuration
-
-#### Application Services (Examples)
-Services are deployed dynamically via Coolify API. Check the following for current services:
+#### Application Services
 
 **Check deployed services**:
 ```bash
-# Via Coolify API
-curl -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-  http://192.168.1.200:8000/api/v1/services
-
-# Via Docker in Coolify LXC
+# Via Docker in LXC 200
 ssh root@192.168.1.3 pct exec 200 -- docker ps
+
+# Via Traefik dashboard
+ssh root@192.168.1.3 pct exec 200 -- docker logs traefik --tail 50
 ```
 
-**Example services** (deployment status may vary):
-- Links Portal: https://links.viljo.se
-- Media services: https://media.viljo.se
-- Cloud storage: https://cloud.viljo.se
-- Collaboration tools
-- Development tools
+**Currently deployed services**:
+- **Links Portal**: https://links.viljo.se (landing page)
+- **Jitsi Meet**: https://meet.viljo.se (video conferencing)
+- **Nextcloud**: https://cloud.viljo.se (file storage)
+- **Jellyfin**: https://media.viljo.se (media streaming)
+- **qBittorrent**: https://torrent.viljo.se (torrent client)
+- **Zipline**: https://zipline.viljo.se (file sharing)
+- **Webtop**: https://webtop.viljo.se (browser desktop - SSO)
+- **Mailhog**: https://mail.viljo.se (email testing - SSO)
 
-**Note**: Services are defined in `/coolify_service/ansible` repository, not in this infrastructure repository.
+**Service configuration**: See `inventory/group_vars/all/services.yml`
 
 ## Network Configuration
 
@@ -85,29 +79,29 @@ ssh root@192.168.1.3 pct exec 200 -- docker ps
 - **Function**: Hypervisor, Ansible control plane
 - **Internet Access**: No (management network only)
 
-### Coolify LXC 200 - Management Interface (eth1)
+### Containers LXC 200 - Management Interface (eth1)
 - **Bridge**: vmbr0 (management network)
 - **IP**: 192.168.1.200/16 (static)
 - **Gateway**: 192.168.1.1
 - **Purpose**:
-  - Ansible API access
-  - Coolify API endpoint
+  - Ansible management access
+  - SSH administration
   - Management/monitoring traffic
 
-### Coolify LXC 200 - Public Interface (eth0)
+### Containers LXC 200 - Public Interface (eth0)
 - **Bridge**: vmbr2 (WAN)
 - **IP**: DHCP from ISP (dynamic public IP)
 - **Purpose**:
   - All public service traffic
-  - SSL termination via Coolify Proxy
+  - SSL termination via Traefik
   - DNS points here (via Loopia DDNS)
 
 ### Bridge Status Summary
 
 | Bridge | Network | Purpose | Status | Connected Devices |
 |--------|---------|---------|--------|-------------------|
-| vmbr0 | 192.168.1.0/16 | Management | Active | Proxmox host (192.168.1.3), Coolify eth1 (192.168.1.200) |
-| vmbr2 | DHCP from ISP | WAN/Public | Active | Coolify eth0 (public IP) |
+| vmbr0 | 192.168.1.0/16 | Management | Active | Proxmox host (192.168.1.3), Containers eth1 (192.168.1.200) |
+| vmbr2 | DHCP from ISP | WAN/Public | Active | Containers eth0 (public IP) |
 | vmbr3 | 172.16.10.0/24 | Reserved | DOWN | Created but unused, available for future segmentation |
 
 ## DNS and Service Discovery
@@ -120,32 +114,32 @@ ssh root@192.168.1.3 pct exec 200 -- docker ps
 
 **Configuration**:
 ```python
-# Script monitors Coolify LXC 200 eth0 interface (vmbr2)
-CONTAINER_ID = 200  # Coolify container
+# Script monitors Containers LXC 200 eth0 interface (vmbr2)
+CONTAINER_ID = 200  # Containers LXC
 INTERFACE = "eth0"  # Public interface on vmbr2
 
-# Updates all *.viljo.se DNS records to Coolify public IP
+# Updates all *.viljo.se DNS records to LXC 200 public IP
 ```
 
 **Verification**:
 ```bash
-# Check Coolify public IP
+# Check LXC 200 public IP
 ssh root@192.168.1.3 pct exec 200 -- ip -4 addr show eth0 | grep inet
 
 # Check DNS resolution (should match above)
-dig +short paas.viljo.se @1.1.1.1
+dig +short links.viljo.se @1.1.1.1
 ```
 
 ### Service Access Patterns
 
 **Public Access** (via vmbr2):
 ```
-Internet → ISP Router (DHCP) → vmbr2 → Coolify eth0 → Coolify Proxy → Docker Container
+Internet → ISP Router (DHCP) → vmbr2 → LXC 200 eth0 → Traefik → Docker Container
 ```
 
 **Management Access** (via vmbr0):
 ```
-Ansible → 192.168.1.3 (Proxmox) → vmbr0 → Coolify eth1 (192.168.1.200) → Coolify API
+Ansible → 192.168.1.3 (Proxmox) → vmbr0 → LXC 200 eth1 (192.168.1.200) → Docker/SSH
 ```
 
 ## Comparison: Documented vs Actual
@@ -172,52 +166,52 @@ Container 53:  GitLab (172.16.10.53)        [NEVER EXISTED]
 
 **Actual deployed architecture** (as of 2025-11-10):
 
-- ✅ **Coolify LXC (200)**: Single container hosting everything
-- ✅ **vmbr2 (WAN)**: Coolify eth0 gets public IP directly
-- ✅ **vmbr0 (Management)**: Coolify eth1 for management (192.168.1.200)
+- ✅ **Containers LXC (200)**: Single container hosting everything
+- ✅ **vmbr2 (WAN)**: LXC 200 eth0 gets public IP directly
+- ✅ **vmbr0 (Management)**: LXC 200 eth1 for management (192.168.1.200)
 - ✅ **vmbr3**: Created but DOWN (interface exists, no active network)
-- ✅ **Docker Containers**: All services as containers inside Coolify LXC
-- ✅ **Coolify Proxy**: Built-in reverse proxy (replaces Traefik)
+- ✅ **Docker Containers**: All services as containers inside LXC 200
+- ✅ **Traefik**: Reverse proxy with automatic SSL
 - ✅ **Direct Internet Exposure**: No firewall/NAT layer
 
 **Actual container mapping**:
 ```
-Container 200: Coolify PaaS                 [DEPLOYED & ACTIVE]
+Container 200: Containers (Docker Host)    [DEPLOYED & ACTIVE]
   ├─ eth0 → vmbr2 (public IP via DHCP)
   ├─ eth1 → vmbr0 (192.168.1.200)
   ├─ Docker Engine
-  ├─ Coolify API (port 8000)
-  ├─ Coolify Proxy (reverse proxy)
-  └─ All services (as Docker containers)
+  ├─ Traefik (reverse proxy)
+  ├─ OAuth2-Proxy instances
+  └─ All application services (as Docker containers)
 ```
 
 ## Quick Reference Commands
 
 ### Check LXC Container Status
 ```bash
-# List all LXC containers (should only show Coolify 200)
+# List all LXC containers (should only show Containers 200)
 ssh root@192.168.1.3 pct list
 
-# Check Coolify container status
+# Check Containers LXC status
 ssh root@192.168.1.3 pct status 200
 
-# Check Coolify container config
+# Check Containers LXC config
 ssh root@192.168.1.3 pct config 200
 
-# Enter Coolify container
+# Enter Containers LXC
 ssh root@192.168.1.3 pct enter 200
 ```
 
 ### Check Docker Containers
 ```bash
-# List all Docker containers in Coolify
+# List all Docker containers in LXC 200
 ssh root@192.168.1.3 pct exec 200 -- docker ps
 
 # Check specific service
 ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=SERVICE_NAME
 
-# Check Coolify proxy
-ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=coolify-proxy
+# Check Traefik reverse proxy
+ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=traefik
 
 # View container logs
 ssh root@192.168.1.3 pct exec 200 -- docker logs CONTAINER_NAME
@@ -225,42 +219,41 @@ ssh root@192.168.1.3 pct exec 200 -- docker logs CONTAINER_NAME
 
 ### Check Network Interfaces
 ```bash
-# Check Coolify public IP (eth0 on vmbr2)
+# Check LXC 200 public IP (eth0 on vmbr2)
 ssh root@192.168.1.3 pct exec 200 -- ip addr show eth0
 
-# Check Coolify management IP (eth1 on vmbr0)
+# Check LXC 200 management IP (eth1 on vmbr0)
 ssh root@192.168.1.3 pct exec 200 -- ip addr show eth1
 
-# Test internet connectivity from Coolify
+# Test internet connectivity from LXC 200
 ssh root@192.168.1.3 pct exec 200 -- ping -c 2 1.1.1.1
 
 # Test DNS resolution
-ssh root@192.168.1.3 pct exec 200 -- dig +short paas.viljo.se
+ssh root@192.168.1.3 pct exec 200 -- dig +short links.viljo.se
 ```
 
-### Check Coolify API
+### Check Traefik Reverse Proxy
 ```bash
-# Check API health (from Proxmox host)
-curl -s http://192.168.1.200:8000/health
+# Check Traefik status
+ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=traefik
 
-# List services via API
-curl -s -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-  http://192.168.1.200:8000/api/v1/services | jq
+# View Traefik logs
+ssh root@192.168.1.3 pct exec 200 -- docker logs traefik --tail 50
 
-# List applications via API
-curl -s -H "Authorization: Bearer $COOLIFY_API_TOKEN" \
-  http://192.168.1.200:8000/api/v1/applications | jq
+# Check Traefik routing
+ssh root@192.168.1.3 pct exec 200 -- docker exec traefik cat /etc/traefik/traefik.yml
 ```
 
 ### Service Deployment
 ```bash
-# Services are deployed via Ansible playbooks in /coolify_service/ansible
-cd /path/to/coolify_service/ansible
+# Services are deployed via Ansible playbooks in this repository
+cd /path/to/Proxmox_config
 
-# Deploy a service
-ansible-playbook -i inventory/production.ini \
-  playbooks/deploy-SERVICE-via-api.yml \
-  --vault-password-file=.vault_pass.txt
+# Deploy media services
+ansible-playbook playbooks/media-services-deploy.yml
+
+# Deploy OAuth2-Proxy SSO
+ansible-playbook playbooks/oauth2-proxy-deploy.yml
 ```
 
 ## Resource Summary
@@ -268,11 +261,11 @@ ansible-playbook -i inventory/production.ini \
 ### Current Resource Usage
 
 **Single LXC Container**:
-- Coolify LXC 200: Resources allocated via Proxmox LXC configuration
+- Containers LXC 200: Resources allocated via Proxmox LXC configuration
 
 **Docker Containers**: Variable based on deployed services
-- Each service runs as Docker container with resources managed by Coolify
-- Check current resource usage via Coolify dashboard: https://paas.viljo.se
+- Each service runs as Docker container within LXC 200
+- Check current resource usage via `docker stats` or Proxmox web UI
 
 ### Comparison with Previous Documentation
 
@@ -282,9 +275,9 @@ ansible-playbook -i inventory/production.ini \
 - 760GB storage allocated
 
 **Actual reality**:
-- 1 LXC container (Coolify 200)
+- 1 LXC container (Containers 200)
 - Resources allocated to single LXC
-- Docker containers share resources within Coolify LXC
+- Docker containers share resources within LXC 200
 - More efficient resource usage than multiple LXCs
 
 ## Configuration Files
@@ -292,24 +285,24 @@ ansible-playbook -i inventory/production.ini \
 ### Infrastructure Configuration
 - **Services Inventory**: `inventory/group_vars/all/services.yml`
 - **Network Configuration**: `inventory/group_vars/all/main.yml`
-- **Coolify Deployment**: `specs/planned/002-docker-platform-selfservice/`
+- **Service Roles**: `roles/` (Jellyfin, qBittorrent, OAuth2-Proxy, etc.)
 
 ### Service Configuration
-- **Service Definitions**: `/coolify_service/ansible/` (separate repository)
-- **API Deployment Playbooks**: `/coolify_service/ansible/playbooks/`
-- **Service Variables**: `/coolify_service/ansible/inventory/group_vars/`
+- **Ansible Playbooks**: `playbooks/` (media-services-deploy.yml, oauth2-proxy-deploy.yml, etc.)
+- **Service Variables**: `inventory/group_vars/all/`
+- **Ansible Roles**: `roles/` (service-specific deployment logic)
 
 ## Troubleshooting
 
 ### Container Not Found
 If you see references to containers other than 200:
 ```bash
-# This is expected - only Coolify container exists
+# This is expected - only Containers LXC exists
 ssh root@192.168.1.3 pct list
 
 # You should only see:
 # VMID  Status  Name
-# 200   running coolify
+# 200   running containers
 ```
 
 ### Service Not Accessible
@@ -318,27 +311,27 @@ If a service isn't reachable:
 # 1. Check DNS resolution
 dig +short SERVICE.viljo.se @1.1.1.1
 
-# 2. Check Coolify public IP
+# 2. Check LXC 200 public IP
 ssh root@192.168.1.3 pct exec 200 -- ip -4 addr show eth0 | grep inet
 
 # 3. Check if service container is running
 ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=SERVICE_NAME
 
-# 4. Check Coolify proxy
-ssh root@192.168.1.3 pct exec 200 -- docker logs coolify-proxy | tail -50
+# 4. Check Traefik reverse proxy
+ssh root@192.168.1.3 pct exec 200 -- docker logs traefik | tail -50
 ```
 
-### Cannot Access Coolify API
-If you cannot reach the Coolify API:
+### Cannot Access Services
+If you cannot reach services:
 ```bash
-# 1. Check Coolify management interface
-ssh root@192.168.1.3 pct exec 200 -- ip addr show eth1
-
-# 2. Test API from Proxmox host
-curl -s http://192.168.1.200:8000/health
-
-# 3. Check Coolify container is running
+# 1. Check LXC 200 is running
 ssh root@192.168.1.3 pct status 200
+
+# 2. Check Traefik is running
+ssh root@192.168.1.3 pct exec 200 -- docker ps --filter name=traefik
+
+# 3. Check service containers
+ssh root@192.168.1.3 pct exec 200 -- docker ps
 ```
 
 ## Migration Notes
@@ -355,8 +348,8 @@ If future requirements demand network segmentation or firewall layer:
    - Deploy container 101 with eth0→vmbr2, eth1→vmbr3
    - Configure NAT/routing
 
-3. **Move Coolify to DMZ**:
-   - Move Coolify eth0 from vmbr2 to vmbr3
+3. **Move LXC 200 to DMZ**:
+   - Move LXC 200 eth0 from vmbr2 to vmbr3
    - Assign static IP 172.16.10.200
    - Update routing through firewall
 
@@ -372,7 +365,6 @@ If future requirements demand network segmentation or firewall layer:
 
 - [Network Topology](network-topology.md) - Complete network architecture
 - [ADR-001: Network Architecture Decision](../adr/001-network-topology-change.md)
-- [Coolify Deployment Spec](../../specs/planned/002-docker-platform-selfservice/)
 - [Infrastructure Status Script](../../scripts/check-infrastructure-status.sh)
 - [Services Configuration](../../inventory/group_vars/all/services.yml)
 
