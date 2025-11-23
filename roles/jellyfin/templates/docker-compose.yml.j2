@@ -24,6 +24,7 @@ services:
       - "traefik.http.routers.{{ jellyfin_service_name }}.rule=Host(`{{ jellyfin_subdomain }}.{{ public_domain }}`)"
       - "traefik.http.routers.{{ jellyfin_service_name }}.entrypoints=websecure"
       - "traefik.http.routers.{{ jellyfin_service_name }}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.{{ jellyfin_service_name }}.service={{ jellyfin_service_name }}"
 
       # Service configuration
       - "traefik.http.services.{{ jellyfin_service_name }}.loadbalancer.server.port={{ jellyfin_service_port }}"

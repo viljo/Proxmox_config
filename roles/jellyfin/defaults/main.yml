@@ -51,7 +51,7 @@ jellyfin_memory_limit: 4G
 # ================================================================================
 
 jellyfin_subdomain: media
-jellyfin_enable_traefik: false  # Disabled because oauth2-proxy handles routing
+jellyfin_enable_traefik: true  # Enable direct Traefik routing (no SSO protection)
 
 # ================================================================================
 # STARTUP WIZARD CONFIGURATION
