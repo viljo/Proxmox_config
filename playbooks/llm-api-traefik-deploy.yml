@@ -3,7 +3,7 @@
 # Description: Configure Traefik routing for llama.cpp OpenAI-compatible API
 # Prerequisites:
 #   - VM 201 (ipex-llm) with llama.cpp server running on port 8000
-#   - Traefik running on Proxmox host with file provider
+#   - LXC 200 with Docker Traefik (handles external traffic via NAT)
 #   - DNS record for llm-api.viljo.se pointing to public IP
 
 - name: Deploy LLM API Traefik Configuration
@@ -11,11 +11,12 @@
   gather_facts: false
 
   vars:
+    lxc_id: 200
     service_subdomain: llm-api
     service_domain: "{{ service_subdomain }}.{{ public_domain }}"
     # llama.cpp server with OpenAI-compatible API (Intel Arc Pro B60 GPU)
     llm_api_backend: "http://172.31.31.201:8000"
-    traefik_dynamic_path: /etc/traefik/dynamic
+    traefik_dynamic_path: /opt/docker-stack/traefik/dynamic
 
   pre_tasks:
     - name: Display deployment plan
@@ -29,6 +30,7 @@
           - "- External access to llama.cpp OpenAI-compatible API"
           - ""
           - "Configuration:"
+          - "  LXC: {{ lxc_id }} (Docker Traefik)"
           - "  Domain: {{ service_domain }}"
           - "  Backend: {{ llm_api_backend }}"
           - "  GPU: Intel Arc Pro B60 24GB (VM 201)"
@@ -38,17 +40,20 @@
           - "  Uses Bearer token (API key: sk-local-connector)"
           - ""
           - "Traefik Integration:"
-          - "  - Automatic HTTPS via Let's Encrypt (DNS challenge)"
+          - "  - Automatic HTTPS via Let's Encrypt (TLS challenge)"
           - "  - Routing: Host(`{{ service_domain }}`)"
           - "=========================================="
 
   tasks:
-    - name: Create Traefik dynamic configuration
+    - name: Create Traefik dynamic config directory
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- mkdir -p {{ traefik_dynamic_path }}
+      changed_when: true
+
+    - name: Create Traefik dynamic configuration file
       ansible.builtin.copy:
-        dest: "{{ traefik_dynamic_path }}/llm-api.yml"
-        mode: '0640'
-        owner: root
-        group: traefik
+        dest: /tmp/llm-api-traefik.yml
+        mode: '0644'
         content: |
           http:
             routers:
@@ -58,7 +63,7 @@
                 entryPoints:
                   - websecure
                 tls:
-                  certResolver: dns
+                  certResolver: letsencrypt
 
             services:
               llm-api:
@@ -68,16 +73,111 @@
                   passHostHeader: true
                   responseForwarding:
                     flushInterval: "100ms"
-      notify: reload traefik
 
-    - name: Verify Traefik configuration
-      ansible.builtin.command: traefik version
-      register: traefik_version
+    - name: Copy config to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/llm-api-traefik.yml {{ traefik_dynamic_path }}/llm-api.yml
+      changed_when: true
+
+    - name: Check if Traefik has file provider
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- docker exec traefik cat /proc/1/cmdline
+      register: traefik_cmdline
       changed_when: false
 
-    - name: Wait for certificate provisioning
+    - name: Update Traefik docker-compose if needed
+      when: "'providers.file' not in traefik_cmdline.stdout"
+      block:
+        - name: Create updated docker-compose.yml
+          ansible.builtin.copy:
+            dest: /tmp/traefik-compose.yml
+            mode: '0644'
+            content: |
+              services:
+                traefik:
+                  image: traefik:latest
+                  container_name: traefik
+                  restart: unless-stopped
+
+                  environment:
+                    - DOCKER_API_VERSION=1.46
+
+                  command:
+                    # API and Dashboard
+                    - --api.dashboard=true
+                    - --api.insecure=false
+
+                    # Docker provider
+                    - --providers.docker=true
+                    - --providers.docker.exposedbydefault=false
+                    - --providers.docker.network=traefik_public
+
+                    # File provider for external routes
+                    - --providers.file.directory=/dynamic
+                    - --providers.file.watch=true
+
+                    # Entrypoints
+                    - --entrypoints.web.address=:80
+                    - --entrypoints.websecure.address=:443
+
+                    # HTTP to HTTPS redirect
+                    - --entrypoints.web.http.redirections.entrypoint.to=websecure
+                    - --entrypoints.web.http.redirections.entrypoint.scheme=https
+
+                    # Let's Encrypt configuration
+                    - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+                    - --certificatesresolvers.letsencrypt.acme.email=anders@viljo.se
+                    - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
+
+                    # Logging
+                    - --log.level=INFO
+                    - --accesslog=true
+
+                  ports:
+                    - "80:80"
+                    - "443:443"
+
+                  volumes:
+                    - /var/run/docker.sock:/var/run/docker.sock:ro
+                    - /opt/docker-stack/traefik/acme.json:/acme.json
+                    - /opt/docker-stack/traefik/dynamic:/dynamic:ro
+
+                  networks:
+                    - traefik_public
+
+                  labels:
+                    # Enable Traefik for this service
+                    - "traefik.enable=true"
+
+                    # Dashboard router
+                    - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.viljo.se`)"
+                    - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+                    - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+                    - "traefik.http.routers.traefik-dashboard.service=api@internal"
+
+                    # Protect dashboard with OAuth2
+                    - "traefik.http.routers.traefik-dashboard.middlewares=oauth2-auth@docker"
+
+                    # Explicitly set port for dashboard
+                    - "traefik.http.services.traefik-dashboard.loadbalancer.server.port=8080"
+
+              networks:
+                traefik_public:
+                  external: true
+
+        - name: Copy docker-compose to LXC
+          ansible.builtin.command: >
+            pct push {{ lxc_id }} /tmp/traefik-compose.yml /opt/docker-stack/traefik/docker-compose.yml
+          changed_when: true
+
+        - name: Recreate Traefik container
+          ansible.builtin.command: >
+            pct exec {{ lxc_id }} -- bash -c 'cd /opt/docker-stack/traefik && docker compose up -d'
+          changed_when: true
+
+    - name: Wait for Traefik to reload config
       ansible.builtin.wait_for:
-        timeout: 10
+        timeout: 5
       delegate_to: localhost
 
     - name: Test API endpoint
@@ -93,12 +193,6 @@
       failed_when: false
       retries: 6
       delay: 10
-
-  handlers:
-    - name: reload traefik
-      ansible.builtin.systemd:
-        name: traefik
-        state: reloaded
 
   post_tasks:
     - name: Display deployment summary
