@@ -216,6 +216,51 @@
         pct exec {{ lxc_id }} -- bash -c 'cd {{ deploy_path }} && docker compose build && docker compose up -d'
       changed_when: true
 
+    - name: Create Proxmox host Traefik config for WebSocket routing
+      ansible.builtin.copy:
+        dest: /etc/traefik/dynamic/remotellm.yml
+        mode: '0644'
+        content: |
+          http:
+            routers:
+              # WebSocket tunnel for connectors - direct to broker
+              remotellm-ws:
+                rule: "Host(`{{ service_domain }}`) && PathPrefix(`/ws`)"
+                service: remotellm-ws
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: dns
+
+              # Main web/API traffic through LXC Traefik
+              remotellm:
+                rule: "Host(`{{ service_domain }}`)"
+                service: remotellm
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: dns
+                priority: 1
+
+            services:
+              # WebSocket direct to broker (port {{ broker_api_port }})
+              remotellm-ws:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ lxc_internal_ip }}:{{ broker_api_port }}"
+                  passHostHeader: true
+                  responseForwarding:
+                    flushInterval: "-1"
+
+              # Web/API through LXC Traefik
+              remotellm:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ lxc_internal_ip }}:80"
+                  passHostHeader: true
+                  responseForwarding:
+                    flushInterval: "100ms"
+
     - name: Wait for container to start
       ansible.builtin.wait_for:
         timeout: 30
@@ -277,5 +322,9 @@
           - "    --broker-url ws://{{ lxc_internal_ip }}:{{ broker_api_port }}/ws \\"
           - "    --credentials-file /root/.remotellm/credentials.yaml \\"
           - "    --connector-name ipex-llm-connector"
+          - ""
+          - "External connectors:"
+          - "  Uses wss://{{ service_domain }}/ws"
+          - "  (WebSocket routed directly to broker via Proxmox Traefik)"
           - ""
           - "=========================================="
