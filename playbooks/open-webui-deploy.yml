@@ -1,8 +1,8 @@
 ---
 # Playbook: Deploy Open WebUI
-# Description: Deploy Open WebUI web interface for Ollama LLM
+# Description: Deploy Open WebUI web interface for LLM (llama.cpp with Intel Arc Pro B60)
 # Prerequisites:
-#   - Ollama VM deployed and running (172.31.31.201:11434)
+#   - VM 201 (ipex-llm) with llama.cpp server running on port 8000
 #   - LXC 200 "Containers" with Docker and Traefik
 #   - DNS record for llm.viljo.se pointing to public IP
 
@@ -15,7 +15,9 @@
     service_name: open-webui
     service_subdomain: llm
     service_domain: "{{ service_subdomain }}.{{ public_domain }}"
-    ollama_api_url: "http://172.31.31.201:11434"
+    # llama.cpp server with OpenAI-compatible API (Intel Arc Pro B60 GPU)
+    openai_api_url: "http://172.31.31.201:8000/v1"
+    openai_api_key: "sk-local-connector"
     deploy_path: "/opt/docker-stack/open-webui"
     webui_secret_key: "{{ vault_open_webui_secret_key | default('change-me-to-random-secret') }}"
 
@@ -28,12 +30,15 @@
           - "=========================================="
           - "This playbook will deploy:"
           - "- Open WebUI container (ghcr.io/open-webui/open-webui:main)"
-          - "- Web interface for Ollama LLM"
+          - "- Web interface for LLM (llama.cpp on Intel Arc Pro B60)"
           - ""
           - "Configuration:"
           - "  LXC: {{ lxc_id }} (Containers)"
           - "  Domain: {{ service_domain }}"
-          - "  Ollama API: {{ ollama_api_url }}"
+          - "  LLM Backend: llama.cpp (OpenAI-compatible API)"
+          - "  LLM API URL: {{ openai_api_url }}"
+          - "  GPU: Intel Arc Pro B60 24GB (VM 201)"
+          - "  Model: Qwen2.5-Coder-7B-Instruct (Q4_K_M)"
           - "  Deploy Path: {{ deploy_path }}"
           - "  Authentication: Disabled (OAuth2-proxy handles auth)"
           - ""
@@ -67,7 +72,11 @@
               restart: unless-stopped
 
               environment:
-                - OLLAMA_BASE_URL={{ ollama_api_url }}
+                # llama.cpp OpenAI-compatible API (Intel Arc Pro B60 GPU)
+                - OPENAI_API_BASE_URL={{ openai_api_url }}
+                - OPENAI_API_KEY={{ openai_api_key }}
+                # Disable Ollama (using OpenAI-compatible API only)
+                - ENABLE_OLLAMA_API=false
                 # Disable Open WebUI auth - OAuth2-proxy handles authentication
                 - WEBUI_AUTH=false
                 - WEBUI_NAME=Viljo LLM
@@ -78,10 +87,13 @@
                 # Disable local signup and login form
                 - ENABLE_SIGNUP=false
                 - ENABLE_LOGIN_FORM=false
-                # Default model
-                - DEFAULT_MODELS=qwen2.5:0.5b
-                # API Information Banner
-                - 'WEBUI_BANNERS=[{"id":"api-info","type":"info","title":"API Access Available","content":"OpenAI-compatible API: https://{{ service_domain }}/v1 | Generate your API key in Settings → Account","dismissible":false}]'
+                # Default model (llama.cpp GGUF model path)
+                - DEFAULT_MODELS=/opt/llama.cpp/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf
+                # Web Search Configuration - Using DuckDuckGo (no API key needed)
+                - ENABLE_RAG_WEB_SEARCH=true
+                - RAG_WEB_SEARCH_ENGINE=duckduckgo
+                - RAG_WEB_SEARCH_RESULT_COUNT=5
+                - RAG_WEB_SEARCH_CONCURRENT_REQUESTS=10
 
               volumes:
                 - {{ deploy_path }}/data:/app/backend/data
@@ -127,10 +139,10 @@
       register: container_status
       changed_when: false
 
-    - name: Verify Ollama connectivity from container
+    - name: Verify LLM API connectivity from container
       ansible.builtin.command: >
-        pct exec {{ lxc_id }} -- docker exec open-webui curl -sf {{ ollama_api_url }}/api/version
-      register: ollama_check
+        pct exec {{ lxc_id }} -- docker exec open-webui curl -sf {{ openai_api_url }}/models -H "Authorization: Bearer {{ openai_api_key }}"
+      register: llm_api_check
       changed_when: false
       failed_when: false
 
@@ -159,10 +171,12 @@
           - "  Image: ghcr.io/open-webui/open-webui:main"
           - "  Port: 8080 (internal)"
           - ""
-          - "✅ Ollama Connection:"
-          - "  API URL: {{ ollama_api_url }}"
-          - "  Status: {{ 'Connected' if ollama_check.rc == 0 else 'Failed - check Ollama VM' }}"
-          - "  {% if ollama_check.rc == 0 %}Version: {{ ollama_check.stdout }}{% endif %}"
+          - "✅ LLM Backend Connection:"
+          - "  Type: llama.cpp (OpenAI-compatible API)"
+          - "  API URL: {{ openai_api_url }}"
+          - "  GPU: Intel Arc Pro B60 24GB (VM 201)"
+          - "  Model: Qwen2.5-Coder-7B-Instruct (Q4_K_M)"
+          - "  Status: {{ 'Connected' if llm_api_check.rc == 0 else 'Failed - check VM 201 llama-server' }}"
           - ""
           - "✅ HTTPS Access:"
           - "  URL: https://{{ service_domain }}"
@@ -176,14 +190,14 @@
           - "1. Access Open WebUI:"
           - "   https://{{ service_domain }}"
           - ""
-          - "2. Start chatting with available models:"
-          - "   - Model list will auto-populate from Ollama"
+          - "2. Start chatting with the Qwen2.5-Coder model:"
+          - "   - Model is pre-loaded on Intel Arc Pro B60 GPU"
           - ""
           - "3. Check container logs if needed:"
           - "   pct exec {{ lxc_id }} -- docker logs open-webui"
           - ""
-          - "4. Update container (automatic via Watchtower):"
-          - "   docker pull ghcr.io/open-webui/open-webui:main"
+          - "4. Check LLM server logs:"
+          - "   ssh root@172.31.31.201 journalctl -u llama-server -f"
           - ""
           - "=========================================="
 
@@ -194,5 +208,6 @@
           - "SUCCESS! Open WebUI is Running"
           - "=========================================="
           - "Access at: https://{{ service_domain }}"
-          - "Connected to: Ollama VM (172.31.31.201)"
+          - "LLM Backend: llama.cpp on Intel Arc Pro B60 (VM 201)"
+          - "Model: Qwen2.5-Coder-7B-Instruct"
           - "=========================================="

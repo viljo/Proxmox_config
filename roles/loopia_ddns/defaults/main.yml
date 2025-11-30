@@ -1,0 +1,30 @@
+---
+# Loopia DDNS Role Defaults
+
+# Network interface to get public IP from
+loopia_ddns_interface: vmbr2
+
+# Update interval (systemd timer)
+loopia_ddns_interval: "*:0/15"  # Every 15 minutes
+
+# DNS records to update (subdomains)
+loopia_ddns_records:
+  - host: "@"
+    ttl: 600
+  - host: "*"
+    ttl: 600
+  - host: links
+  - host: meet
+  - host: cloud
+  - host: media
+  - host: torrent
+  - host: zipline
+  - host: llm
+  - host: webtop
+  - host: mail
+  - host: ssh
+
+# Installation paths
+loopia_ddns_lib_path: /usr/local/lib/loopia-ddns
+loopia_ddns_bin_path: /usr/local/bin/loopia-ddns
+loopia_ddns_state_path: /var/lib/loopia-ddns

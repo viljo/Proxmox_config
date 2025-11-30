@@ -1,0 +1,138 @@
+---
+# Playbook: Deploy LLM API Traefik Configuration
+# Description: Configure Traefik routing for llama.cpp OpenAI-compatible API
+# Prerequisites:
+#   - VM 201 (ipex-llm) with llama.cpp server running on port 8000
+#   - Traefik running on Proxmox host with file provider
+#   - DNS record for llm-api.viljo.se pointing to public IP
+
+- name: Deploy LLM API Traefik Configuration
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    service_subdomain: llm-api
+    service_domain: "{{ service_subdomain }}.{{ public_domain }}"
+    # llama.cpp server with OpenAI-compatible API (Intel Arc Pro B60 GPU)
+    llm_api_backend: "http://172.31.31.201:8000"
+    traefik_dynamic_path: /etc/traefik/dynamic
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "LLM API Traefik Configuration"
+          - "=========================================="
+          - "This playbook will deploy:"
+          - "- Traefik dynamic configuration for LLM API"
+          - "- External access to llama.cpp OpenAI-compatible API"
+          - ""
+          - "Configuration:"
+          - "  Domain: {{ service_domain }}"
+          - "  Backend: {{ llm_api_backend }}"
+          - "  GPU: Intel Arc Pro B60 24GB (VM 201)"
+          - "  Model: Qwen2.5-Coder-7B-Instruct (Q4_K_M)"
+          - ""
+          - "API Authentication:"
+          - "  Uses Bearer token (API key: sk-local-connector)"
+          - ""
+          - "Traefik Integration:"
+          - "  - Automatic HTTPS via Let's Encrypt (DNS challenge)"
+          - "  - Routing: Host(`{{ service_domain }}`)"
+          - "=========================================="
+
+  tasks:
+    - name: Create Traefik dynamic configuration
+      ansible.builtin.copy:
+        dest: "{{ traefik_dynamic_path }}/llm-api.yml"
+        mode: '0640'
+        owner: root
+        group: traefik
+        content: |
+          http:
+            routers:
+              llm-api:
+                rule: "Host(`{{ service_domain }}`)"
+                service: llm-api
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: dns
+
+            services:
+              llm-api:
+                loadBalancer:
+                  servers:
+                    - url: "{{ llm_api_backend }}"
+                  passHostHeader: true
+                  responseForwarding:
+                    flushInterval: "100ms"
+      notify: reload traefik
+
+    - name: Verify Traefik configuration
+      ansible.builtin.command: traefik version
+      register: traefik_version
+      changed_when: false
+
+    - name: Wait for certificate provisioning
+      ansible.builtin.wait_for:
+        timeout: 10
+      delegate_to: localhost
+
+    - name: Test API endpoint
+      ansible.builtin.uri:
+        url: "https://{{ service_domain }}/v1/models"
+        method: GET
+        headers:
+          Authorization: "Bearer sk-local-connector"
+        validate_certs: true
+        status_code: 200
+      register: api_test
+      delegate_to: localhost
+      failed_when: false
+      retries: 6
+      delay: 10
+
+  handlers:
+    - name: reload traefik
+      ansible.builtin.systemd:
+        name: traefik
+        state: reloaded
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "LLM API Traefik Configuration Complete"
+          - "=========================================="
+          - ""
+          - "API Endpoint:"
+          - "  URL: https://{{ service_domain }}"
+          - "  Status: {{ 'Available' if api_test.status == 200 else 'Check logs' }}"
+          - "  SSL: Let's Encrypt"
+          - ""
+          - "Backend:"
+          - "  llama.cpp server: {{ llm_api_backend }}"
+          - "  GPU: Intel Arc Pro B60 24GB"
+          - "  Model: Qwen2.5-Coder-7B-Instruct (Q4_K_M)"
+          - ""
+          - "=========================================="
+          - "USAGE EXAMPLES"
+          - "=========================================="
+          - ""
+          - "List models:"
+          - "  curl https://{{ service_domain }}/v1/models \\"
+          - "    -H 'Authorization: Bearer sk-local-connector'"
+          - ""
+          - "Chat completion:"
+          - "  curl https://{{ service_domain }}/v1/chat/completions \\"
+          - "    -H 'Authorization: Bearer sk-local-connector' \\"
+          - "    -H 'Content-Type: application/json' \\"
+          - "    -d '{"
+          - '      "model": "qwen2.5-coder-7b-instruct",'
+          - '      "messages": [{"role": "user", "content": "Hello"}]'
+          - "    }'"
+          - ""
+          - "=========================================="

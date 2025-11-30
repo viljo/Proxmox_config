@@ -1,0 +1,10 @@
+[Unit]
+Description=Loopia dynamic DNS updater timer
+
+[Timer]
+OnBootSec=1min
+OnCalendar={{ loopia_ddns_interval }}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,65 @@
+---
+# Loopia DDNS Role Tasks
+
+- name: Create DDNS lib directory
+  ansible.builtin.file:
+    path: "{{ loopia_ddns_lib_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Create DDNS state directory
+  ansible.builtin.file:
+    path: "{{ loopia_ddns_state_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Deploy DDNS update script
+  ansible.builtin.template:
+    src: update.py.j2
+    dest: "{{ loopia_ddns_lib_path }}/update.py"
+    mode: '0700'
+  notify: restart loopia-ddns
+
+- name: Deploy DDNS wrapper script
+  ansible.builtin.copy:
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      /usr/bin/python3 {{ loopia_ddns_lib_path }}/update.py
+    dest: "{{ loopia_ddns_bin_path }}"
+    mode: '0755'
+
+- name: Deploy systemd service
+  ansible.builtin.template:
+    src: loopia-ddns.service.j2
+    dest: /etc/systemd/system/loopia-ddns.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart loopia-ddns
+
+- name: Deploy systemd timer
+  ansible.builtin.template:
+    src: loopia-ddns.timer.j2
+    dest: /etc/systemd/system/loopia-ddns.timer
+    mode: '0644'
+  notify:
+    - reload systemd
+    - enable loopia-ddns timer
+
+- name: Enable and start DDNS timer
+  ansible.builtin.systemd:
+    name: loopia-ddns.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Run initial DDNS update
+  ansible.builtin.command:
+    cmd: "{{ loopia_ddns_bin_path }}"
+  register: initial_ddns
+  changed_when: "'Updated' in initial_ddns.stdout"
+
+- name: Display DDNS status
+  ansible.builtin.debug:
+    msg: "{{ initial_ddns.stdout_lines }}"

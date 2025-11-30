@@ -1,0 +1,18 @@
+---
+# Loopia DDNS Role Handlers
+
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart loopia-ddns
+  ansible.builtin.systemd:
+    name: loopia-ddns.service
+    state: restarted
+  failed_when: false
+
+- name: enable loopia-ddns timer
+  ansible.builtin.systemd:
+    name: loopia-ddns.timer
+    state: started
+    enabled: true

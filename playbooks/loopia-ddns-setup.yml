@@ -1,0 +1,60 @@
+---
+# Loopia DDNS Setup Playbook
+# Sets up automatic dynamic DNS updates for viljo.se domain
+#
+# Usage:
+#   ansible-playbook playbooks/loopia-ddns-setup.yml
+#
+# What this does:
+#   1. Deploys Python script to update DNS via Loopia API
+#   2. Creates systemd service and timer for automatic updates
+#   3. Updates DNS every 15 minutes automatically
+#   4. Gets public IP from vmbr2 (Bahnhof WAN) interface
+
+- name: "Setup Loopia DDNS"
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    # Override interface if needed
+    loopia_ddns_interface: vmbr2
+
+    # DNS records to keep updated
+    loopia_ddns_records:
+      - host: "@"
+        ttl: 600
+      - host: "*"
+        ttl: 600
+      - host: links
+      - host: meet
+      - host: cloud
+      - host: media
+      - host: torrent
+      - host: zipline
+      - host: llm
+      - host: llm-api
+      - host: webtop
+      - host: mail
+      - host: ssh
+
+  roles:
+    - loopia_ddns
+
+  post_tasks:
+    - name: "Display DDNS setup status"
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "LOOPIA DDNS CONFIGURED SUCCESSFULLY"
+          - "=========================================="
+          - ""
+          - "Interface: {{ loopia_ddns_interface }}"
+          - "Domain: {{ public_domain }}"
+          - "Update interval: Every 15 minutes"
+          - ""
+          - "Records managed: {{ loopia_ddns_records | map(attribute='host') | join(', ') }}"
+          - ""
+          - "Manual commands:"
+          - "  Update now: /usr/local/bin/loopia-ddns"
+          - "  Check timer: systemctl status loopia-ddns.timer"
+          - "  View logs: journalctl -u loopia-ddns"

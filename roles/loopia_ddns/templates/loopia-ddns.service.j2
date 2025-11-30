@@ -1,0 +1,13 @@
+[Unit]
+Description=Loopia dynamic DNS updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ loopia_ddns_bin_path }}
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
