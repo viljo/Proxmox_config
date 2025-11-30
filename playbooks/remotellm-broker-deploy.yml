@@ -1,0 +1,267 @@
+---
+# Playbook: Deploy RemoteLLM Broker
+# Description: Deploy RemoteLLM broker to replace Open WebUI at llm.viljo.se
+# Prerequisites:
+#   - LXC 200 with Docker and Traefik
+#   - GitLab OAuth application configured
+#   - DNS record for llm.viljo.se
+
+- name: Deploy RemoteLLM Broker
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    lxc_id: 200
+    service_name: remotellm-broker
+    service_subdomain: llm
+    service_domain: "{{ service_subdomain }}.{{ public_domain }}"
+    deploy_path: /opt/docker-stack/remotellm-broker
+    repo_url: "https://github.com/viljo/RemoteLLMconnector.git"
+
+    # Broker ports
+    broker_api_port: 8443
+    broker_ws_port: 8444
+    broker_health_port: 8080
+
+    # GitLab OAuth (use same as oauth2-proxy)
+    gitlab_url: "https://gitlab.com"
+    gitlab_client_id: "{{ vault_gitlab_oauth_client_id | default('60eef15e33f36fd80aee4a1c001d3f9e597ac568cb565ecc595e2ff08f17d9ce') }}"
+    gitlab_client_secret: "{{ vault_gitlab_oauth_client_secret | default('gloas-dfbc98646d9e57dd52e6ae9a1c364a9908b3ed82d44bc47a023977065693fe3a') }}"
+    gitlab_redirect_uri: "https://{{ service_domain }}/auth/callback"
+
+    # Broker security
+    session_secret: "{{ vault_remotellm_session_secret | default('change-me-to-random-32-char-secret!') }}"
+
+    # Connector token for local llama.cpp
+    connector_token: "{{ vault_remotellm_connector_token | default('local-llm-connector-token') }}"
+    llm_api_key: "sk-local-connector"
+
+    # LXC 200 internal IP (for connector to bypass NAT hairpin SSL issue)
+    lxc_internal_ip: "172.31.31.10"
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "RemoteLLM Broker Deployment"
+          - "=========================================="
+          - "This will REPLACE Open WebUI at llm.viljo.se"
+          - ""
+          - "Configuration:"
+          - "  LXC: {{ lxc_id }}"
+          - "  Domain: {{ service_domain }}"
+          - "  API Port: {{ broker_api_port }}"
+          - "  WebSocket Port: {{ broker_ws_port }}"
+          - "  Health Port: {{ broker_health_port }}"
+          - ""
+          - "Authentication:"
+          - "  OAuth: GitLab ({{ gitlab_url }})"
+          - "  Redirect: {{ gitlab_redirect_uri }}"
+          - ""
+          - "Architecture:"
+          - "  External Users → Broker → WebSocket → Connector → llama.cpp"
+          - "=========================================="
+
+  tasks:
+    - name: Stop and remove Open WebUI container
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c 'docker stop open-webui 2>/dev/null; docker rm open-webui 2>/dev/null; true'
+      changed_when: true
+
+    - name: Stop oauth2-proxy-llm container
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c 'docker stop oauth2-proxy-llm 2>/dev/null; docker rm oauth2-proxy-llm 2>/dev/null; true'
+      changed_when: true
+
+    - name: Create deployment directory
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- mkdir -p {{ deploy_path }}/data
+      changed_when: true
+
+    - name: Clone RemoteLLM repository
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c '
+          if [ -d {{ deploy_path }}/repo ]; then
+            cd {{ deploy_path }}/repo && git pull
+          else
+            git clone {{ repo_url }} {{ deploy_path }}/repo
+          fi'
+      changed_when: true
+
+    - name: Create connectors.yaml config
+      ansible.builtin.copy:
+        dest: /tmp/remotellm-connectors.yaml
+        mode: '0600'
+        content: |
+          # RemoteLLM Connector Configuration
+          connectors:
+            - token: "{{ connector_token }}"
+              llm_api_key: "{{ llm_api_key }}"
+
+    - name: Copy connectors.yaml to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/remotellm-connectors.yaml {{ deploy_path }}/connectors.yaml
+      changed_when: true
+
+    - name: Create users.yaml for user storage
+      ansible.builtin.copy:
+        dest: /tmp/remotellm-users.yaml
+        mode: '0600'
+        content: |
+          # RemoteLLM User Storage
+          users: []
+
+    - name: Copy users.yaml to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/remotellm-users.yaml {{ deploy_path }}/users.yaml
+      changed_when: true
+
+    - name: Create docker-compose.yml
+      ansible.builtin.copy:
+        dest: /tmp/remotellm-broker-compose.yml
+        mode: '0644'
+        content: |
+          services:
+            remotellm-broker:
+              build:
+                context: {{ deploy_path }}/repo
+                dockerfile: Dockerfile
+              container_name: remotellm-broker
+              restart: unless-stopped
+
+              environment:
+                # Server config
+                - REMOTELLM_BROKER_HOST=0.0.0.0
+                - REMOTELLM_BROKER_PORT={{ broker_api_port }}
+                - REMOTELLM_BROKER_HEALTH_PORT={{ broker_health_port }}
+                - REMOTELLM_BROKER_LOG_LEVEL=INFO
+
+                # Connector config (JSON array format required by pydantic-settings)
+                - REMOTELLM_BROKER_CONNECTOR_CONFIG=/data/connectors.yaml
+                - REMOTELLM_BROKER_CONNECTOR_TOKENS=["{{ connector_token }}"]
+
+                # GitLab OAuth
+                - REMOTELLM_BROKER_GITLAB_URL={{ gitlab_url }}
+                - REMOTELLM_BROKER_GITLAB_CLIENT_ID={{ gitlab_client_id }}
+                - REMOTELLM_BROKER_GITLAB_CLIENT_SECRET={{ gitlab_client_secret }}
+                - REMOTELLM_BROKER_GITLAB_REDIRECT_URI={{ gitlab_redirect_uri }}
+
+                # Session and public URL
+                - REMOTELLM_BROKER_PUBLIC_URL=https://{{ service_domain }}
+                - REMOTELLM_BROKER_SESSION_SECRET={{ session_secret }}
+                - REMOTELLM_BROKER_USERS_FILE=/data/users.yaml
+
+              volumes:
+                - {{ deploy_path }}/data:/data
+                - {{ deploy_path }}/connectors.yaml:/data/connectors.yaml:ro
+                - {{ deploy_path }}/users.yaml:/data/users.yaml
+
+              # Expose WebSocket port for internal connector access
+              # (bypasses NAT hairpin SSL certificate issue)
+              ports:
+                - "{{ broker_ws_port }}:{{ broker_ws_port }}"
+
+              labels:
+                - "traefik.enable=true"
+
+                # Main web/API router
+                - "traefik.http.routers.remotellm.rule=Host(`{{ service_domain }}`)"
+                - "traefik.http.routers.remotellm.entrypoints=websecure"
+                - "traefik.http.routers.remotellm.tls.certresolver=letsencrypt"
+                - "traefik.http.routers.remotellm.service=remotellm"
+                - "traefik.http.services.remotellm.loadbalancer.server.port={{ broker_api_port }}"
+
+                # WebSocket tunnel router (for connectors)
+                - "traefik.http.routers.remotellm-ws.rule=Host(`{{ service_domain }}`) && PathPrefix(`/ws`)"
+                - "traefik.http.routers.remotellm-ws.entrypoints=websecure"
+                - "traefik.http.routers.remotellm-ws.tls.certresolver=letsencrypt"
+                - "traefik.http.routers.remotellm-ws.service=remotellm-ws"
+                - "traefik.http.services.remotellm-ws.loadbalancer.server.port={{ broker_ws_port }}"
+
+                # Watchtower: Disable auto-updates
+                - "com.centurylinklabs.watchtower.enable=false"
+
+              networks:
+                - traefik_public
+
+              deploy:
+                resources:
+                  limits:
+                    cpus: '1.0'
+                    memory: 512M
+
+          networks:
+            traefik_public:
+              external: true
+
+    - name: Copy docker-compose.yml to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/remotellm-broker-compose.yml {{ deploy_path }}/docker-compose.yml
+      changed_when: true
+
+    - name: Build and deploy RemoteLLM broker
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c 'cd {{ deploy_path }} && docker compose build && docker compose up -d'
+      changed_when: true
+
+    - name: Wait for container to start
+      ansible.builtin.wait_for:
+        timeout: 30
+      delegate_to: localhost
+
+    - name: Check container status
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- docker ps --filter name=remotellm-broker --format "{{ '{{' }}.Status{{ '}}' }}"
+      register: container_status
+      changed_when: false
+
+    - name: Test API endpoint
+      ansible.builtin.uri:
+        url: "https://{{ service_domain }}/v1/models"
+        method: GET
+        validate_certs: true
+        status_code: [200]
+      register: api_check
+      delegate_to: localhost
+      failed_when: false
+      retries: 6
+      delay: 10
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "RemoteLLM Broker Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Container Status: {{ container_status.stdout }}"
+          - ""
+          - "Web Portal:"
+          - "  URL: https://{{ service_domain }}"
+          - "  Auth: GitLab OAuth"
+          - ""
+          - "API Endpoint:"
+          - "  URL: https://{{ service_domain }}/v1"
+          - ""
+          - "WebSocket Tunnel:"
+          - "  URL: wss://{{ service_domain }}/ws"
+          - "  Token: {{ connector_token }}"
+          - ""
+          - "=========================================="
+          - "NEXT: Deploy connector on VM 201"
+          - "=========================================="
+          - ""
+          - "Internal connector (from VM 201):"
+          - "  Uses ws://{{ lxc_internal_ip }}:{{ broker_ws_port }}"
+          - "  (bypasses NAT hairpin SSL issue)"
+          - ""
+          - "Systemd service at /etc/systemd/system/remotellm-connector.service:"
+          - "  ExecStart=/usr/local/bin/remotellm-connector \\"
+          - "    --llm-url http://localhost:8000 \\"
+          - "    --broker-url ws://{{ lxc_internal_ip }}:{{ broker_ws_port }} \\"
+          - "    --broker-token {{ connector_token }} \\"
+          - "    --model qwen2.5-coder-7b-instruct"
+          - ""
+          - "=========================================="
