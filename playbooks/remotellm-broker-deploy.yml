@@ -18,9 +18,8 @@
     deploy_path: /opt/docker-stack/remotellm-broker
     repo_url: "https://github.com/viljo/RemoteLLMconnector.git"
 
-    # Broker ports
+    # Broker ports (API and WebSocket both on same port)
     broker_api_port: 8443
-    broker_ws_port: 8444
     broker_health_port: 8080
 
     # GitLab OAuth (use same as oauth2-proxy)
@@ -32,9 +31,8 @@
     # Broker security
     session_secret: "{{ vault_remotellm_session_secret | default('change-me-to-random-32-char-secret!') }}"
 
-    # Connector token for local llama.cpp
+    # Connector token for local llama.cpp (broker authentication)
     connector_token: "{{ vault_remotellm_connector_token | default('local-llm-connector-token') }}"
-    llm_api_key: "sk-local-connector"
 
     # LXC 200 internal IP (for connector to bypass NAT hairpin SSL issue)
     lxc_internal_ip: "172.31.31.10"
@@ -54,8 +52,7 @@
           - "Configuration:"
           - "  LXC: {{ lxc_id }}"
           - "  Domain: {{ service_domain }}"
-          - "  API Port: {{ broker_api_port }}"
-          - "  WebSocket Port: {{ broker_ws_port }}"
+          - "  API/WS Port: {{ broker_api_port }}"
           - "  Health Port: {{ broker_health_port }}"
           - ""
           - "Authentication:"
@@ -92,19 +89,32 @@
           fi'
       changed_when: true
 
-    - name: Create connectors.yaml config
+    - name: Create connectors.yaml config (pre-approved connector for VM 201)
       ansible.builtin.copy:
         dest: /tmp/remotellm-connectors.yaml
-        mode: '0600'
+        mode: '0644'
         content: |
-          # RemoteLLM Connector Configuration
+          # RemoteLLM Connector Store (approval workflow format)
+          # Pre-approved connector for ipex-llm VM 201
           connectors:
-            - token: "{{ connector_token }}"
-              llm_api_key: "{{ llm_api_key }}"
+            - connector_id: conn-ipex-llm
+              api_key: "{{ connector_token }}"
+              name: ipex-llm-connector
+              models:
+                - qwen3-coder-30b
+              status: approved
+              created_at: "2025-01-01T00:00:00"
+              last_used: null
+              last_connected: null
 
     - name: Copy connectors.yaml to LXC
       ansible.builtin.command: >
         pct push {{ lxc_id }} /tmp/remotellm-connectors.yaml {{ deploy_path }}/connectors.yaml
+      changed_when: true
+
+    - name: Set connectors.yaml ownership for container
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- chown 999:999 {{ deploy_path }}/connectors.yaml
       changed_when: true
 
     - name: Create users.yaml for user storage
@@ -134,15 +144,11 @@
               restart: unless-stopped
 
               environment:
-                # Server config
+                # Server config (API and WebSocket both on same port)
                 - REMOTELLM_BROKER_HOST=0.0.0.0
                 - REMOTELLM_BROKER_PORT={{ broker_api_port }}
                 - REMOTELLM_BROKER_HEALTH_PORT={{ broker_health_port }}
                 - REMOTELLM_BROKER_LOG_LEVEL=INFO
-
-                # Connector config (JSON array format required by pydantic-settings)
-                - REMOTELLM_BROKER_CONNECTOR_CONFIG=/data/connectors.yaml
-                - REMOTELLM_BROKER_CONNECTOR_TOKENS=["{{ connector_token }}"]
 
                 # GitLab OAuth
                 - REMOTELLM_BROKER_GITLAB_URL={{ gitlab_url }}
@@ -157,13 +163,13 @@
 
               volumes:
                 - {{ deploy_path }}/data:/data
-                - {{ deploy_path }}/connectors.yaml:/data/connectors.yaml:ro
+                - {{ deploy_path }}/connectors.yaml:/data/connectors.yaml
                 - {{ deploy_path }}/users.yaml:/data/users.yaml
 
-              # Expose WebSocket port for internal connector access
+              # Expose API port for internal connector access
               # (bypasses NAT hairpin SSL certificate issue)
               ports:
-                - "{{ broker_ws_port }}:{{ broker_ws_port }}"
+                - "{{ broker_api_port }}:{{ broker_api_port }}"
 
               labels:
                 - "traefik.enable=true"
@@ -174,13 +180,15 @@
                 - "traefik.http.routers.remotellm.tls.certresolver=letsencrypt"
                 - "traefik.http.routers.remotellm.service=remotellm"
                 - "traefik.http.services.remotellm.loadbalancer.server.port={{ broker_api_port }}"
+                - "traefik.http.services.remotellm.loadbalancer.responseforwarding.flushinterval=-1"
 
-                # WebSocket tunnel router (for connectors)
+                # WebSocket tunnel router (for connectors) - same port as API
                 - "traefik.http.routers.remotellm-ws.rule=Host(`{{ service_domain }}`) && PathPrefix(`/ws`)"
                 - "traefik.http.routers.remotellm-ws.entrypoints=websecure"
                 - "traefik.http.routers.remotellm-ws.tls.certresolver=letsencrypt"
                 - "traefik.http.routers.remotellm-ws.service=remotellm-ws"
-                - "traefik.http.services.remotellm-ws.loadbalancer.server.port={{ broker_ws_port }}"
+                - "traefik.http.services.remotellm-ws.loadbalancer.server.port={{ broker_api_port }}"
+                - "traefik.http.services.remotellm-ws.loadbalancer.responseforwarding.flushinterval=-1"
 
                 # Watchtower: Disable auto-updates
                 - "com.centurylinklabs.watchtower.enable=false"
@@ -257,14 +265,17 @@
           - "=========================================="
           - ""
           - "Internal connector (from VM 201):"
-          - "  Uses ws://{{ lxc_internal_ip }}:{{ broker_ws_port }}"
+          - "  Uses ws://{{ lxc_internal_ip }}:{{ broker_api_port }}/ws"
           - "  (bypasses NAT hairpin SSL issue)"
+          - ""
+          - "Connector credentials file at /root/.remotellm/credentials.yaml:"
+          - "  broker_token: {{ connector_token }}"
           - ""
           - "Systemd service at /etc/systemd/system/remotellm-connector.service:"
           - "  ExecStart=/usr/local/bin/remotellm-connector \\"
           - "    --llm-url http://localhost:8000 \\"
-          - "    --broker-url ws://{{ lxc_internal_ip }}:{{ broker_ws_port }} \\"
-          - "    --broker-token {{ connector_token }} \\"
-          - "    --model qwen2.5-coder-7b-instruct"
+          - "    --broker-url ws://{{ lxc_internal_ip }}:{{ broker_api_port }}/ws \\"
+          - "    --credentials-file /root/.remotellm/credentials.yaml \\"
+          - "    --connector-name ipex-llm-connector"
           - ""
           - "=========================================="
