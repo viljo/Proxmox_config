@@ -39,6 +39,9 @@
     # LXC 200 internal IP (for connector to bypass NAT hairpin SSL issue)
     lxc_internal_ip: "172.31.31.10"
 
+    # VM 201 (ipex-llm) where connector runs
+    connector_vm_ip: "172.31.31.201"
+
   pre_tasks:
     - name: Display deployment plan
       ansible.builtin.debug:
