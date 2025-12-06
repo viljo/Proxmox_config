@@ -23,12 +23,6 @@ services:
       - {{ network }}
 {% endfor %}
 
-    deploy:
-      resources:
-        limits:
-          cpus: '{{ gitlab_runner_cpu_limit }}'
-          memory: {{ gitlab_runner_memory_limit }}
-
   gitlab-runner-2:
     image: {{ gitlab_runner_image }}
     container_name: gitlab-runner-2
@@ -52,12 +46,6 @@ services:
 {% for network in gitlab_runner_networks %}
       - {{ network }}
 {% endfor %}
-
-    deploy:
-      resources:
-        limits:
-          cpus: '{{ gitlab_runner_cpu_limit }}'
-          memory: {{ gitlab_runner_memory_limit }}
 
 networks:
 {% for network in gitlab_runner_networks %}
