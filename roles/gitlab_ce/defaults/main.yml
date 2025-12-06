@@ -46,3 +46,8 @@ gitlab_oauth_enabled: false
 # These should be set via vault or extra vars when oauth is enabled
 # gitlab_oauth_app_id: ""
 # gitlab_oauth_app_secret: ""
+
+# Admin users - list of emails to grant admin access
+# Users must exist (created via OAuth or manually)
+gitlab_admin_users:
+  - anders@viljo.se

@@ -86,3 +86,39 @@
       Initial root password (valid for 24 hours):
       {{ gitlab_root_password.stdout | default('Password file not found - GitLab may still be initializing. Check with: pct exec 200 -- docker exec gitlab cat /etc/gitlab/initial_root_password') }}
   when: gitlab_root_password is defined
+
+- name: Create admin grant script for each user
+  ansible.builtin.copy:
+    content: |
+      user = User.find_by(email: "{{ item }}")
+      if user
+        user.admin = true
+        user.save
+        puts "Admin granted to {{ item }}"
+      else
+        puts "User {{ item }} not found - will be admin after first OAuth login"
+      end
+    dest: "/tmp/gitlab_admin_{{ item | regex_replace('@', '_at_') | regex_replace('\\.', '_') }}.rb"
+    mode: '0644'
+  loop: "{{ gitlab_admin_users | default([]) }}"
+  when: gitlab_admin_users is defined and gitlab_admin_users | length > 0
+
+- name: Grant admin access to specified users
+  ansible.builtin.shell: |
+    SCRIPT_NAME="gitlab_admin_{{ item | regex_replace('@', '_at_') | regex_replace('\\.', '_') }}.rb"
+    pct push {{ lxc_id }} /tmp/$SCRIPT_NAME /tmp/$SCRIPT_NAME
+    pct exec {{ lxc_id }} -- docker cp /tmp/$SCRIPT_NAME {{ gitlab_service_name }}:/tmp/$SCRIPT_NAME
+    pct exec {{ lxc_id }} -- docker exec {{ gitlab_service_name }} gitlab-rails runner /tmp/$SCRIPT_NAME
+  args:
+    executable: /bin/bash
+  loop: "{{ gitlab_admin_users | default([]) }}"
+  register: admin_result
+  changed_when: "'Admin granted' in admin_result.stdout"
+  failed_when: false
+  when: gitlab_admin_users is defined and gitlab_admin_users | length > 0
+
+- name: Display admin user status
+  ansible.builtin.debug:
+    msg: "{{ item.stdout }}"
+  loop: "{{ admin_result.results | default([]) }}"
+  when: admin_result is defined and admin_result.results is defined and item.stdout is defined
