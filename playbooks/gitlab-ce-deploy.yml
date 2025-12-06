@@ -1,0 +1,108 @@
+---
+# Playbook: Deploy GitLab CE
+# Description: Deploy self-hosted GitLab CE instance in Docker
+
+- name: Deploy GitLab CE
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    lxc_id: 200
+    # OAuth via gitlab.com
+    gitlab_oauth_enabled: true
+    gitlab_oauth_app_id: "{{ vault_gitlab_ce_oauth_app_id }}"
+    gitlab_oauth_app_secret: "{{ vault_gitlab_ce_oauth_app_secret }}"
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "GitLab CE Self-Hosted Deployment"
+          - "=========================================="
+          - "This playbook will deploy:"
+          - "  GitLab CE - Self-hosted git platform"
+          - ""
+          - "URL: https://gitlab.{{ public_domain }}"
+          - "SSH: ssh://git@gitlab.{{ public_domain }}:2224/"
+          - ""
+          - "Deployment target: Containers LXC 200"
+          - "Resources: 8GB RAM, 4 CPU cores"
+          - ""
+          - "Note: Initial startup takes 3-5 minutes"
+          - "=========================================="
+
+  tasks:
+    - name: Configure NAT port forwarding for GitLab SSH
+      ansible.builtin.shell: |
+        # Add NAT rule for GitLab SSH port 2224
+        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport 2224 -j DNAT --to-destination 172.31.31.10:2224 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport 2224 -j DNAT --to-destination 172.31.31.10:2224
+
+        # Save rules persistently
+        mkdir -p /etc/iptables
+        iptables-save > /etc/iptables/rules.v4
+      args:
+        executable: /bin/bash
+      changed_when: false
+      tags:
+        - gitlab
+        - firewall
+
+    - name: Deploy GitLab CE
+      ansible.builtin.include_role:
+        name: gitlab_ce
+      tags:
+        - gitlab
+
+    - name: Configure GitLab Runners with persistent DNS
+      ansible.builtin.include_role:
+        name: gitlab_runners
+      tags:
+        - runners
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "GitLab CE Deployment Complete"
+          - "=========================================="
+          - ""
+          - "GitLab CE is now running!"
+          - ""
+          - "Access URL: https://gitlab.{{ public_domain }}"
+          - "SSH Clone:  ssh://git@gitlab.{{ public_domain }}:2224/"
+          - ""
+          - "Login: root"
+          - "Password: See output above (valid 24 hours)"
+          - ""
+          - "=========================================="
+          - "NEXT STEPS"
+          - "=========================================="
+          - ""
+          - "1. Initial Login:"
+          - "   a. Access https://gitlab.{{ public_domain }}"
+          - "   b. Login as 'root' with the password shown above"
+          - "   c. Change password immediately"
+          - ""
+          - "2. Register Runners with Local GitLab:"
+          - "   a. Go to Admin Area → CI/CD → Runners"
+          - "   b. Click 'New instance runner'"
+          - "   c. Copy registration token"
+          - "   d. Run on Proxmox host:"
+          - "      pct exec 200 -- docker exec gitlab-runner-1 \\"
+          - "        gitlab-runner register \\"
+          - "        --url https://gitlab.{{ public_domain }} \\"
+          - "        --token <TOKEN>"
+          - ""
+          - "3. Configure SSH Key:"
+          - "   a. Go to User Settings → SSH Keys"
+          - "   b. Add your public SSH key"
+          - ""
+          - "4. Create First Project:"
+          - "   a. Click 'New Project'"
+          - "   b. Create blank project or import existing"
+          - ""
+          - "=========================================="

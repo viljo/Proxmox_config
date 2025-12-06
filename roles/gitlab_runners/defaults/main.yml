@@ -1,0 +1,39 @@
+---
+# GitLab Runners Configuration
+
+# Runner container settings
+gitlab_runner_image: gitlab/gitlab-runner:latest
+gitlab_runner_timezone: Europe/Stockholm
+
+# Resource limits per runner
+gitlab_runner_cpu_limit: "2.0"
+gitlab_runner_memory_limit: 2G
+
+# Concurrency settings
+gitlab_runner_concurrent: 4
+gitlab_runner_request_concurrency: 4
+
+# Docker executor settings
+gitlab_runner_docker_image: docker:latest
+gitlab_runner_docker_privileged: true
+gitlab_runner_docker_pull_policy: if-not-present
+
+# Paths
+gitlab_runner_base_path: /opt/docker-stack/gitlab-runner
+
+# Networks
+gitlab_runner_networks:
+  - backend
+  - traefik_public
+
+# Extra hosts for internal DNS resolution
+# Maps hostnames to Docker container IPs for internal routing
+gitlab_runner_extra_hosts:
+  - "gitlab.viljo.se:traefik"  # Resolve via Traefik container
+
+# Runner instances
+gitlab_runners:
+  - name: gitlab-runner-1
+    config_path: "{{ gitlab_runner_base_path }}/runner-1/config"
+  - name: gitlab-runner-2
+    config_path: "{{ gitlab_runner_base_path }}/runner-2/config"

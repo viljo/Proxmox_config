@@ -1,0 +1,144 @@
+#!/bin/bash
+# GitLab CE Backup Script
+# Runs on Proxmox host, executes Docker commands inside LXC {{ backup_container_id }}
+# Creates full GitLab backup including repositories, database, and uploads
+#
+# Retention policy (GFS - Grandfather-Father-Son):
+#   - Daily backups: keep last {{ gitlab_backup_retention_daily | default(7) }} days
+#   - Weekly backups: keep last {{ gitlab_backup_retention_weekly | default(4) }} weeks (Sundays)
+#   - Monthly backups: keep last {{ gitlab_backup_retention_monthly | default(12) }} months (1st of month)
+#   - Yearly backups: keep indefinitely (January 1st)
+
+set -euo pipefail
+
+CONTAINER_ID="{{ backup_container_id }}"
+BACKUP_DIR="{{ backup_base_path }}/gitlab"
+DATE=$(date +%Y%m%d_%H%M%S)
+LOG_FILE="{{ backup_base_path }}/logs/gitlab.log"
+
+# Retention settings
+RETENTION_DAILY={{ gitlab_backup_retention_daily | default(7) }}
+RETENTION_WEEKLY={{ gitlab_backup_retention_weekly | default(4) }}
+RETENTION_MONTHLY={{ gitlab_backup_retention_monthly | default(12) }}
+
+# Subdirectories for retention tiers
+DAILY_DIR="$BACKUP_DIR/daily"
+WEEKLY_DIR="$BACKUP_DIR/weekly"
+MONTHLY_DIR="$BACKUP_DIR/monthly"
+YEARLY_DIR="$BACKUP_DIR/yearly"
+
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+# Create backup directories
+mkdir -p "$DAILY_DIR" "$WEEKLY_DIR" "$MONTHLY_DIR" "$YEARLY_DIR"
+
+log "Starting GitLab backup..."
+
+# Create GitLab backup using built-in tool
+# This backs up: repositories, database, uploads, LFS objects, etc.
+log "Creating GitLab application backup..."
+pct exec $CONTAINER_ID -- docker exec gitlab gitlab-backup create SKIP={{ gitlab_backup_skip | default('artifacts,builds') }} BACKUP=auto_${DATE} 2>&1 | tee -a "$LOG_FILE"
+
+# Copy backup from container to backup directory
+log "Copying backup to $BACKUP_DIR..."
+BACKUP_FILE=$(pct exec $CONTAINER_ID -- docker exec gitlab find /var/opt/gitlab/backups -name "*.tar" -type f -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2 | tr -d '\r')
+if [ -n "$BACKUP_FILE" ]; then
+    BACKUP_NAME=$(basename "$BACKUP_FILE")
+    # Copy from Docker container to LXC, then from LXC to Proxmox host (to daily dir first)
+    pct exec $CONTAINER_ID -- docker cp "gitlab:$BACKUP_FILE" "/tmp/$BACKUP_NAME"
+    pct pull $CONTAINER_ID "/tmp/$BACKUP_NAME" "$DAILY_DIR/$BACKUP_NAME"
+    # Clean up temp file in LXC
+    pct exec $CONTAINER_ID -- rm -f "/tmp/$BACKUP_NAME"
+    log "Backup saved: $DAILY_DIR/$BACKUP_NAME"
+
+    # Clean up backup inside container
+    pct exec $CONTAINER_ID -- docker exec gitlab rm -f "$BACKUP_FILE"
+else
+    log "ERROR: No backup file found in container"
+    exit 1
+fi
+
+# Backup GitLab secrets and configuration
+log "Backing up GitLab configuration files..."
+CONFIG_BACKUP="$DAILY_DIR/gitlab-config_${DATE}.tar.gz"
+pct exec $CONTAINER_ID -- docker exec gitlab tar czf - /etc/gitlab/gitlab-secrets.json /etc/gitlab/gitlab.rb 2>/dev/null > "$CONFIG_BACKUP"
+log "Config backup saved: $CONFIG_BACKUP"
+
+# ============================================================================
+# GFS Retention Policy - Promote backups to longer-term storage
+# ============================================================================
+
+DAY_OF_WEEK=$(date +%u)  # 1=Monday, 7=Sunday
+DAY_OF_MONTH=$(date +%d)
+MONTH=$(date +%m)
+
+# Weekly backup: Copy to weekly on Sundays (day 7)
+if [ "$DAY_OF_WEEK" -eq 7 ]; then
+    log "Sunday - creating weekly backup copy..."
+    cp "$DAILY_DIR/$BACKUP_NAME" "$WEEKLY_DIR/$BACKUP_NAME"
+    cp "$CONFIG_BACKUP" "$WEEKLY_DIR/$(basename "$CONFIG_BACKUP")"
+    log "Weekly backup saved to $WEEKLY_DIR"
+fi
+
+# Monthly backup: Copy to monthly on 1st of month
+if [ "$DAY_OF_MONTH" -eq "01" ]; then
+    log "First of month - creating monthly backup copy..."
+    cp "$DAILY_DIR/$BACKUP_NAME" "$MONTHLY_DIR/$BACKUP_NAME"
+    cp "$CONFIG_BACKUP" "$MONTHLY_DIR/$(basename "$CONFIG_BACKUP")"
+    log "Monthly backup saved to $MONTHLY_DIR"
+fi
+
+# Yearly backup: Copy to yearly on January 1st
+if [ "$MONTH" -eq "01" ] && [ "$DAY_OF_MONTH" -eq "01" ]; then
+    log "January 1st - creating yearly backup copy..."
+    cp "$DAILY_DIR/$BACKUP_NAME" "$YEARLY_DIR/$BACKUP_NAME"
+    cp "$CONFIG_BACKUP" "$YEARLY_DIR/$(basename "$CONFIG_BACKUP")"
+    log "Yearly backup saved to $YEARLY_DIR"
+fi
+
+# ============================================================================
+# Cleanup old backups based on retention policy
+# ============================================================================
+
+log "Cleaning up old backups..."
+
+# Daily: keep last N days
+log "  Cleaning daily backups older than $RETENTION_DAILY days..."
+find "$DAILY_DIR" -name "*.tar" -mtime +${RETENTION_DAILY} -delete 2>/dev/null || true
+find "$DAILY_DIR" -name "gitlab-config_*.tar.gz" -mtime +${RETENTION_DAILY} -delete 2>/dev/null || true
+
+# Weekly: keep last N weeks (N*7 days)
+WEEKLY_RETENTION_DAYS=$((RETENTION_WEEKLY * 7))
+log "  Cleaning weekly backups older than $RETENTION_WEEKLY weeks ($WEEKLY_RETENTION_DAYS days)..."
+find "$WEEKLY_DIR" -name "*.tar" -mtime +${WEEKLY_RETENTION_DAYS} -delete 2>/dev/null || true
+find "$WEEKLY_DIR" -name "gitlab-config_*.tar.gz" -mtime +${WEEKLY_RETENTION_DAYS} -delete 2>/dev/null || true
+
+# Monthly: keep last N months (N*31 days approximately)
+MONTHLY_RETENTION_DAYS=$((RETENTION_MONTHLY * 31))
+log "  Cleaning monthly backups older than $RETENTION_MONTHLY months (~$MONTHLY_RETENTION_DAYS days)..."
+find "$MONTHLY_DIR" -name "*.tar" -mtime +${MONTHLY_RETENTION_DAYS} -delete 2>/dev/null || true
+find "$MONTHLY_DIR" -name "gitlab-config_*.tar.gz" -mtime +${MONTHLY_RETENTION_DAYS} -delete 2>/dev/null || true
+
+# Yearly: keep indefinitely (no cleanup)
+log "  Yearly backups are kept indefinitely"
+
+# ============================================================================
+# Show backup status
+# ============================================================================
+
+log "Current backup status:"
+log "  Daily backups:"
+ls -lah "$DAILY_DIR" 2>/dev/null | tail -5 | while read line; do log "    $line"; done
+log "  Weekly backups:"
+ls -lah "$WEEKLY_DIR" 2>/dev/null | tail -5 | while read line; do log "    $line"; done
+log "  Monthly backups:"
+ls -lah "$MONTHLY_DIR" 2>/dev/null | tail -5 | while read line; do log "    $line"; done
+log "  Yearly backups:"
+ls -lah "$YEARLY_DIR" 2>/dev/null | tail -5 | while read line; do log "    $line"; done
+
+BACKUP_SIZE=$(du -sh "$BACKUP_DIR" | cut -f1)
+log "Total backup size: $BACKUP_SIZE"
+
+log "GitLab backup completed successfully!"

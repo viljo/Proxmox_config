@@ -1,0 +1,48 @@
+---
+# GitLab CE Configuration
+
+# Service settings
+gitlab_service_name: gitlab
+gitlab_docker_image: gitlab/gitlab-ce:17.6.1-ce.0
+gitlab_subdomain: gitlab
+gitlab_external_url: "https://{{ gitlab_subdomain }}.{{ public_domain }}"
+
+# Resource limits
+gitlab_memory_limit: 8g
+gitlab_cpu_limit: "4"
+
+# Ports (internal only, Traefik handles external)
+gitlab_http_port: 8929
+gitlab_ssh_port: 2224
+
+# Paths
+gitlab_base_path: /opt/docker-stack/gitlab
+gitlab_config_path: "{{ gitlab_base_path }}/config"
+gitlab_logs_path: "{{ gitlab_base_path }}/logs"
+gitlab_data_path: "{{ gitlab_base_path }}/data"
+
+# Traefik settings
+gitlab_enable_traefik: true
+gitlab_networks:
+  - traefik_public
+
+# GitLab configuration
+gitlab_time_zone: "Europe/Stockholm"
+
+# Puma (web server) settings - reduce for lower memory usage
+gitlab_puma_workers: 2
+
+# Sidekiq (background jobs) settings
+gitlab_sidekiq_concurrency: 10
+
+# PostgreSQL settings (embedded)
+gitlab_postgres_shared_buffers: "256MB"
+
+# Registry (container registry) - disabled by default
+gitlab_registry_enabled: false
+
+# OAuth via gitlab.com
+gitlab_oauth_enabled: false
+# These should be set via vault or extra vars when oauth is enabled
+# gitlab_oauth_app_id: ""
+# gitlab_oauth_app_secret: ""

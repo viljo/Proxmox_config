@@ -1,0 +1,80 @@
+---
+# Backup Role Defaults
+
+# Container ID where Docker services run
+backup_container_id: 200
+
+# Backup destination (ZFS dataset)
+backup_base_path: /mnt/home_rack1/backups
+
+# Retention settings
+backup_retention_days: 30
+backup_retention_weekly: 4
+backup_retention_monthly: 6
+
+# ZFS snapshot retention
+zfs_snapshot_hourly_keep: 24
+zfs_snapshot_daily_keep: 7
+zfs_snapshot_weekly_keep: 4
+
+# Docker stack path
+docker_stack_path: /opt/docker-stack
+
+# PostgreSQL databases to backup
+postgres_databases:
+  - name: nextcloud
+    container: nextcloud-postgres
+    user: nextcloud
+  - name: zipline
+    container: zipline-db
+    user: zipline
+  - name: claper
+    container: claper-postgres
+    user: postgres
+
+# ZFS datasets to snapshot (only existing datasets)
+zfs_datasets:
+  - home_rack1/backups
+
+# Docker services to backup configs
+docker_services:
+  - name: traefik
+    critical: true
+  - name: nextcloud
+    critical: true
+  - name: jellyfin
+    critical: false
+  - name: qbittorrent
+    critical: false
+  - name: zipline
+    critical: true
+  - name: open-webui
+    critical: true
+  - name: webtop
+    critical: false
+  - name: jitsi
+    critical: false
+  - name: claper
+    critical: true
+  - name: gitlab-runner
+    critical: false
+  - name: gitlab
+    critical: true
+
+# GitLab CE backup settings
+gitlab_backup_enabled: true
+gitlab_backup_skip: "artifacts,builds"  # Skip these from backup to save space
+
+# GitLab backup retention (GFS - Grandfather-Father-Son policy)
+gitlab_backup_retention_daily: 7      # Keep last 7 daily backups
+gitlab_backup_retention_weekly: 4     # Keep last 4 weekly backups (Sundays)
+gitlab_backup_retention_monthly: 12   # Keep last 12 monthly backups (1st of month)
+# Yearly backups (January 1st) are kept indefinitely
+
+# Backup schedule (cron format)
+backup_schedule_postgres: "0 2 * * *"      # Daily at 2 AM
+backup_schedule_configs: "0 3 * * *"       # Daily at 3 AM
+backup_schedule_gitlab: "0 1 * * *"        # Daily at 1 AM (before postgres)
+backup_schedule_zfs_hourly: "0 * * * *"    # Every hour
+backup_schedule_zfs_daily: "0 4 * * *"     # Daily at 4 AM
+backup_schedule_cleanup: "0 5 * * 0"       # Weekly on Sunday at 5 AM

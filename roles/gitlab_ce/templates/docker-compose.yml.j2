@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  {{ gitlab_service_name }}:
+    image: {{ gitlab_docker_image }}
+    container_name: {{ gitlab_service_name }}
+    restart: unless-stopped
+    hostname: {{ gitlab_subdomain }}.{{ public_domain }}
+
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        # External URL
+        external_url '{{ gitlab_external_url }}'
+
+        # Timezone
+        gitlab_rails['time_zone'] = '{{ gitlab_time_zone }}'
+
+        # Disable Let's Encrypt (Traefik handles TLS)
+        letsencrypt['enable'] = false
+        nginx['listen_https'] = false
+        nginx['listen_port'] = 80
+
+        # Trust the proxy headers from Traefik
+        nginx['real_ip_trusted_addresses'] = ['172.16.0.0/12', '192.168.0.0/16', '10.0.0.0/8']
+        nginx['real_ip_header'] = 'X-Forwarded-For'
+        nginx['real_ip_recursive'] = 'on'
+
+        # Puma (web server) - reduce workers for memory savings
+        puma['worker_processes'] = {{ gitlab_puma_workers }}
+
+        # Sidekiq - reduce concurrency for memory savings
+        sidekiq['concurrency'] = {{ gitlab_sidekiq_concurrency }}
+
+        # PostgreSQL - tune for available memory
+        postgresql['shared_buffers'] = "{{ gitlab_postgres_shared_buffers }}"
+
+        # SSH settings
+        gitlab_rails['gitlab_shell_ssh_port'] = {{ gitlab_ssh_port }}
+
+        # Disable monitoring features to save memory
+        prometheus_monitoring['enable'] = false
+
+{% if gitlab_oauth_enabled %}
+        # OAuth2 authentication via gitlab.com
+        gitlab_rails['omniauth_enabled'] = true
+        gitlab_rails['omniauth_allow_single_sign_on'] = ['gitlab']
+        gitlab_rails['omniauth_block_auto_created_users'] = false
+        gitlab_rails['omniauth_providers'] = [
+          {
+            name: "gitlab",
+            label: "GitLab.com",
+            app_id: "{{ gitlab_oauth_app_id }}",
+            app_secret: "{{ gitlab_oauth_app_secret }}",
+            args: {
+              scope: "read_user openid profile email",
+              client_options: {
+                site: "https://gitlab.com",
+                authorize_url: "/oauth/authorize",
+                token_url: "/oauth/token"
+              }
+            }
+          }
+        ]
+{% endif %}
+
+{% if gitlab_registry_enabled %}
+        # Container Registry
+        registry_external_url 'https://registry.{{ public_domain }}'
+        registry_nginx['listen_https'] = false
+        registry_nginx['listen_port'] = 5050
+{% else %}
+        # Container Registry disabled
+        registry['enable'] = false
+{% endif %}
+
+    volumes:
+      - {{ gitlab_config_path }}:/etc/gitlab
+      - {{ gitlab_logs_path }}:/var/log/gitlab
+      - {{ gitlab_data_path }}:/var/opt/gitlab
+
+    ports:
+      - "{{ gitlab_ssh_port }}:22"
+
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable={{ gitlab_enable_traefik | lower }}"
+
+{% if gitlab_enable_traefik %}
+      # Main GitLab web interface
+      - "traefik.http.routers.{{ gitlab_service_name }}.rule=Host(`{{ gitlab_subdomain }}.{{ public_domain }}`)"
+      - "traefik.http.routers.{{ gitlab_service_name }}.entrypoints=websecure"
+      - "traefik.http.routers.{{ gitlab_service_name }}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.{{ gitlab_service_name }}.service={{ gitlab_service_name }}"
+      - "traefik.http.services.{{ gitlab_service_name }}.loadbalancer.server.port=80"
+{% endif %}
+
+      # Watchtower: Enable automatic updates
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    networks:
+{% for network in gitlab_networks %}
+      - {{ network }}
+{% endfor %}
+
+    shm_size: '256m'
+
+    deploy:
+      resources:
+        limits:
+          cpus: '{{ gitlab_cpu_limit }}'
+          memory: {{ gitlab_memory_limit }}
+
+networks:
+{% for network in gitlab_networks %}
+  {{ network }}:
+    external: true
+{% endfor %}

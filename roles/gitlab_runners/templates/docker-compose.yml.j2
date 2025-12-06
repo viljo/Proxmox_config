@@ -1,0 +1,66 @@
+services:
+  gitlab-runner-1:
+    image: {{ gitlab_runner_image }}
+    container_name: gitlab-runner-1
+    restart: unless-stopped
+    privileged: true
+
+    environment:
+      - TZ={{ gitlab_runner_timezone }}
+
+    volumes:
+      - {{ gitlab_runner_base_path }}/runner-1/config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    extra_hosts:
+      - "gitlab.viljo.se:{{ traefik_container_ip }}"
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    networks:
+{% for network in gitlab_runner_networks %}
+      - {{ network }}
+{% endfor %}
+
+    deploy:
+      resources:
+        limits:
+          cpus: '{{ gitlab_runner_cpu_limit }}'
+          memory: {{ gitlab_runner_memory_limit }}
+
+  gitlab-runner-2:
+    image: {{ gitlab_runner_image }}
+    container_name: gitlab-runner-2
+    restart: unless-stopped
+    privileged: true
+
+    environment:
+      - TZ={{ gitlab_runner_timezone }}
+
+    volumes:
+      - {{ gitlab_runner_base_path }}/runner-2/config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    extra_hosts:
+      - "gitlab.viljo.se:{{ traefik_container_ip }}"
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    networks:
+{% for network in gitlab_runner_networks %}
+      - {{ network }}
+{% endfor %}
+
+    deploy:
+      resources:
+        limits:
+          cpus: '{{ gitlab_runner_cpu_limit }}'
+          memory: {{ gitlab_runner_memory_limit }}
+
+networks:
+{% for network in gitlab_runner_networks %}
+  {{ network }}:
+    external: true
+{% endfor %}

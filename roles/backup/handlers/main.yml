@@ -1,0 +1,7 @@
+---
+# Backup Role Handlers
+
+- name: "Reload cron"
+  ansible.builtin.command:
+    cmd: systemctl reload cron
+  listen: "reload cron"

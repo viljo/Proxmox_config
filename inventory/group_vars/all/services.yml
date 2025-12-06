@@ -80,6 +80,14 @@ infrastructure_services:
     status: deployed_working
     note: "Protected by OAuth2-Proxy (GitLab SSO). API endpoints accessible with API key authentication. Connected to Ollama LLM VM (172.31.31.201:11434)"
 
+  - name: GitLab CE
+    slug: gitlab
+    icon: "🦊"
+    description: Self-hosted GitLab instance
+    subdomain: gitlab
+    status: deployed_working
+    note: "Self-hosted Git platform with CI/CD. SSH on port 2224. Runners serve both gitlab.com and local instance."
+
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:
   - name: Ollama LLM

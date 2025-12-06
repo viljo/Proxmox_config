@@ -1,0 +1,88 @@
+---
+# GitLab CE deployment tasks
+# Runs inside LXC container via pct exec
+
+- name: Create GitLab directories
+  ansible.builtin.command: >
+    pct exec {{ lxc_id }} -- mkdir -p {{ item }}
+  loop:
+    - "{{ gitlab_base_path }}"
+    - "{{ gitlab_config_path }}"
+    - "{{ gitlab_logs_path }}"
+    - "{{ gitlab_data_path }}"
+  changed_when: true
+
+- name: Create GitLab docker-compose.yml on Proxmox host
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /tmp/gitlab-docker-compose.yml
+    mode: '0644'
+
+- name: Copy docker-compose.yml to LXC
+  ansible.builtin.command: >
+    pct push {{ lxc_id }} /tmp/gitlab-docker-compose.yml {{ gitlab_base_path }}/docker-compose.yml
+  changed_when: true
+
+- name: Pull GitLab image (this may take several minutes)
+  ansible.builtin.command: >
+    pct exec {{ lxc_id }} -- docker pull {{ gitlab_docker_image }}
+  changed_when: false
+
+- name: Stop existing GitLab container
+  ansible.builtin.command: >
+    pct exec {{ lxc_id }} -- bash -c 'cd {{ gitlab_base_path }} && docker compose down 2>/dev/null || true'
+  changed_when: true
+
+- name: Start GitLab container
+  ansible.builtin.command: >
+    pct exec {{ lxc_id }} -- bash -c 'cd {{ gitlab_base_path }} && docker compose up -d'
+  register: gitlab_started
+  changed_when: true
+
+- name: Wait for GitLab container to be running
+  ansible.builtin.command: >
+    pct exec {{ lxc_id }} -- docker ps --filter name={{ gitlab_service_name }} --format {% raw %}'{{.Status}}'{% endraw %}
+  register: gitlab_status
+  until: "'Up' in gitlab_status.stdout"
+  retries: 12
+  delay: 10
+
+- name: Display startup message
+  ansible.builtin.debug:
+    msg:
+      - "GitLab container is starting..."
+      - "Initial startup takes 3-5 minutes for database migrations."
+      - ""
+      - "Monitor progress with:"
+      - "  ssh root@192.168.1.3 'pct exec 200 -- docker logs -f gitlab'"
+      - ""
+      - "Check readiness with:"
+      - "  ssh root@192.168.1.3 'pct exec 200 -- docker exec gitlab gitlab-ctl status'"
+
+- name: Wait for GitLab to be healthy (up to 10 minutes)
+  ansible.builtin.command: >
+    pct exec {{ lxc_id }} -- docker exec {{ gitlab_service_name }} gitlab-ctl status
+  register: gitlab_health
+  until: gitlab_health.rc == 0
+  retries: 60
+  delay: 10
+  ignore_errors: true
+
+- name: Get initial root password
+  ansible.builtin.command: >
+    pct exec {{ lxc_id }} -- docker exec {{ gitlab_service_name }} cat /etc/gitlab/initial_root_password
+  register: gitlab_root_password
+  ignore_errors: true
+  changed_when: false
+
+- name: Display initial root password
+  ansible.builtin.debug:
+    msg: |
+      GitLab is now running!
+
+      URL: {{ gitlab_external_url }}
+      SSH: ssh://git@{{ gitlab_subdomain }}.{{ public_domain }}:{{ gitlab_ssh_port }}/
+
+      Initial root password (valid for 24 hours):
+      {{ gitlab_root_password.stdout | default('Password file not found - GitLab may still be initializing. Check with: pct exec 200 -- docker exec gitlab cat /etc/gitlab/initial_root_password') }}
+  when: gitlab_root_password is defined

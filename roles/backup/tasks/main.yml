@@ -1,0 +1,208 @@
+---
+# Backup Role Main Tasks
+
+# ================================================================================
+# SETUP BACKUP INFRASTRUCTURE
+# ================================================================================
+
+- name: "Create backup directory structure"
+  ansible.builtin.command:
+    cmd: >
+      mkdir -p {{ backup_base_path }}/postgres
+      {{ backup_base_path }}/docker-configs
+      {{ backup_base_path }}/scripts
+      {{ backup_base_path }}/logs
+  changed_when: true
+
+- name: "Set backup directory permissions"
+  ansible.builtin.command:
+    cmd: chmod -R 750 {{ backup_base_path }}
+  changed_when: true
+
+# ================================================================================
+# DEPLOY BACKUP SCRIPTS
+# ================================================================================
+
+- name: "Deploy PostgreSQL backup script"
+  ansible.builtin.template:
+    src: backup-postgres.sh.j2
+    dest: /tmp/backup-postgres.sh
+    mode: '0755'
+  delegate_to: localhost
+
+- name: "Transfer PostgreSQL backup script to host"
+  ansible.builtin.copy:
+    src: /tmp/backup-postgres.sh
+    dest: "{{ backup_base_path }}/scripts/backup-postgres.sh"
+    mode: '0755'
+
+- name: "Deploy Docker configs backup script"
+  ansible.builtin.template:
+    src: backup-docker-configs.sh.j2
+    dest: /tmp/backup-docker-configs.sh
+    mode: '0755'
+  delegate_to: localhost
+
+- name: "Transfer Docker configs backup script to host"
+  ansible.builtin.copy:
+    src: /tmp/backup-docker-configs.sh
+    dest: "{{ backup_base_path }}/scripts/backup-docker-configs.sh"
+    mode: '0755'
+
+- name: "Deploy ZFS snapshot script"
+  ansible.builtin.template:
+    src: backup-zfs-snapshots.sh.j2
+    dest: /tmp/backup-zfs-snapshots.sh
+    mode: '0755'
+  delegate_to: localhost
+
+- name: "Transfer ZFS snapshot script to host"
+  ansible.builtin.copy:
+    src: /tmp/backup-zfs-snapshots.sh
+    dest: "{{ backup_base_path }}/scripts/backup-zfs-snapshots.sh"
+    mode: '0755'
+
+- name: "Deploy backup cleanup script"
+  ansible.builtin.template:
+    src: backup-cleanup.sh.j2
+    dest: /tmp/backup-cleanup.sh
+    mode: '0755'
+  delegate_to: localhost
+
+- name: "Transfer backup cleanup script to host"
+  ansible.builtin.copy:
+    src: /tmp/backup-cleanup.sh
+    dest: "{{ backup_base_path }}/scripts/backup-cleanup.sh"
+    mode: '0755'
+
+# ================================================================================
+# DEPLOY GITLAB BACKUP SCRIPT
+# ================================================================================
+
+- name: "Create GitLab backup directory"
+  ansible.builtin.command:
+    cmd: mkdir -p {{ backup_base_path }}/gitlab
+  changed_when: true
+  when: gitlab_backup_enabled | default(true)
+
+- name: "Deploy GitLab backup script"
+  ansible.builtin.template:
+    src: backup-gitlab.sh.j2
+    dest: /tmp/backup-gitlab.sh
+    mode: '0755'
+  delegate_to: localhost
+  when: gitlab_backup_enabled | default(true)
+
+- name: "Transfer GitLab backup script to host"
+  ansible.builtin.copy:
+    src: /tmp/backup-gitlab.sh
+    dest: "{{ backup_base_path }}/scripts/backup-gitlab.sh"
+    mode: '0755'
+  when: gitlab_backup_enabled | default(true)
+
+# ================================================================================
+# SETUP CRON JOBS
+# ================================================================================
+
+- name: "Setup PostgreSQL backup cron job"
+  ansible.builtin.cron:
+    name: "Backup PostgreSQL databases"
+    job: "{{ backup_base_path }}/scripts/backup-postgres.sh >> {{ backup_base_path }}/logs/postgres.log 2>&1"
+    minute: "0"
+    hour: "2"
+    user: root
+
+- name: "Setup Docker configs backup cron job"
+  ansible.builtin.cron:
+    name: "Backup Docker configs"
+    job: "{{ backup_base_path }}/scripts/backup-docker-configs.sh >> {{ backup_base_path }}/logs/docker-configs.log 2>&1"
+    minute: "0"
+    hour: "3"
+    user: root
+
+- name: "Setup GitLab backup cron job"
+  ansible.builtin.cron:
+    name: "Backup GitLab CE"
+    job: "{{ backup_base_path }}/scripts/backup-gitlab.sh >> {{ backup_base_path }}/logs/gitlab.log 2>&1"
+    minute: "0"
+    hour: "1"
+    user: root
+  when: gitlab_backup_enabled | default(true)
+
+- name: "Setup ZFS hourly snapshot cron job"
+  ansible.builtin.cron:
+    name: "ZFS hourly snapshots"
+    job: "{{ backup_base_path }}/scripts/backup-zfs-snapshots.sh hourly >> {{ backup_base_path }}/logs/zfs-snapshots.log 2>&1"
+    minute: "0"
+    user: root
+
+- name: "Setup ZFS daily snapshot cron job"
+  ansible.builtin.cron:
+    name: "ZFS daily snapshots"
+    job: "{{ backup_base_path }}/scripts/backup-zfs-snapshots.sh daily >> {{ backup_base_path }}/logs/zfs-snapshots.log 2>&1"
+    minute: "0"
+    hour: "4"
+    user: root
+
+- name: "Setup backup cleanup cron job"
+  ansible.builtin.cron:
+    name: "Backup cleanup"
+    job: "{{ backup_base_path }}/scripts/backup-cleanup.sh >> {{ backup_base_path }}/logs/cleanup.log 2>&1"
+    minute: "0"
+    hour: "5"
+    weekday: "0"
+    user: root
+
+# ================================================================================
+# RUN INITIAL BACKUP
+# ================================================================================
+
+- name: "Run initial PostgreSQL backup"
+  ansible.builtin.command:
+    cmd: "{{ backup_base_path }}/scripts/backup-postgres.sh"
+  register: initial_postgres_backup
+  changed_when: true
+  failed_when: false
+
+- name: "Run initial Docker configs backup"
+  ansible.builtin.command:
+    cmd: "{{ backup_base_path }}/scripts/backup-docker-configs.sh"
+  register: initial_configs_backup
+  changed_when: true
+  failed_when: false
+
+- name: "Run initial ZFS snapshot"
+  ansible.builtin.command:
+    cmd: "{{ backup_base_path }}/scripts/backup-zfs-snapshots.sh daily"
+  register: initial_zfs_snapshot
+  changed_when: true
+  failed_when: false
+
+# ================================================================================
+# VERIFICATION
+# ================================================================================
+
+- name: "List backup contents"
+  ansible.builtin.shell:
+    cmd: "find {{ backup_base_path }} -type f \\( -name '*.sql.gz' -o -name '*.tar.gz' \\) | head -20"
+  register: backup_files
+  changed_when: false
+  failed_when: false
+
+- name: "Display backup summary"
+  ansible.builtin.debug:
+    msg:
+      - "Backup system configured successfully"
+      - ""
+      - "Backup location: {{ backup_base_path }}"
+      - "Scripts location: {{ backup_base_path }}/scripts/"
+      - ""
+      - "Scheduled backups:"
+      - "  - GitLab CE: Daily at 1 AM"
+      - "  - PostgreSQL: Daily at 2 AM"
+      - "  - Docker configs: Daily at 3 AM"
+      - "  - ZFS snapshots: Hourly + Daily at 4 AM"
+      - "  - Cleanup: Weekly on Sunday at 5 AM"
+      - ""
+      - "Initial backup files:"
+      - "{{ backup_files.stdout_lines | default(['No files yet']) }}"

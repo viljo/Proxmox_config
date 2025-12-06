@@ -1,0 +1,45 @@
+---
+# Playbook: Deploy GitLab Runners
+# Description: Configure GitLab runners with persistent DNS for local GitLab
+
+- name: Deploy GitLab Runners
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    lxc_id: 200
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "GitLab Runners Configuration"
+          - "=========================================="
+          - "This playbook will configure runners with:"
+          - "  - Persistent DNS for gitlab.viljo.se"
+          - "  - Connection to traefik_public network"
+          - "  - Dual registration (gitlab.com + local)"
+          - "=========================================="
+
+  tasks:
+    - name: Deploy GitLab Runners
+      ansible.builtin.include_role:
+        name: gitlab_runners
+
+  post_tasks:
+    - name: Display status
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "GitLab Runners Configuration Complete"
+          - "=========================================="
+          - ""
+          - "Runners are configured to serve:"
+          - "  - gitlab.com (existing projects)"
+          - "  - gitlab.viljo.se (local GitLab)"
+          - ""
+          - "Verify with:"
+          - "  pct exec 200 -- docker exec gitlab-runner-1 gitlab-runner list"
+          - "=========================================="

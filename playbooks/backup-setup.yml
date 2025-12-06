@@ -1,0 +1,94 @@
+---
+# Backup System Setup Playbook
+# Sets up automated backups for GitLab, PostgreSQL, Docker configs, and ZFS snapshots
+#
+# Usage:
+#   ansible-playbook playbooks/backup-setup.yml
+#
+# What this does:
+#   1. Creates backup directory structure on ZFS
+#   2. Deploys backup scripts (GitLab, PostgreSQL, Docker configs, ZFS snapshots)
+#   3. Sets up cron jobs for automated backups
+#   4. Runs initial backup to verify everything works
+
+- name: "Setup Backup System"
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    # Override container ID if needed
+    backup_container_id: 200
+
+    # PostgreSQL databases to backup (container 200)
+    postgres_databases:
+      - name: nextcloud
+        container: nextcloud-postgres
+        user: nextcloud
+      - name: zipline
+        container: zipline-db
+        user: zipline
+      - name: claper
+        container: claper-postgres
+        user: postgres
+
+    # Docker services to backup configs
+    docker_services:
+      - name: traefik
+        critical: true
+      - name: nextcloud
+        critical: true
+      - name: jellyfin
+        critical: false
+      - name: qbittorrent
+        critical: false
+      - name: zipline
+        critical: true
+      - name: open-webui
+        critical: true
+      - name: webtop
+        critical: false
+      - name: jitsi
+        critical: false
+      - name: claper
+        critical: true
+      - name: gitlab-runner
+        critical: false
+      - name: gitlab
+        critical: true
+
+    # GitLab backup settings
+    gitlab_backup_enabled: true
+    gitlab_backup_retention_days: 7
+
+    # ZFS datasets to snapshot
+    zfs_datasets:
+      - home_rack1/backups
+
+  roles:
+    - backup
+
+  post_tasks:
+    - name: "Display backup system status"
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "BACKUP SYSTEM CONFIGURED SUCCESSFULLY"
+          - "=========================================="
+          - ""
+          - "Backup location: /mnt/home_rack1/backups"
+          - ""
+          - "Automated schedules:"
+          - "  - GitLab CE:        Daily at 1:00 AM"
+          - "  - PostgreSQL dumps: Daily at 2:00 AM"
+          - "  - Docker configs:   Daily at 3:00 AM"
+          - "  - ZFS snapshots:    Hourly + Daily at 4:00 AM"
+          - "  - Cleanup:          Weekly on Sunday at 5:00 AM"
+          - ""
+          - "Manual backup commands (run on Proxmox host):"
+          - "  /mnt/home_rack1/backups/scripts/backup-gitlab.sh"
+          - "  /mnt/home_rack1/backups/scripts/backup-postgres.sh"
+          - "  /mnt/home_rack1/backups/scripts/backup-docker-configs.sh"
+          - "  /mnt/home_rack1/backups/scripts/backup-zfs-snapshots.sh daily"
+          - "  /mnt/home_rack1/backups/scripts/backup-cleanup.sh"
+          - ""
+          - "Logs: /mnt/home_rack1/backups/logs/"
