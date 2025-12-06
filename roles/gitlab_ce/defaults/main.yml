@@ -41,6 +41,11 @@ gitlab_postgres_shared_buffers: "256MB"
 # Registry (container registry) - disabled by default
 gitlab_registry_enabled: false
 
+# GitLab Pages
+gitlab_pages_enabled: true
+gitlab_pages_domain: "gitlab.viljo.se"  # Pages will be at *.gitlab.viljo.se
+gitlab_pages_port: 8090
+
 # OAuth via gitlab.com
 gitlab_oauth_enabled: false
 # These should be set via vault or extra vars when oauth is enabled

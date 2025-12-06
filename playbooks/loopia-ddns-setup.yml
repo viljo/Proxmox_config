@@ -25,6 +25,9 @@
         ttl: 600
       - host: "*"
         ttl: 600
+      - host: "*.gitlab"
+        ttl: 600
+      - host: gitlab
       - host: links
       - host: meet
       - host: cloud

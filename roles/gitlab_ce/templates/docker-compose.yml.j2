@@ -63,6 +63,16 @@ services:
         ]
 {% endif %}
 
+{% if gitlab_pages_enabled | default(false) %}
+        # GitLab Pages - served via Traefik for TLS
+        pages_external_url 'https://{{ gitlab_pages_domain }}'
+        gitlab_pages['enable'] = true
+        gitlab_pages['listen_proxy'] = '0.0.0.0:{{ gitlab_pages_port }}'
+        gitlab_pages['redirect_http'] = false
+        gitlab_pages['internal_gitlab_server'] = 'http://localhost:80'
+        pages_nginx['enable'] = false
+{% endif %}
+
 {% if gitlab_registry_enabled %}
         # Container Registry
         registry_external_url 'https://registry.{{ public_domain }}'
@@ -80,6 +90,9 @@ services:
 
     ports:
       - "{{ gitlab_ssh_port }}:22"
+{% if gitlab_pages_enabled | default(false) %}
+      - "{{ gitlab_pages_port }}:{{ gitlab_pages_port }}"
+{% endif %}
 
     labels:
       # Enable Traefik for this service
@@ -92,6 +105,17 @@ services:
       - "traefik.http.routers.{{ gitlab_service_name }}.tls.certresolver=letsencrypt"
       - "traefik.http.routers.{{ gitlab_service_name }}.service={{ gitlab_service_name }}"
       - "traefik.http.services.{{ gitlab_service_name }}.loadbalancer.server.port=80"
+{% if gitlab_pages_enabled | default(false) %}
+      # GitLab Pages - wildcard subdomain routing (uses DNS challenge for wildcard cert)
+      # Traefik v3 syntax: HostRegexp uses raw Go regexp without named groups
+      - 'traefik.http.routers.{{ gitlab_service_name }}-pages.rule=HostRegexp(`^[a-zA-Z0-9-]+\.{{ gitlab_pages_domain | replace(".", "\.") }}$`)'
+      - "traefik.http.routers.{{ gitlab_service_name }}-pages.entrypoints=websecure"
+      - "traefik.http.routers.{{ gitlab_service_name }}-pages.tls.certresolver=dns"
+      - "traefik.http.routers.{{ gitlab_service_name }}-pages.tls.domains[0].main={{ gitlab_pages_domain }}"
+      - "traefik.http.routers.{{ gitlab_service_name }}-pages.tls.domains[0].sans=*.{{ gitlab_pages_domain }}"
+      - "traefik.http.routers.{{ gitlab_service_name }}-pages.service={{ gitlab_service_name }}-pages"
+      - "traefik.http.services.{{ gitlab_service_name }}-pages.loadbalancer.server.port={{ gitlab_pages_port }}"
+{% endif %}
 {% endif %}
 
       # Watchtower: Enable automatic updates

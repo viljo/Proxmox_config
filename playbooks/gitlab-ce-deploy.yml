@@ -13,6 +13,10 @@
     gitlab_oauth_enabled: true
     gitlab_oauth_app_id: "{{ vault_gitlab_ce_oauth_app_id }}"
     gitlab_oauth_app_secret: "{{ vault_gitlab_ce_oauth_app_secret }}"
+    # GitLab Pages - enable wildcard pages at *.gitlab.viljo.se
+    gitlab_pages_enabled: true
+    gitlab_pages_domain: "gitlab.viljo.se"
+    gitlab_pages_port: 8090
 
   pre_tasks:
     - name: Display deployment plan
