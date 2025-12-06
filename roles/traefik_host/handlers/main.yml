@@ -1,0 +1,10 @@
+---
+# Traefik Host Role Handlers
+
+- name: Reload Traefik
+  ansible.builtin.systemd:
+    name: traefik
+    state: reloaded
+  # Traefik auto-reloads dynamic configs via file provider
+  # This handler is a no-op but documents the intent
+  listen: Reload Traefik

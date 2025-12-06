@@ -1,0 +1,53 @@
+---
+# Playbook: Deploy Traefik Host Dynamic Configs
+# Description: Deploy dynamic configuration files for Traefik running on Proxmox host
+#
+# This manages the Traefik instance running directly on the Proxmox host
+# (as a systemd service), not the Traefik in LXC 200.
+#
+# The Proxmox host Traefik handles external routing to LXC containers
+# that don't use the LXC Traefik (e.g., services needing direct host access).
+
+- name: Deploy Traefik Host Dynamic Configs
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    # GitLab Pages enabled
+    traefik_host_gitlab_pages_enabled: true
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Traefik Host Dynamic Config Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook deploys dynamic configs to:"
+          - "  /etc/traefik/dynamic/"
+          - ""
+          - "Services configured:"
+          - "  - GitLab: gitlab.{{ public_domain }}"
+          - "  - GitLab Pages: *.gitlab.{{ public_domain }}"
+          - "=========================================="
+
+  roles:
+    - traefik_host
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Traefik Host Config Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Dynamic configs deployed to /etc/traefik/dynamic/"
+          - "Traefik will auto-reload the configuration."
+          - ""
+          - "Verify with:"
+          - "  systemctl status traefik"
+          - "  ls -la /etc/traefik/dynamic/"
+          - "=========================================="

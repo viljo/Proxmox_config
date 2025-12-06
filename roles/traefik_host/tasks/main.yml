@@ -1,0 +1,28 @@
+---
+# Traefik Host Role Tasks
+# Deploys dynamic configuration files to Proxmox host Traefik
+
+- name: Ensure Traefik dynamic config directory exists
+  ansible.builtin.file:
+    path: "{{ traefik_host_dynamic_path }}"
+    state: directory
+    owner: root
+    group: traefik
+    mode: '0750'
+
+- name: Deploy GitLab Traefik configuration
+  ansible.builtin.template:
+    src: gitlab.yml.j2
+    dest: "{{ traefik_host_dynamic_path }}/gitlab.yml"
+    owner: root
+    group: root
+    mode: '0644'
+  when: traefik_host_gitlab_enabled
+  notify: Reload Traefik
+
+- name: Display Traefik host configuration status
+  ansible.builtin.debug:
+    msg:
+      - "Traefik host dynamic configs deployed to {{ traefik_host_dynamic_path }}"
+      - "GitLab: {{ traefik_host_gitlab_enabled }}"
+      - "GitLab Pages: {{ traefik_host_gitlab_pages_enabled }}"

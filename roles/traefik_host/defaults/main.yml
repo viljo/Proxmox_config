@@ -1,0 +1,20 @@
+---
+# Traefik Host Role Defaults
+# Manages dynamic configurations for Traefik running on Proxmox host
+
+# Base path for Traefik dynamic configs
+traefik_host_dynamic_path: /etc/traefik/dynamic
+
+# LXC containers network (for routing to services)
+traefik_host_lxc_network: 172.31.31.0/24
+traefik_host_containers_ip: 172.31.31.10
+
+# GitLab settings
+traefik_host_gitlab_enabled: true
+traefik_host_gitlab_domain: "gitlab.{{ public_domain }}"
+traefik_host_gitlab_port: 80
+
+# GitLab Pages settings
+traefik_host_gitlab_pages_enabled: true
+traefik_host_gitlab_pages_domain: "gitlab.{{ public_domain }}"
+traefik_host_gitlab_pages_port: 8090

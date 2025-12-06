@@ -1,0 +1,46 @@
+# GitLab Traefik configuration
+# Managed by Ansible - do not edit manually
+
+http:
+  routers:
+    gitlab:
+      rule: "Host(`{{ traefik_host_gitlab_domain }}`)"
+      service: gitlab
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: dns
+
+{% if traefik_host_gitlab_pages_enabled %}
+    gitlab-pages:
+      # Traefik v3 syntax: raw Go regexp without named groups
+      rule: "HostRegexp(`^[a-zA-Z0-9-]+\\.{{ traefik_host_gitlab_pages_domain | replace('.', '\\.') }}$`)"
+      service: gitlab-pages
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: dns
+        domains:
+          - main: "{{ traefik_host_gitlab_pages_domain }}"
+            sans:
+              - "*.{{ traefik_host_gitlab_pages_domain }}"
+{% endif %}
+
+  services:
+    gitlab:
+      loadBalancer:
+        servers:
+          - url: "http://{{ traefik_host_containers_ip }}:{{ traefik_host_gitlab_port }}"
+        passHostHeader: true
+        responseForwarding:
+          flushInterval: "100ms"
+
+{% if traefik_host_gitlab_pages_enabled %}
+    gitlab-pages:
+      loadBalancer:
+        servers:
+          - url: "http://{{ traefik_host_containers_ip }}:{{ traefik_host_gitlab_pages_port }}"
+        passHostHeader: true
+        responseForwarding:
+          flushInterval: "100ms"
+{% endif %}
