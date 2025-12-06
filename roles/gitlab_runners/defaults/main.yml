@@ -27,6 +27,12 @@ gitlab_runner_networks:
 gitlab_runner_extra_hosts:
   - "gitlab.viljo.se:traefik"  # Resolve via Traefik container
 
+# Local GitLab settings for runners
+# clone_url allows containers to clone via HTTP internally
+# network_mode=host allows containers to reach local services
+gitlab_runner_local_clone_url: "http://10.0.2.16"
+gitlab_runner_local_network_mode: "host"
+
 # Runner instances
 gitlab_runners:
   - name: gitlab-runner-1
