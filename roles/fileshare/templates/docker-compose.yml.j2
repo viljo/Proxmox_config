@@ -53,7 +53,7 @@ services:
     container_name: {{ fileshare_service_name }}-web
     restart: unless-stopped
     volumes:
-      - {{ fileshare_data_path }}/public:/data/public:ro
+      - {{ fileshare_data_path }}/public:/data/public
       - {{ fileshare_data_path }}/private:/data/private
       - {{ fileshare_data_path }}/db:/data/db
       - {{ fileshare_sftp_path }}/authorized_keys:/sftp/authorized_keys
