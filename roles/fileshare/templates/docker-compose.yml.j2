@@ -5,6 +5,7 @@ services:
     image: atmoz/sftp:latest
     container_name: {{ fileshare_service_name }}-sftp
     restart: unless-stopped
+    privileged: true
     ports:
       - "{{ fileshare_sftp_port }}:22"
     volumes:
