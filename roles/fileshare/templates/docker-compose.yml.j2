@@ -64,6 +64,7 @@ services:
       PRIVATE_DIR: /data/private
       DATABASE_PATH: /data/db/fileshare.db
       SERVER_HOSTNAME: https://{{ fileshare_subdomain }}.{{ public_domain }}
+      SFTP_PORT: "{{ fileshare_sftp_port }}"
       GITLAB_URL: {{ fileshare_gitlab_url }}
       GITLAB_CLIENT_ID: {{ fileshare_gitlab_client_id }}
       GITLAB_CLIENT_SECRET: {{ fileshare_gitlab_client_secret }}
