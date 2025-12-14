@@ -1,0 +1,7 @@
+---
+# Traefik handlers
+
+- name: Restart Traefik
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- bash -c 'cd {{ traefik_base_path }} && docker compose restart'
+  listen: restart traefik

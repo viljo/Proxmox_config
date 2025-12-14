@@ -9,3 +9,8 @@
 * Always strive to create end to end test (emulating a user testing the service) for all services
 * Always run end to end test before assuming service is correctly deployed
 * Always check and remove previous existing duplicates before creating a new service
+
+* RemoteLLM/llama.cpp model naming:
+  - Always use --alias flag with llama-server to set a clean model name (e.g., "qwen3-coder-30b")
+  - Model names should not contain paths or file extensions
+  - Standard format: {model-family}-{size} (e.g., "qwen3-coder-30b", "llama-3.1-8b")

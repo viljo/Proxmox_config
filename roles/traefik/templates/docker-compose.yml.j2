@@ -1,0 +1,90 @@
+version: "3.8"
+
+services:
+  {{ traefik_container_name }}:
+    image: {{ traefik_image }}
+    container_name: {{ traefik_container_name }}
+    restart: unless-stopped
+
+    environment:
+      - DOCKER_API_VERSION=1.46
+{% if traefik_dns_challenge_enabled %}
+      # Loopia DNS credentials for wildcard certificates
+      - LOOPIA_API_USER={{ traefik_loopia_api_user }}
+      - LOOPIA_API_PASSWORD={{ traefik_loopia_api_password }}
+{% endif %}
+
+    command:
+      # API and Dashboard
+      - --api.dashboard={{ traefik_dashboard_enabled | lower }}
+      - --api.insecure=false
+
+      # Docker provider
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network={{ traefik_network }}
+
+      # File provider for external routes
+      - --providers.file.directory=/dynamic
+      - --providers.file.watch=true
+
+      # Entrypoints
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+
+      # HTTP to HTTPS redirect
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+
+      # Let's Encrypt - TLS Challenge (for regular certs)
+      - --certificatesresolvers.letsencrypt.acme.tlschallenge=true
+      - --certificatesresolvers.letsencrypt.acme.email={{ traefik_acme_email }}
+      - --certificatesresolvers.letsencrypt.acme.storage=/acme.json
+
+{% if traefik_dns_challenge_enabled %}
+      # Let's Encrypt - DNS Challenge (for wildcard certs)
+      - --certificatesresolvers.dns.acme.dnschallenge=true
+      - --certificatesresolvers.dns.acme.dnschallenge.provider={{ traefik_dns_provider }}
+      - --certificatesresolvers.dns.acme.dnschallenge.delaybeforecheck={{ traefik_dns_delay_before_check }}
+      - --certificatesresolvers.dns.acme.email={{ traefik_acme_email }}
+      - --certificatesresolvers.dns.acme.storage=/acme-dns.json
+{% endif %}
+
+      # Logging
+      - --log.level={{ traefik_log_level }}
+      - --accesslog={{ traefik_access_log | lower }}
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {{ traefik_base_path }}/acme.json:/acme.json
+{% if traefik_dns_challenge_enabled %}
+      - {{ traefik_base_path }}/acme-dns.json:/acme-dns.json
+{% endif %}
+      - {{ traefik_dynamic_path }}:/dynamic:ro
+
+    networks:
+      - {{ traefik_network }}
+
+    labels:
+      # Enable Traefik for this service
+      - "traefik.enable=true"
+
+{% if traefik_dashboard_enabled %}
+      # Dashboard router
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`{{ traefik_dashboard_subdomain }}.{{ public_domain }}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+{% if traefik_dashboard_oauth_protected %}
+      - "traefik.http.routers.traefik-dashboard.middlewares=oauth2-auth@docker"
+{% endif %}
+      - "traefik.http.services.traefik-dashboard.loadbalancer.server.port=8080"
+{% endif %}
+
+networks:
+  {{ traefik_network }}:
+    external: true

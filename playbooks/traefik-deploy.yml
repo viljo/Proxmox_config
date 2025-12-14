@@ -1,0 +1,56 @@
+---
+# Playbook: Deploy Traefik Reverse Proxy
+# Description: Deploy Traefik with TLS and DNS challenge support
+
+- name: Deploy Traefik
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    traefik_lxc_id: 200
+    # DNS challenge for wildcard certs
+    traefik_dns_challenge_enabled: true
+    traefik_loopia_api_user: "{{ vault_loopia_api_user }}"
+    traefik_loopia_api_password: "{{ vault_loopia_api_password }}"
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Traefik Reverse Proxy Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook will deploy:"
+          - "  - Traefik reverse proxy with automatic TLS"
+          - "  - TLS challenge for regular certificates"
+          - "  - DNS challenge (Loopia) for wildcard certs"
+          - ""
+          - "Dashboard: https://traefik.{{ public_domain }}"
+          - ""
+          - "Deployment target: LXC {{ traefik_lxc_id }}"
+          - "=========================================="
+
+  roles:
+    - traefik
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Traefik Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Traefik is now running with:"
+          - "  - TLS Challenge: letsencrypt (regular certs)"
+          - "  - DNS Challenge: dns (wildcard certs via Loopia)"
+          - ""
+          - "Dashboard: https://traefik.{{ public_domain }}"
+          - ""
+          - "To use wildcard certs, set certresolver to 'dns':"
+          - "  tls.certresolver=dns"
+          - "  tls.domains[0].main=example.com"
+          - "  tls.domains[0].sans=*.example.com"
+          - "=========================================="

@@ -1,0 +1,35 @@
+---
+# Traefik Configuration
+
+# Container settings
+traefik_image: traefik:latest
+traefik_container_name: traefik
+
+# LXC container where Traefik runs
+traefik_lxc_id: 200
+
+# Paths
+traefik_base_path: /opt/docker-stack/traefik
+traefik_dynamic_path: "{{ traefik_base_path }}/dynamic"
+
+# Network
+traefik_network: traefik_public
+
+# ACME/Let's Encrypt settings
+traefik_acme_email: anders@viljo.se
+
+# DNS Challenge for wildcard certificates (Loopia)
+traefik_dns_challenge_enabled: true
+traefik_dns_provider: loopia
+traefik_loopia_api_user: "{{ vault_loopia_api_user }}"
+traefik_loopia_api_password: "{{ vault_loopia_api_password }}"
+traefik_dns_delay_before_check: 30
+
+# Dashboard settings
+traefik_dashboard_enabled: true
+traefik_dashboard_subdomain: traefik
+traefik_dashboard_oauth_protected: true
+
+# Logging
+traefik_log_level: INFO
+traefik_access_log: true

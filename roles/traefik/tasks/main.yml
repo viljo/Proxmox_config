@@ -1,0 +1,65 @@
+---
+# Traefik deployment tasks
+
+- name: Create Traefik directories
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- mkdir -p {{ item }}
+  loop:
+    - "{{ traefik_base_path }}"
+    - "{{ traefik_dynamic_path }}"
+  changed_when: true
+
+- name: Create acme.json if not exists
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- bash -c 'test -f {{ traefik_base_path }}/acme.json || (touch {{ traefik_base_path }}/acme.json && chmod 600 {{ traefik_base_path }}/acme.json)'
+  changed_when: true
+
+- name: Create acme-dns.json if not exists (for DNS challenge)
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- bash -c 'test -f {{ traefik_base_path }}/acme-dns.json || (touch {{ traefik_base_path }}/acme-dns.json && chmod 600 {{ traefik_base_path }}/acme-dns.json)'
+  changed_when: true
+  when: traefik_dns_challenge_enabled | default(false)
+
+- name: Ensure traefik_public network exists
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- docker network create {{ traefik_network }} --driver bridge
+  register: network_result
+  changed_when: network_result.rc == 0
+  failed_when: network_result.rc != 0 and 'already exists' not in network_result.stderr
+
+- name: Create Traefik docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /tmp/traefik-docker-compose.yml
+    mode: '0644'
+
+- name: Copy docker-compose.yml to LXC
+  ansible.builtin.command: >
+    pct push {{ traefik_lxc_id }} /tmp/traefik-docker-compose.yml {{ traefik_base_path }}/docker-compose.yml
+  changed_when: true
+
+- name: Pull Traefik image
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- docker pull {{ traefik_image }}
+  changed_when: false
+
+- name: Restart Traefik container
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- bash -c 'cd {{ traefik_base_path }} && docker compose down && docker compose up -d'
+  register: traefik_restart
+  changed_when: true
+
+- name: Wait for Traefik to be healthy
+  ansible.builtin.command: >
+    pct exec {{ traefik_lxc_id }} -- docker ps --filter name={{ traefik_container_name }} --format {% raw %}'{{.Status}}'{% endraw %}
+  register: traefik_status
+  until: "'Up' in traefik_status.stdout"
+  retries: 6
+  delay: 5
+
+- name: Display Traefik status
+  ansible.builtin.debug:
+    msg:
+      - "Traefik is running"
+      - "Dashboard: https://{{ traefik_dashboard_subdomain }}.{{ public_domain }}"
+      - "DNS Challenge enabled: {{ traefik_dns_challenge_enabled }}"
