@@ -88,6 +88,14 @@ infrastructure_services:
     status: deployed_working
     note: "Self-hosted Git platform with CI/CD. SSH on port 2224. Runners serve both gitlab.com and local instance."
 
+  - name: Fileshare
+    slug: store
+    icon: "📁"
+    description: File sharing with SFTP and web interface
+    subdomain: store
+    status: deployed_working
+    note: "GitLab OAuth, SFTP on port 2223, public/private file areas, API key access."
+
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:
   - name: Ollama LLM

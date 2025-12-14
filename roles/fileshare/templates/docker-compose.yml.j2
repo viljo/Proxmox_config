@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  sftp:
+    image: atmoz/sftp:latest
+    container_name: {{ fileshare_service_name }}-sftp
+    restart: unless-stopped
+    ports:
+      - "{{ fileshare_sftp_port }}:22"
+    volumes:
+      - {{ fileshare_data_path }}/public:/data/public
+      - {{ fileshare_data_path }}/private:/data/private
+      - {{ fileshare_sftp_path }}/ssh_host_keys:/etc/ssh/keys
+      - {{ fileshare_sftp_path }}/authorized_keys:/etc/sftp/authorized_keys:ro
+      - {{ fileshare_sftp_path }}/users.conf:/etc/sftp/users.conf:ro
+    command: >
+      bash -c '
+        for type in rsa ecdsa ed25519; do
+          if [ ! -f /etc/ssh/keys/ssh_host_$${type}_key ]; then
+            ssh-keygen -t $$type -f /etc/ssh/keys/ssh_host_$${type}_key -N ""
+          fi
+        done
+        ln -sf /etc/ssh/keys/ssh_host_* /etc/ssh/
+
+        if [ -f /etc/sftp/users.conf ]; then
+          while IFS=: read -r username uid gid; do
+            [ -z "$$username" ] && continue
+            [[ "$$username" =~ ^# ]] && continue
+            useradd -u $$uid -g users -m -d /home/$$username -s /usr/sbin/nologin $$username 2>/dev/null || true
+            mkdir -p /home/$$username/.ssh
+            chmod 700 /home/$$username/.ssh
+            if [ -f /etc/sftp/authorized_keys/$$username ]; then
+              cp /etc/sftp/authorized_keys/$$username /home/$$username/.ssh/authorized_keys
+              chmod 600 /home/$$username/.ssh/authorized_keys
+              chown $$username:users /home/$$username/.ssh/authorized_keys
+            fi
+            chown $$username:users /home/$$username/.ssh
+            mkdir -p /home/$$username/public /home/$$username/private
+            mount --bind /data/public /home/$$username/public
+            mount --bind /data/private /home/$$username/private
+          done < /etc/sftp/users.conf
+        fi
+
+        echo "PasswordAuthentication no" >> /etc/ssh/sshd_config
+        exec /usr/sbin/sshd -D -e
+      '
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: {{ fileshare_service_name }}-web:latest
+    container_name: {{ fileshare_service_name }}-web
+    restart: unless-stopped
+    volumes:
+      - {{ fileshare_data_path }}/public:/data/public:ro
+      - {{ fileshare_data_path }}/private:/data/private
+      - {{ fileshare_data_path }}/db:/data/db
+      - {{ fileshare_sftp_path }}/authorized_keys:/sftp/authorized_keys
+      - {{ fileshare_sftp_path }}/users.conf:/sftp/users.conf
+    environment:
+      PUBLIC_DIR: /data/public
+      PRIVATE_DIR: /data/private
+      DATABASE_PATH: /data/db/fileshare.db
+      GITLAB_URL: {{ fileshare_gitlab_url }}
+      GITLAB_CLIENT_ID: {{ fileshare_gitlab_client_id }}
+      GITLAB_CLIENT_SECRET: {{ fileshare_gitlab_client_secret }}
+      GITLAB_REDIRECT_URI: {{ fileshare_gitlab_redirect_uri }}
+      SECRET_KEY: {{ fileshare_secret_key }}
+    depends_on:
+      - sftp
+
+    labels:
+      - "traefik.enable={{ fileshare_enable_traefik | lower }}"
+{% if fileshare_enable_traefik %}
+      - "traefik.http.routers.{{ fileshare_service_name }}.rule=Host(`{{ fileshare_subdomain }}.{{ public_domain }}`)"
+      - "traefik.http.routers.{{ fileshare_service_name }}.entrypoints=websecure"
+      - "traefik.http.routers.{{ fileshare_service_name }}.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.{{ fileshare_service_name }}.service={{ fileshare_service_name }}"
+      - "traefik.http.services.{{ fileshare_service_name }}.loadbalancer.server.port=8080"
+{% endif %}
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    networks:
+{% for network in fileshare_networks %}
+      - {{ network }}
+{% endfor %}
+
+networks:
+{% for network in fileshare_networks %}
+  {{ network }}:
+    external: true
+{% endfor %}

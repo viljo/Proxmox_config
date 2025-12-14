@@ -1,0 +1,32 @@
+---
+# Fileshare Service Configuration
+
+# Service settings
+fileshare_service_name: fileshare
+fileshare_subdomain: store
+fileshare_lxc_id: 200
+
+# Ports
+fileshare_web_port: 8085
+fileshare_sftp_port: 2223
+
+# Paths
+fileshare_base_path: /opt/docker-stack/fileshare
+fileshare_data_path: "{{ fileshare_base_path }}/data"
+fileshare_sftp_path: "{{ fileshare_base_path }}/sftp"
+fileshare_web_path: "{{ fileshare_base_path }}/web"
+
+# Local source path (for building Docker image)
+# Override this in the playbook if needed
+fileshare_local_source: "/Users/anders/git/fileshare_service"
+
+# GitLab OAuth (use gitlab.com or local gitlab.viljo.se)
+fileshare_gitlab_url: "https://gitlab.com"
+fileshare_gitlab_redirect_uri: "https://{{ fileshare_subdomain }}.{{ public_domain }}/auth/callback"
+
+# Docker networks
+fileshare_networks:
+  - traefik_public
+
+# Traefik settings
+fileshare_enable_traefik: true

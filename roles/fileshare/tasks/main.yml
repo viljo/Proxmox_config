@@ -1,0 +1,92 @@
+---
+# Fileshare Service Deployment Tasks
+
+- name: Create fileshare directories
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- mkdir -p {{ item }}
+  loop:
+    - "{{ fileshare_base_path }}"
+    - "{{ fileshare_data_path }}/public"
+    - "{{ fileshare_data_path }}/private"
+    - "{{ fileshare_data_path }}/db"
+    - "{{ fileshare_sftp_path }}/ssh_host_keys"
+    - "{{ fileshare_sftp_path }}/authorized_keys"
+    - "{{ fileshare_web_path }}/app"
+  changed_when: true
+
+- name: Create empty users.conf if not exists
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- bash -c 'test -f {{ fileshare_sftp_path }}/users.conf || touch {{ fileshare_sftp_path }}/users.conf'
+  changed_when: true
+
+- name: Set permissions on data directories (for non-root container user)
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- chmod -R 777 {{ fileshare_data_path }}/db {{ fileshare_data_path }}/private {{ fileshare_sftp_path }}/authorized_keys
+  changed_when: true
+
+- name: Create fileshare docker-compose.yml on Proxmox host
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /tmp/fileshare-docker-compose.yml
+    mode: '0644'
+
+- name: Copy docker-compose.yml to LXC
+  ansible.builtin.command: >
+    pct push {{ fileshare_lxc_id }} /tmp/fileshare-docker-compose.yml {{ fileshare_base_path }}/docker-compose.yml
+  changed_when: true
+
+# Copy web app source for local build
+- name: Create temporary archive of web source
+  delegate_to: localhost
+  ansible.builtin.command:
+    cmd: tar czf /tmp/fileshare-web.tar.gz --exclude='.venv' --exclude='.pytest_cache' --exclude='__pycache__' --exclude='*.pyc' -C {{ fileshare_local_source }}/web .
+  changed_when: true
+
+- name: Copy web source archive to Proxmox host
+  ansible.builtin.copy:
+    src: /tmp/fileshare-web.tar.gz
+    dest: /tmp/fileshare-web.tar.gz
+    mode: '0644'
+
+- name: Push web source archive to LXC
+  ansible.builtin.command: >
+    pct push {{ fileshare_lxc_id }} /tmp/fileshare-web.tar.gz /tmp/fileshare-web.tar.gz
+  changed_when: true
+
+- name: Extract web source in LXC
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- bash -c 'cd {{ fileshare_web_path }} && tar xzf /tmp/fileshare-web.tar.gz && rm /tmp/fileshare-web.tar.gz'
+  changed_when: true
+
+- name: Pull SFTP base image
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- docker pull atmoz/sftp:latest
+  changed_when: false
+
+- name: Stop existing fileshare containers
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- bash -c 'cd {{ fileshare_base_path }} && docker compose down 2>/dev/null || true'
+  changed_when: true
+
+- name: Build and start fileshare containers
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- bash -c 'cd {{ fileshare_base_path }} && docker compose up -d --build'
+  changed_when: true
+
+- name: Wait for fileshare web container to be running
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- docker ps --filter name={{ fileshare_service_name }}-web --format '{% raw %}{{.Status}}{% endraw %}'
+  register: fileshare_status
+  until: "'Up' in fileshare_status.stdout"
+  retries: 12
+  delay: 5
+
+- name: Display fileshare status
+  ansible.builtin.debug:
+    msg: |
+      Fileshare service is running!
+
+      Web URL: https://{{ fileshare_subdomain }}.{{ public_domain }}
+      SFTP: sftp -P {{ fileshare_sftp_port }} username@{{ public_domain }}
+
+      First user to login becomes admin.

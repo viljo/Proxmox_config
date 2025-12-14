@@ -1,0 +1,81 @@
+---
+# Playbook: Deploy Fileshare Service
+# Description: Deploy file sharing service with SFTP and web interface
+#
+# Prerequisites:
+# 1. Create GitLab OAuth application at https://gitlab.com/-/profile/applications
+#    - Name: Fileshare viljo.se
+#    - Redirect URI: https://store.viljo.se/auth/callback
+#    - Scopes: read_user
+# 2. Add OAuth credentials to vault:
+#    ansible-vault edit inventory/group_vars/all/vault.yml
+#    - vault_fileshare_gitlab_client_id
+#    - vault_fileshare_gitlab_client_secret
+#    - vault_fileshare_secret_key
+
+- name: Deploy Fileshare Service
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    fileshare_lxc_id: 200
+    fileshare_subdomain: store
+    # GitLab OAuth credentials from vault
+    fileshare_gitlab_client_id: "{{ vault_fileshare_gitlab_client_id }}"
+    fileshare_gitlab_client_secret: "{{ vault_fileshare_gitlab_client_secret }}"
+    fileshare_secret_key: "{{ vault_fileshare_secret_key }}"
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Fileshare Service Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook will deploy:"
+          - "  - Fileshare web interface with GitLab OAuth"
+          - "  - SFTP server for file uploads"
+          - ""
+          - "Web URL: https://{{ fileshare_subdomain }}.{{ public_domain }}"
+          - "SFTP: sftp -P 2223 user@{{ public_domain }}"
+          - ""
+          - "Deployment target: LXC {{ fileshare_lxc_id }}"
+          - "=========================================="
+
+  roles:
+    - fileshare
+
+  post_tasks:
+    - name: Configure NAT port forwarding for SFTP
+      ansible.builtin.shell: |
+        # Add NAT rule for Fileshare SFTP port
+        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport 2223 -j DNAT --to-destination 172.31.31.10:2223 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport 2223 -j DNAT --to-destination 172.31.31.10:2223
+
+        # Save rules persistently
+        iptables-save > /etc/iptables/rules.v4
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Fileshare Service Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Web URL: https://{{ fileshare_subdomain }}.{{ public_domain }}"
+          - "SFTP: sftp -P 2223 username@{{ public_domain }}"
+          - ""
+          - "First user to login becomes admin."
+          - ""
+          - "Features:"
+          - "  - GitLab OAuth authentication"
+          - "  - Public file browsing (no auth)"
+          - "  - Private files via SFTP or API key"
+          - "  - SSH key management in dashboard"
+          - "  - Admin user approval queue"
+          - "=========================================="

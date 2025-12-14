@@ -1,0 +1,7 @@
+---
+# Fileshare Service Handlers
+
+- name: Restart fileshare
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- bash -c 'cd {{ fileshare_base_path }} && docker compose restart'
+  listen: Restart fileshare
