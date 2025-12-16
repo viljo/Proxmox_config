@@ -1,3 +1,21 @@
+## CRITICAL - SSH ACCESS RULES - DO NOT VIOLATE
+
+### 192.168.1.0/24 Network SSH (Port 22) - ABSOLUTELY NEVER TOUCH
+**The 192.168.1.0/24 management network SSH on port 22 is the USER'S EMERGENCY BACKUP ACCESS.**
+- NEVER modify, remove, or change SSH port 22 configuration on the 192.168.1.0/24 network
+- NEVER touch /etc/ssh/sshd_config Port 22 setting
+- This is the user's last resort access method - DO NOT TOUCH IT UNDER ANY CIRCUMSTANCES
+
+### External SSH Access (Port 2222 via ssh.viljo.se)
+- External SSH access is on port 2222: `ssh -p 2222 root@ssh.viljo.se`
+- This is the PRIMARY access method for Claude to use
+- NAT rule: vmbr2:2222 → 192.168.1.3:2222
+- Always use this for normal operations
+
+### Access Priority
+1. PRIMARY: `ssh -p 2222 root@ssh.viljo.se` (external via port 2222)
+2. BACKUP (user only): `ssh root@192.168.1.3` (internal port 22) - CLAUDE MUST NEVER MODIFY THIS
+
 * Dual ISP Architecture:
   - vmbr0: Starlink ISP (CGNAT) on 192.168.1.0/24 - Management ONLY - MUST NOT TOUCH
   - vmbr2: Bahnhof ISP (public IP via DHCP) - WAN for public services

@@ -1,0 +1,229 @@
+---
+# WireGuard VPN LXC Deployment Tasks
+
+- name: Check if WireGuard LXC exists
+  ansible.builtin.command: pct status {{ wireguard_lxc_id }}
+  register: wireguard_lxc_status
+  failed_when: false
+  changed_when: false
+
+- name: Create WireGuard LXC container
+  ansible.builtin.command: >
+    pct create {{ wireguard_lxc_id }} {{ wireguard_lxc_template }}
+    --hostname {{ wireguard_lxc_hostname }}
+    --memory {{ wireguard_lxc_memory }}
+    --cores {{ wireguard_lxc_cores }}
+    --rootfs {{ wireguard_lxc_storage }}:{{ wireguard_lxc_disk }}
+    --net0 {{ wireguard_lxc_net0 }}
+    --net1 {{ wireguard_lxc_net1 }}
+    --net2 {{ wireguard_lxc_net2 }}
+    --unprivileged 0
+    --features nesting=1
+    --onboot 1
+    --start 1
+  when: wireguard_lxc_status.rc != 0
+
+- name: Start WireGuard LXC if not running
+  ansible.builtin.command: pct start {{ wireguard_lxc_id }}
+  when: wireguard_lxc_status.rc == 0 and "'running' not in wireguard_lxc_status.stdout"
+  failed_when: false
+
+- name: Wait for LXC to be ready
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- cat /etc/os-release
+  register: lxc_ready
+  until: lxc_ready.rc == 0
+  retries: 30
+  delay: 2
+
+- name: Update apt cache
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- apt-get update
+  changed_when: true
+
+- name: Install WireGuard and tools
+  ansible.builtin.command: >
+    pct exec {{ wireguard_lxc_id }} -- apt-get install -y wireguard wireguard-tools iptables
+  changed_when: true
+
+- name: Enable IP forwarding
+  ansible.builtin.command: >
+    pct exec {{ wireguard_lxc_id }} -- bash -c '
+      echo "net.ipv4.ip_forward = 1" > /etc/sysctl.d/99-wireguard.conf
+      sysctl -p /etc/sysctl.d/99-wireguard.conf
+    '
+  changed_when: true
+
+- name: Check if server keys exist
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- test -f /etc/wireguard/server_private.key
+  register: keys_exist
+  failed_when: false
+  changed_when: false
+
+- name: Generate server keys
+  ansible.builtin.command: >
+    pct exec {{ wireguard_lxc_id }} -- bash -c '
+      cd /etc/wireguard
+      wg genkey | tee server_private.key | wg pubkey > server_public.key
+      chmod 600 server_private.key
+    '
+  when: keys_exist.rc != 0
+
+- name: Get server private key
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- cat /etc/wireguard/server_private.key
+  register: server_private_key
+  changed_when: false
+
+- name: Get server public key
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- cat /etc/wireguard/server_public.key
+  register: server_public_key
+  changed_when: false
+
+- name: Create WireGuard server config
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /tmp/wg0.conf
+    mode: '0600'
+
+- name: Copy WireGuard config to LXC
+  ansible.builtin.command: pct push {{ wireguard_lxc_id }} /tmp/wg0.conf /etc/wireguard/wg0.conf
+  changed_when: true
+
+- name: Set config permissions
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- chmod 600 /etc/wireguard/wg0.conf
+  changed_when: true
+
+- name: Enable and start WireGuard
+  ansible.builtin.command: >
+    pct exec {{ wireguard_lxc_id }} -- bash -c '
+      systemctl enable wg-quick@wg0
+      systemctl restart wg-quick@wg0
+    '
+  changed_when: true
+
+- name: Verify WireGuard is running
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- wg show
+  register: wg_status
+  changed_when: false
+
+- name: Display WireGuard status
+  ansible.builtin.debug:
+    msg: |
+      WireGuard VPN is running!
+
+      Server Public Key: {{ server_public_key.stdout }}
+
+      To add a client, run the wireguard-add-peer playbook.
+
+- name: Save server public key to local file
+  delegate_to: localhost
+  ansible.builtin.copy:
+    content: "{{ server_public_key.stdout }}"
+    dest: "/tmp/wireguard_server_public.key"
+    mode: '0644'
+
+# Web UI Deployment
+- name: Install Docker for web UI
+  ansible.builtin.command: >
+    pct exec {{ wireguard_lxc_id }} -- bash -c '
+      apt-get install -y ca-certificates curl gnupg
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    '
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Create web app directory
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- mkdir -p /opt/vpn-manager
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Copy web app files to LXC
+  ansible.builtin.command: >
+    pct push {{ wireguard_lxc_id }} {{ item.src }} {{ item.dest }}
+  loop:
+    - { src: "{{ role_path }}/files/web/Dockerfile", dest: "/opt/vpn-manager/Dockerfile" }
+    - { src: "{{ role_path }}/files/web/requirements.txt", dest: "/opt/vpn-manager/requirements.txt" }
+    - { src: "{{ role_path }}/files/web/docker-compose.yml", dest: "/opt/vpn-manager/docker-compose.yml" }
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Create app directory structure in LXC
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- mkdir -p /opt/vpn-manager/app/templates
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Copy main.py to LXC
+  ansible.builtin.command: >
+    pct push {{ wireguard_lxc_id }} {{ role_path }}/files/web/app/main.py /opt/vpn-manager/app/main.py
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Copy HTML templates to LXC
+  ansible.builtin.command: >
+    pct push {{ wireguard_lxc_id }} {{ item.src }} {{ item.dest }}
+  loop:
+    - { src: "{{ role_path }}/files/web/app/templates/login.html", dest: "/opt/vpn-manager/app/templates/login.html" }
+    - { src: "{{ role_path }}/files/web/app/templates/index.html", dest: "/opt/vpn-manager/app/templates/index.html" }
+    - { src: "{{ role_path }}/files/web/app/templates/download.html", dest: "/opt/vpn-manager/app/templates/download.html" }
+    - { src: "{{ role_path }}/files/web/app/templates/denied.html", dest: "/opt/vpn-manager/app/templates/denied.html" }
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Create .env file for web app
+  ansible.builtin.command: >
+    pct exec {{ wireguard_lxc_id }} -- bash -c '
+      cat > /opt/vpn-manager/.env << EOF
+    GITLAB_URL={{ wireguard_web_gitlab_url | default("https://gitlab.com") }}
+    GITLAB_CLIENT_ID={{ wireguard_web_gitlab_client_id }}
+    GITLAB_CLIENT_SECRET={{ wireguard_web_gitlab_client_secret }}
+    GITLAB_REDIRECT_URI=https://vpn.{{ public_domain }}/auth/callback
+    SECRET_KEY={{ lookup("password", "/dev/null chars=hexdigits length=64") }}
+    ALLOWED_USERS={{ wireguard_web_allowed_users | join(",") }}
+    WG_ENDPOINT=vpn.{{ public_domain }}:{{ wireguard_port }}
+    WG_ALLOWED_IPS={{ wireguard_allowed_networks | join(", ") }}, {{ wireguard_network }}
+    WG_DNS={{ wireguard_dns }}
+    EOF
+    '
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Build and start web app
+  ansible.builtin.command: >
+    pct exec {{ wireguard_lxc_id }} -- bash -c '
+      cd /opt/vpn-manager
+      docker compose up -d --build
+    '
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+# Deploy Traefik config to Docker Traefik in LXC 200 (not host Traefik)
+# External traffic on vmbr2 is NAT'd to LXC 200 (172.31.31.10) which runs Docker Traefik
+- name: Create Traefik config on Proxmox host
+  ansible.builtin.template:
+    src: traefik-vpn.yml.j2
+    dest: /tmp/traefik-vpn.yml
+    mode: '0644'
+  when: wireguard_web_enabled | default(true)
+
+- name: Deploy Traefik config to Docker Traefik in LXC 200
+  ansible.builtin.command: >
+    pct push 200 /tmp/traefik-vpn.yml /opt/docker-stack/traefik/dynamic/vpn.yml
+  when: wireguard_web_enabled | default(true)
+  changed_when: true
+
+- name: Display Web UI info
+  ansible.builtin.debug:
+    msg: |
+      WireGuard VPN Web UI deployed!
+
+      Access: https://vpn.{{ public_domain }}
+      Allowed Users: {{ wireguard_web_allowed_users | join(", ") }}
+
+      The web UI allows you to:
+      - Generate new peer configs with QR codes
+      - View connected peers
+      - Download config files
+  when: wireguard_web_enabled | default(true)

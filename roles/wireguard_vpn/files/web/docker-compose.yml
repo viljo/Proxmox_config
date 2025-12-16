@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  vpn-manager:
+    build: .
+    container_name: vpn-manager
+    restart: unless-stopped
+    ports:
+      - "8080:8000"
+    environment:
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
+      - GITLAB_CLIENT_ID=${GITLAB_CLIENT_ID}
+      - GITLAB_CLIENT_SECRET=${GITLAB_CLIENT_SECRET}
+      - GITLAB_REDIRECT_URI=${GITLAB_REDIRECT_URI:-https://vpn.viljo.se/auth/callback}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_USERS=${ALLOWED_USERS:-Viljosson}
+      - WG_CONFIG_PATH=/etc/wireguard
+      - SERVER_PUBLIC_KEY_PATH=/etc/wireguard/server_public.key
+      - WG_ENDPOINT=${WG_ENDPOINT:-vpn.viljo.se:51820}
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-192.168.1.0/24, 172.31.31.0/24, 10.10.10.0/24}
+      - WG_DNS=${WG_DNS:-1.1.1.1}
+    volumes:
+      - /etc/wireguard:/etc/wireguard
+    cap_add:
+      - NET_ADMIN
+    network_mode: host

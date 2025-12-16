@@ -94,7 +94,16 @@ infrastructure_services:
     description: File sharing with SFTP and web interface
     subdomain: store
     status: deployed_working
-    note: "GitLab OAuth, SFTP on port 2223, public/private file areas, API key access."
+    note: "GitLab OAuth, SFTP on port 22, public/private file areas, API key access."
+
+  - name: WireGuard VPN
+    slug: vpn
+    icon: "🔐"
+    description: Emergency access VPN to all internal networks
+    subdomain: vpn
+    port: 51820/udp
+    status: deployed_working
+    note: "CRITICAL backup access. VPN server running on LXC 110 (192.168.1.110, 172.31.31.110 for Traefik). Web UI at https://vpn.viljo.se with GitLab OAuth. Provides access to 192.168.1.0/24 (management), 172.31.31.0/24 (containers), and 10.10.10.0/24 (VPN network). NAT configured for UDP port 51820."
 
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:

@@ -8,7 +8,8 @@ fileshare_lxc_id: 200
 
 # Ports
 fileshare_web_port: 8085
-fileshare_sftp_port: 2223
+fileshare_sftp_port: 22  # External port (after NAT)
+fileshare_sftp_host_port: 2223  # LXC host port (before NAT)
 
 # Paths
 fileshare_base_path: /opt/docker-stack/fileshare

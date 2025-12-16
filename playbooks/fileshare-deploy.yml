@@ -50,9 +50,9 @@
   post_tasks:
     - name: Configure NAT port forwarding for SFTP
       ansible.builtin.shell: |
-        # Add NAT rule for Fileshare SFTP port
-        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport 2223 -j DNAT --to-destination 172.31.31.10:2223 2>/dev/null || \
-          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport 2223 -j DNAT --to-destination 172.31.31.10:2223
+        # Add NAT rule for Fileshare SFTP - external port 22 to LXC host port 2223
+        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport {{ fileshare_sftp_port }} -j DNAT --to-destination 172.31.31.10:{{ fileshare_sftp_host_port }} 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport {{ fileshare_sftp_port }} -j DNAT --to-destination 172.31.31.10:{{ fileshare_sftp_host_port }}
 
         # Save rules persistently
         iptables-save > /etc/iptables/rules.v4

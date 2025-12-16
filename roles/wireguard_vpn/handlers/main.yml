@@ -1,0 +1,4 @@
+---
+# WireGuard VPN Handlers
+# Note: Docker Traefik auto-reloads when config files change (file watcher enabled)
+# No handler needed for Traefik reload

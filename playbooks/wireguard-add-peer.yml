@@ -1,0 +1,135 @@
+---
+# Playbook: Add WireGuard Peer
+# Description: Generate keys and config for a new VPN client
+#
+# Usage:
+#   ansible-playbook playbooks/wireguard-add-peer.yml -e peer_name=laptop
+#   ansible-playbook playbooks/wireguard-add-peer.yml -e peer_name=phone -e peer_ip=10.10.10.3
+
+- name: Add WireGuard Peer
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    wireguard_lxc_id: 110
+    wireguard_port: 51820
+    wireguard_network: "10.10.10.0/24"
+    wireguard_dns: "1.1.1.1"
+    wireguard_allowed_networks:
+      - "192.168.1.0/24"
+      - "172.31.31.0/24"
+    # peer_name: must be provided via -e
+    # peer_ip: optional, will auto-assign if not provided
+
+  tasks:
+    - name: Validate peer_name is provided
+      ansible.builtin.fail:
+        msg: "peer_name is required! Use: -e peer_name=mydevice"
+      when: peer_name is not defined
+
+    - name: Get existing peers to find next IP
+      ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- wg show wg0 allowed-ips
+      register: existing_peers
+      changed_when: false
+      failed_when: false
+
+    - name: Calculate next peer IP
+      ansible.builtin.set_fact:
+        client_ip: "{{ peer_ip | default('10.10.10.' + ((existing_peers.stdout_lines | length) + 2) | string) }}"
+
+    - name: Generate client keys on server
+      ansible.builtin.command: >
+        pct exec {{ wireguard_lxc_id }} -- bash -c '
+          cd /etc/wireguard
+          wg genkey | tee {{ peer_name }}_private.key | wg pubkey > {{ peer_name }}_public.key
+          wg genpsk > {{ peer_name }}_preshared.key
+          chmod 600 {{ peer_name }}_*.key
+        '
+      changed_when: true
+
+    - name: Get client private key
+      ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- cat /etc/wireguard/{{ peer_name }}_private.key
+      register: client_private_key_result
+      changed_when: false
+
+    - name: Get client public key
+      ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- cat /etc/wireguard/{{ peer_name }}_public.key
+      register: client_public_key_result
+      changed_when: false
+
+    - name: Get preshared key
+      ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- cat /etc/wireguard/{{ peer_name }}_preshared.key
+      register: client_preshared_key_result
+      changed_when: false
+
+    - name: Get server public key
+      ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- cat /etc/wireguard/server_public.key
+      register: server_public_key
+      changed_when: false
+
+    - name: Add peer to server config
+      ansible.builtin.command: >
+        pct exec {{ wireguard_lxc_id }} -- bash -c '
+          cat >> /etc/wireguard/wg0.conf << EOF
+
+# {{ peer_name }} - added {{ ansible_date_time.date | default("today") }}
+[Peer]
+PublicKey = {{ client_public_key_result.stdout }}
+PresharedKey = {{ client_preshared_key_result.stdout }}
+AllowedIPs = {{ client_ip }}/32
+EOF
+        '
+      changed_when: true
+
+    - name: Reload WireGuard config
+      ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- wg syncconf wg0 <(wg-quick strip wg0)
+      args:
+        executable: /bin/bash
+      changed_when: true
+      failed_when: false
+
+    - name: Restart WireGuard if syncconf failed
+      ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- systemctl restart wg-quick@wg0
+      changed_when: true
+
+    - name: Create client config file
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: |
+          [Interface]
+          PrivateKey = {{ client_private_key_result.stdout }}
+          Address = {{ client_ip }}/32
+          DNS = {{ wireguard_dns }}
+
+          [Peer]
+          PublicKey = {{ server_public_key.stdout }}
+          PresharedKey = {{ client_preshared_key_result.stdout }}
+          Endpoint = vpn.{{ public_domain }}:{{ wireguard_port }}
+          AllowedIPs = {{ wireguard_allowed_networks | join(', ') }}, {{ wireguard_network }}
+          PersistentKeepalive = 25
+        dest: "/tmp/wireguard_{{ peer_name }}.conf"
+        mode: '0600'
+
+    - name: Display client config
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "WireGuard Client Config for: {{ peer_name }}"
+          - "=========================================="
+          - ""
+          - "Client IP: {{ client_ip }}"
+          - "Config saved to: /tmp/wireguard_{{ peer_name }}.conf"
+          - ""
+          - "To use on macOS/iOS/Android:"
+          - "  Import the config file into WireGuard app"
+          - ""
+          - "To use on Linux:"
+          - "  sudo cp /tmp/wireguard_{{ peer_name }}.conf /etc/wireguard/wg0.conf"
+          - "  sudo wg-quick up wg0"
+          - ""
+          - "Networks accessible via VPN:"
+          - "  - 192.168.1.0/24 (Proxmox management)"
+          - "  - 172.31.31.0/24 (LXC containers)"
+          - "  - 10.10.10.0/24 (VPN network)"
+          - "=========================================="

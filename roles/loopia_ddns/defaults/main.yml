@@ -27,6 +27,7 @@ loopia_ddns_records:
   - host: mail
   - host: ssh
   - host: store
+  - host: vpn
 
 # Installation paths
 loopia_ddns_lib_path: /usr/local/lib/loopia-ddns

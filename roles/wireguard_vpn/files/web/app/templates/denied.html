@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Access Denied - WireGuard VPN</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            max-width: 500px;
+        }
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: #ef4444;
+        }
+        .message {
+            color: #888;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        .user-info {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+        .user-info p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .user-info strong {
+            color: #aaa;
+        }
+        .logout-btn {
+            display: inline-block;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🚫</div>
+        <h1>Access Denied</h1>
+        <p class="message">
+            Your GitLab account is not authorized to access the WireGuard VPN Manager.
+            Contact the administrator if you need access.
+        </p>
+
+        <div class="user-info">
+            <p>Logged in as: <strong>{{ user.username }}</strong></p>
+        </div>
+
+        <a href="/auth/logout" class="logout-btn">Logout</a>
+    </div>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard VPN Manager</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .header {
+            background: rgba(0,0,0,0.3);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .user-info img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+        }
+        .logout-btn {
+            color: #888;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border: 1px solid #444;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .logout-btn:hover {
+            color: #fff;
+            border-color: #666;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .card h2 {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            color: #ccc;
+        }
+        .server-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        .info-item {
+            background: rgba(0,0,0,0.2);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        .info-item label {
+            display: block;
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 0.25rem;
+        }
+        .info-item span {
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .add-peer-form {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .add-peer-form input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.75rem 1rem;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: rgba(0,0,0,0.3);
+            color: #fff;
+            font-size: 1rem;
+        }
+        .add-peer-form input::placeholder {
+            color: #666;
+        }
+        .add-peer-form button {
+            padding: 0.75rem 2rem;
+            background: #4ade80;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .add-peer-form button:hover {
+            background: #22c55e;
+        }
+        .peers-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .peers-table th, .peers-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .peers-table th {
+            color: #888;
+            font-weight: 500;
+            font-size: 0.85rem;
+        }
+        .peers-table td {
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+        .network-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .network-badge {
+            background: rgba(74, 222, 128, 0.2);
+            color: #4ade80;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔐 WireGuard VPN Manager</h1>
+        <div class="user-info">
+            {% if user.avatar_url %}
+            <img src="{{ user.avatar_url }}" alt="{{ user.name }}">
+            {% endif %}
+            <span>{{ user.name }}</span>
+            <a href="/auth/logout" class="logout-btn">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Server Information</h2>
+            <div class="server-info">
+                <div class="info-item">
+                    <label>Endpoint</label>
+                    <span>vpn.viljo.se:51820</span>
+                </div>
+                <div class="info-item">
+                    <label>Server Public Key</label>
+                    <span>{{ server_public_key }}</span>
+                </div>
+                <div class="info-item">
+                    <label>VPN Network</label>
+                    <span>10.10.10.0/24</span>
+                </div>
+            </div>
+            <div style="margin-top: 1rem;">
+                <label style="display: block; font-size: 0.8rem; color: #888; margin-bottom: 0.5rem;">Accessible Networks</label>
+                <div class="network-list">
+                    <span class="network-badge">192.168.1.0/24 (Management)</span>
+                    <span class="network-badge">172.31.31.0/24 (Containers)</span>
+                    <span class="network-badge">10.10.10.0/24 (VPN)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Add New Peer</h2>
+            <form action="/peers/add" method="POST" class="add-peer-form">
+                <input type="text" name="peer_name" placeholder="Device name (e.g., laptop, phone)" required pattern="[a-zA-Z0-9_-]+">
+                <button type="submit">Generate Config</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Connected Peers</h2>
+            {% if peers %}
+            <table class="peers-table">
+                <thead>
+                    <tr>
+                        <th>Public Key</th>
+                        <th>Allowed IPs</th>
+                        <th>Last Handshake</th>
+                        <th>Transfer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for peer in peers %}
+                    <tr>
+                        <td>{{ peer.public_key }}</td>
+                        <td>{{ peer.allowed_ips }}</td>
+                        <td>{{ peer.last_handshake }}</td>
+                        <td>{{ peer.transfer }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                No peers configured yet. Add your first device above.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>

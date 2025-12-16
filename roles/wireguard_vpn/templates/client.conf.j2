@@ -1,0 +1,13 @@
+[Interface]
+PrivateKey = {{ client_private_key }}
+Address = {{ client_ip }}/32
+DNS = {{ wireguard_dns }}
+
+[Peer]
+PublicKey = {{ server_public_key.stdout }}
+{% if client_preshared_key is defined %}
+PresharedKey = {{ client_preshared_key }}
+{% endif %}
+Endpoint = vpn.viljo.se:{{ wireguard_port }}
+AllowedIPs = {{ wireguard_allowed_networks | join(', ') }}, {{ wireguard_network }}
+PersistentKeepalive = 25

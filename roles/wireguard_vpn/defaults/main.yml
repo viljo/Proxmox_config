@@ -1,0 +1,51 @@
+---
+# WireGuard VPN Configuration
+
+# LXC Container settings
+wireguard_lxc_id: 110
+wireguard_lxc_hostname: wireguard
+wireguard_lxc_memory: 256
+wireguard_lxc_cores: 1
+wireguard_lxc_disk: 2
+wireguard_lxc_storage: local-lvm
+wireguard_lxc_template: "local:vztmpl/debian-12-standard_12.12-1_amd64.tar.zst"
+
+# Network configuration - connected to THREE networks for full access
+# vmbr0: Management network (192.168.1.0/24) - Starlink
+# vmbr2: WAN network (gets DHCP from Bahnhof)
+# vmbr3: Container network (172.31.31.0/24) - For Traefik connectivity
+wireguard_lxc_net0: "name=eth0,bridge=vmbr0,ip=192.168.1.110/24,gw=192.168.1.1"
+wireguard_lxc_net1: "name=eth1,bridge=vmbr2,ip=dhcp"
+wireguard_lxc_net2: "name=eth2,bridge=vmbr3,ip=172.31.31.110/24"
+wireguard_vmbr3_ip: "172.31.31.110"
+
+# WireGuard settings
+wireguard_port: 51820
+wireguard_interface: wg0
+wireguard_network: "10.10.10.0/24"
+wireguard_server_ip: "10.10.10.1"
+
+# Routes to push to clients (all internal networks)
+wireguard_allowed_networks:
+  - "192.168.1.0/24"    # Management network (Starlink)
+  - "172.31.31.0/24"    # LXC container network (vmbr1)
+  - "172.16.10.0/24"    # Additional container network if any
+
+# DNS server to push to clients
+wireguard_dns: "1.1.1.1"
+
+# Peer configuration (will be generated)
+wireguard_peers: []
+
+# Web UI settings
+wireguard_web_enabled: true
+wireguard_web_port: 8080
+wireguard_web_gitlab_url: "https://gitlab.com"
+wireguard_web_allowed_users:
+  - "Viljosson"
+# OAuth credentials (should be set from vault)
+# Create app at: https://gitlab.com/-/profile/applications
+# Redirect URI: https://vpn.viljo.se/auth/callback
+# Scopes: read_user
+wireguard_web_gitlab_client_id: "{{ vault_wireguard_gitlab_client_id | default('') }}"
+wireguard_web_gitlab_client_secret: "{{ vault_wireguard_gitlab_client_secret | default('') }}"

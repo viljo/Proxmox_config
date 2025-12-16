@@ -1,0 +1,23 @@
+# WireGuard VPN Manager Traefik configuration
+# Managed by Ansible - do not edit manually
+# Deployed to LXC 200 Docker Traefik (not host Traefik)
+
+http:
+  routers:
+    vpn-manager:
+      rule: "Host(`vpn.{{ public_domain }}`)"
+      service: vpn-manager
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: dns
+
+  services:
+    vpn-manager:
+      loadBalancer:
+        servers:
+          # Use vmbr3 IP (172.31.31.x) since Docker Traefik is on that network
+          - url: "http://{{ wireguard_vmbr3_ip | default('172.31.31.' ~ wireguard_lxc_id) }}:{{ wireguard_web_port }}"
+        passHostHeader: true
+        responseForwarding:
+          flushInterval: "100ms"

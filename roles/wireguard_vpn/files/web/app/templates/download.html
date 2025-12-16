@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WireGuard Config - {{ peer_name }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .header {
+            background: rgba(0,0,0,0.3);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .back-btn {
+            color: #888;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border: 1px solid #444;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .back-btn:hover {
+            color: #fff;
+            border-color: #666;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        .success-banner {
+            background: rgba(74, 222, 128, 0.2);
+            border: 1px solid #4ade80;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+        .success-banner h2 {
+            color: #4ade80;
+            margin-bottom: 0.5rem;
+        }
+        .success-banner p {
+            color: #aaa;
+        }
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        @media (max-width: 768px) {
+            .config-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .card h3 {
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            color: #ccc;
+        }
+        .qr-container {
+            display: flex;
+            justify-content: center;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+        }
+        #qrcode {
+            width: 256px;
+            height: 256px;
+        }
+        .config-display {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .download-btn {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            background: #4ade80;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            margin-top: 1rem;
+            transition: background 0.2s;
+        }
+        .download-btn:hover {
+            background: #22c55e;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .info-row label {
+            color: #888;
+        }
+        .info-row span {
+            font-family: monospace;
+        }
+        .warning {
+            background: rgba(251, 191, 36, 0.2);
+            border: 1px solid #fbbf24;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1.5rem;
+            font-size: 0.9rem;
+        }
+        .warning strong {
+            color: #fbbf24;
+        }
+        .instructions {
+            margin-top: 1.5rem;
+        }
+        .instructions h4 {
+            color: #ccc;
+            margin-bottom: 0.75rem;
+        }
+        .instructions ul {
+            list-style: none;
+            color: #aaa;
+        }
+        .instructions li {
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .instructions li::before {
+            content: ">";
+            position: absolute;
+            left: 0;
+            color: #4ade80;
+        }
+        .copy-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+        .copy-btn:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔐 WireGuard Config</h1>
+        <a href="/" class="back-btn">Back to Dashboard</a>
+    </div>
+
+    <div class="container">
+        <div class="success-banner">
+            <h2>Peer Created Successfully!</h2>
+            <p>Configuration for <strong>{{ peer_name }}</strong> is ready</p>
+        </div>
+
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="info-row">
+                <label>Device Name</label>
+                <span>{{ peer_name }}</span>
+            </div>
+            <div class="info-row">
+                <label>VPN IP Address</label>
+                <span>{{ peer_ip }}</span>
+            </div>
+        </div>
+
+        <div class="config-grid">
+            <div class="card">
+                <h3>Scan QR Code</h3>
+                <p style="color: #888; font-size: 0.9rem; margin-bottom: 1rem;">
+                    Scan with WireGuard app on iOS/Android
+                </p>
+                <div class="qr-container">
+                    <canvas id="qrcode"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Configuration File</h3>
+                <div class="config-display" id="config-text">{{ config }}</div>
+                <button class="copy-btn" onclick="copyConfig()">Copy to Clipboard</button>
+                <a href="/peers/download/{{ peer_name }}.conf" class="download-btn">
+                    Download {{ peer_name }}.conf
+                </a>
+            </div>
+        </div>
+
+        <div class="warning">
+            <strong>Security Notice:</strong> This configuration contains your private key.
+            Do not share it with anyone. This page will not be accessible after you leave.
+        </div>
+
+        <div class="instructions">
+            <h4>Setup Instructions</h4>
+            <ul>
+                <li><strong>iOS/Android:</strong> Install WireGuard app, tap +, scan QR code</li>
+                <li><strong>macOS:</strong> Install WireGuard from App Store, import config file</li>
+                <li><strong>Linux:</strong> <code>sudo cp {{ peer_name }}.conf /etc/wireguard/wg0.conf && sudo wg-quick up wg0</code></li>
+                <li><strong>Windows:</strong> Install WireGuard, import tunnel from file</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Generate QR code
+        const config = document.getElementById('config-text').textContent;
+        QRCode.toCanvas(document.getElementById('qrcode'), config, {
+            width: 256,
+            margin: 2,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
+        }, function(error) {
+            if (error) console.error(error);
+        });
+
+        // Copy to clipboard
+        function copyConfig() {
+            navigator.clipboard.writeText(config).then(() => {
+                const btn = document.querySelector('.copy-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy to Clipboard', 2000);
+            });
+        }
+    </script>
+</body>
+</html>

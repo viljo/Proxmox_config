@@ -1,0 +1,68 @@
+---
+# Playbook: Deploy WireGuard VPN Server
+# Description: Deploy isolated WireGuard VPN LXC with access to all networks
+#
+# This VPN provides emergency access to:
+# - 192.168.1.0/24 (Management network / Starlink)
+# - 172.31.31.0/24 (LXC container network)
+# - All services on the Proxmox host
+#
+# CRITICAL: This is a backup access method - keep it running always!
+
+- name: Deploy WireGuard VPN Server
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "WireGuard VPN Server Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook will deploy:"
+          - "  - Dedicated WireGuard LXC container"
+          - "  - Access to management network (192.168.1.0/24)"
+          - "  - Access to container network (172.31.31.0/24)"
+          - ""
+          - "Endpoint: vpn.{{ public_domain }}:51820"
+          - "VPN Network: 10.10.10.0/24"
+          - ""
+          - "CRITICAL: This provides emergency access!"
+          - "=========================================="
+
+  roles:
+    - wireguard_vpn
+
+  post_tasks:
+    - name: Configure NAT port forwarding for WireGuard
+      ansible.builtin.shell: |
+        # Add NAT rule for WireGuard UDP port
+        iptables -t nat -C PREROUTING -i vmbr2 -p udp --dport {{ wireguard_port }} -j DNAT --to-destination 192.168.1.110:{{ wireguard_port }} 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p udp --dport {{ wireguard_port }} -j DNAT --to-destination 192.168.1.110:{{ wireguard_port }}
+
+        # Save rules persistently
+        iptables-save > /etc/iptables/rules.v4
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "WireGuard VPN Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Server is running at: vpn.{{ public_domain }}:{{ wireguard_port }}"
+          - "VPN Network: {{ wireguard_network }}"
+          - ""
+          - "To add a client peer, run:"
+          - "  ansible-playbook playbooks/wireguard-add-peer.yml -e peer_name=mydevice"
+          - ""
+          - "The client config will be saved to /tmp/"
+          - "=========================================="

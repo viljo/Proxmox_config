@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     privileged: true
     ports:
-      - "{{ fileshare_sftp_port }}:22"
+      - "{{ fileshare_sftp_host_port }}:22"
     volumes:
       - {{ fileshare_data_path }}/public:/data/public
       - {{ fileshare_data_path }}/private:/data/private

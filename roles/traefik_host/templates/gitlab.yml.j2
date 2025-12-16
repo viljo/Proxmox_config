@@ -14,7 +14,8 @@ http:
 {% if traefik_host_gitlab_pages_enabled %}
     gitlab-pages:
       # Traefik v3 syntax: raw Go regexp without named groups
-      rule: "HostRegexp(`^[a-zA-Z0-9-]+\\.{{ traefik_host_gitlab_pages_domain | replace('.', '\\.') }}$`)"
+      # Use [.] instead of \. to avoid YAML escape character issues
+      rule: 'HostRegexp(`^[a-zA-Z0-9-]+[.]{{ traefik_host_gitlab_pages_domain | replace(".", "[.]") }}$`)'
       service: gitlab-pages
       entryPoints:
         - websecure
