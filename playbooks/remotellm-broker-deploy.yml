@@ -216,7 +216,7 @@
         pct exec {{ lxc_id }} -- bash -c 'cd {{ deploy_path }} && docker compose build && docker compose up -d'
       changed_when: true
 
-    - name: Create Proxmox host Traefik config for WebSocket routing
+    - name: Create Proxmox host Traefik config for WebSocket and API routing
       ansible.builtin.copy:
         dest: /etc/traefik/dynamic/remotellm.yml
         mode: '0644'
@@ -231,11 +231,22 @@
                   - websecure
                 tls:
                   certResolver: dns
+                priority: 10
 
-              # Main web/API traffic through LXC Traefik
+              # API traffic direct to broker (prevents redirect loops through Docker Traefik)
+              remotellm-api:
+                rule: "Host(`{{ service_domain }}`) && PathPrefix(`/v1`)"
+                service: remotellm-broker
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: dns
+                priority: 5
+
+              # Main web traffic through Docker Traefik (for UI)
               remotellm:
                 rule: "Host(`{{ service_domain }}`)"
-                service: remotellm
+                service: remotellm-web
                 entryPoints:
                   - websecure
                 tls:
@@ -252,8 +263,17 @@
                   responseForwarding:
                     flushInterval: "-1"
 
-              # Web/API through LXC Traefik
-              remotellm:
+              # API direct to broker (port {{ broker_api_port }})
+              remotellm-broker:
+                loadBalancer:
+                  servers:
+                    - url: "http://{{ lxc_internal_ip }}:{{ broker_api_port }}"
+                  passHostHeader: true
+                  responseForwarding:
+                    flushInterval: "-1"
+
+              # Web UI through Docker Traefik
+              remotellm-web:
                 loadBalancer:
                   servers:
                     - url: "http://{{ lxc_internal_ip }}:80"
