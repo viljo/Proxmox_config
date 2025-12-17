@@ -1,0 +1,249 @@
+---
+# Playbook: Deploy SSH Bridge Service
+# Description: Deploy SSH-over-WebSocket bridge for NAT traversal
+#
+# Prerequisites:
+# 1. Create GitLab OAuth application at https://gitlab.com/-/profile/applications
+#    - Name: SSH Bridge viljo.se
+#    - Redirect URI: https://sshbridge.viljo.se/oauth/callback
+#    - Scopes: read_user
+# 2. Add OAuth credentials to vault:
+#    ansible-vault edit inventory/group_vars/all/vault.yml
+#    - vault_sshbridge_gitlab_client_id
+#    - vault_sshbridge_gitlab_client_secret
+#    - vault_sshbridge_session_secret
+
+- name: Deploy SSH Bridge Service
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    lxc_id: 200
+    service_subdomain: sshbridge
+    service_domain: "{{ service_subdomain }}.{{ public_domain }}"
+    deploy_path: /opt/docker-stack/ssh-bridge
+    repo_url: "https://github.com/Viljo/ssh_bridge.git"
+
+    # SSH tunnel port range
+    port_range_start: 2300
+    port_range_end: 2399
+
+    # GitLab OAuth credentials from vault
+    gitlab_client_id: "{{ vault_sshbridge_gitlab_client_id }}"
+    gitlab_client_secret: "{{ vault_sshbridge_gitlab_client_secret }}"
+    session_secret: "{{ vault_sshbridge_session_secret }}"
+
+    # Authorized users (GitLab usernames, comma-separated)
+    authorized_users: "viljo,Viljosson"
+
+    # LXC internal IP
+    lxc_internal_ip: "172.31.31.10"
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SSH Bridge Service Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook will deploy:"
+          - "  - SSH Bridge web interface with GitLab OAuth"
+          - "  - WebSocket server for agent connections"
+          - "  - TCP tunnel ports {{ port_range_start }}-{{ port_range_end }}"
+          - ""
+          - "Web URL: https://{{ service_domain }}"
+          - "SSH Tunnel Ports: {{ port_range_start }}-{{ port_range_end }}"
+          - ""
+          - "Deployment target: LXC {{ lxc_id }}"
+          - "=========================================="
+
+  tasks:
+    - name: Create deployment directory
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- mkdir -p {{ deploy_path }}
+      changed_when: true
+
+    - name: Clone or update SSH Bridge repository
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c '
+          if [ -d {{ deploy_path }}/repo ]; then
+            cd {{ deploy_path }}/repo && git pull
+          else
+            git clone {{ repo_url }} {{ deploy_path }}/repo
+          fi'
+      changed_when: true
+
+    - name: Create .env file
+      ansible.builtin.copy:
+        dest: /tmp/sshbridge-env
+        mode: '0600'
+        content: |
+          # SSH Bridge Environment
+          # GitLab OAuth (gitlab.com)
+          GITLAB_CLIENT_ID={{ gitlab_client_id }}
+          GITLAB_CLIENT_SECRET={{ gitlab_client_secret }}
+          GITLAB_REDIRECT_URI=https://{{ service_domain }}/oauth/callback
+
+          # Session secret
+          SESSION_SECRET={{ session_secret }}
+
+          # Authorized users (GitLab usernames)
+          AUTHORIZED_USERS={{ authorized_users }}
+
+    - name: Copy .env to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/sshbridge-env {{ deploy_path }}/repo/docker/.env
+      changed_when: true
+
+    - name: Create docker-compose.yml
+      ansible.builtin.copy:
+        dest: /tmp/sshbridge-compose.yml
+        mode: '0644'
+        content: |
+          services:
+            ssh-bridge:
+              build:
+                context: ..
+                dockerfile: docker/Dockerfile
+              container_name: ssh-bridge
+              restart: unless-stopped
+
+              environment:
+                - DATABASE_PATH=/data/bridge.db
+                - BRIDGE_HOST=0.0.0.0
+                - BRIDGE_PORT=8443
+                - BRIDGE_DOMAIN={{ service_domain }}
+                - PORT_RANGE_START={{ port_range_start }}
+                - PORT_RANGE_END={{ port_range_end }}
+                - GITLAB_CLIENT_ID=${GITLAB_CLIENT_ID}
+                - GITLAB_CLIENT_SECRET=${GITLAB_CLIENT_SECRET}
+                - GITLAB_REDIRECT_URI=${GITLAB_REDIRECT_URI}
+                - SESSION_SECRET=${SESSION_SECRET}
+                - AUTHORIZED_USERS=${AUTHORIZED_USERS}
+
+              volumes:
+                - bridge-data:/data
+
+              ports:
+                - "{{ port_range_start }}-{{ port_range_end }}:{{ port_range_start }}-{{ port_range_end }}"
+
+              labels:
+                - "traefik.enable=true"
+                - "traefik.http.routers.ssh-bridge.rule=Host(`{{ service_domain }}`)"
+                - "traefik.http.routers.ssh-bridge.entrypoints=websecure"
+                - "traefik.http.routers.ssh-bridge.tls.certresolver=letsencrypt"
+                - "traefik.http.routers.ssh-bridge.service=ssh-bridge"
+                - "traefik.http.services.ssh-bridge.loadbalancer.server.port=8443"
+                - "traefik.http.services.ssh-bridge.loadbalancer.responseforwarding.flushinterval=-1"
+                - "com.centurylinklabs.watchtower.enable=false"
+
+              networks:
+                - traefik_public
+
+          networks:
+            traefik_public:
+              external: true
+
+          volumes:
+            bridge-data:
+
+    - name: Copy docker-compose.yml to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/sshbridge-compose.yml {{ deploy_path }}/repo/docker/docker-compose.yml
+      changed_when: true
+
+    - name: Create Traefik static config for SSH Bridge
+      ansible.builtin.copy:
+        dest: /tmp/sshbridge-traefik.yml
+        mode: '0644'
+        content: |
+          http:
+            routers:
+              ssh-bridge:
+                rule: "Host(`{{ service_domain }}`)"
+                service: ssh-bridge
+                entryPoints:
+                  - websecure
+                tls:
+                  certResolver: letsencrypt
+
+            services:
+              ssh-bridge:
+                loadBalancer:
+                  servers:
+                    - url: "http://ssh-bridge:8443"
+                  responseForwarding:
+                    flushInterval: "-1"
+
+    - name: Copy Traefik config to LXC
+      ansible.builtin.command: >
+        pct push {{ lxc_id }} /tmp/sshbridge-traefik.yml /opt/docker-stack/traefik/dynamic/ssh-bridge.yml
+      changed_when: true
+
+    - name: Build and deploy SSH Bridge
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- bash -c 'cd {{ deploy_path }}/repo/docker && docker compose build && docker compose up -d'
+      changed_when: true
+
+    - name: Configure NAT port forwarding for SSH tunnels
+      ansible.builtin.shell: |
+        # Add NAT rule for SSH Bridge tunnel ports
+        for port in $(seq {{ port_range_start }} {{ port_range_end }}); do
+          iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport $port -j DNAT --to-destination {{ lxc_internal_ip }}:$port 2>/dev/null || \
+            iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport $port -j DNAT --to-destination {{ lxc_internal_ip }}:$port
+        done
+
+        # Save rules persistently
+        iptables-save > /etc/iptables/rules.v4
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Wait for container to start
+      ansible.builtin.wait_for:
+        timeout: 10
+      delegate_to: localhost
+
+    - name: Check container status
+      ansible.builtin.command: >
+        pct exec {{ lxc_id }} -- docker ps --filter name=ssh-bridge --format "{{ '{{' }}.Status{{ '}}' }}"
+      register: container_status
+      changed_when: false
+
+  post_tasks:
+    - name: Cleanup temp files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /tmp/sshbridge-env
+        - /tmp/sshbridge-compose.yml
+        - /tmp/sshbridge-traefik.yml
+      delegate_to: localhost
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "SSH Bridge Service Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Container Status: {{ container_status.stdout }}"
+          - ""
+          - "Web URL: https://{{ service_domain }}"
+          - "Authentication: GitLab OAuth"
+          - ""
+          - "SSH Tunnel Ports: {{ port_range_start }}-{{ port_range_end }}"
+          - "Authorized Users: {{ authorized_users }}"
+          - ""
+          - "Usage:"
+          - "  1. Visit https://{{ service_domain }}"
+          - "  2. Login with GitLab"
+          - "  3. Register an agent to get credentials"
+          - "  4. Run agent on NAT'd machine"
+          - "  5. Connect via assigned SSH tunnel port"
+          - ""
+          - "GitHub: {{ repo_url }}"
+          - "=========================================="

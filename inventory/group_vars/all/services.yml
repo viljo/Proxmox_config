@@ -105,6 +105,14 @@ infrastructure_services:
     status: deployed_working
     note: "CRITICAL backup access. VPN server running on LXC 110 (192.168.1.110, 172.31.31.110 for Traefik). Web UI at https://vpn.viljo.se with GitLab OAuth. Provides access to 192.168.1.0/24 (management), 172.31.31.0/24 (containers), and 10.10.10.0/24 (VPN network). NAT configured for UDP port 51820."
 
+  - name: SSH Bridge
+    slug: sshbridge
+    icon: "🔌"
+    description: SSH-over-WebSocket bridge for NAT traversal
+    subdomain: sshbridge
+    status: deployed_working
+    note: "GitLab.com OAuth. Allows SSH agents behind NAT to be accessible via assigned ports 2300-2399. GitHub repo: Viljo/ssh_bridge. Running in LXC 200."
+
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:
   - name: Ollama LLM
