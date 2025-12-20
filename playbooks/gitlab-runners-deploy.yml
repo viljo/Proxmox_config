@@ -1,8 +1,8 @@
 ---
-# Playbook: Deploy GitLab Runners
-# Description: Configure GitLab runners with persistent DNS for local GitLab
+# Playbook: Deploy GitLab Runner
+# Description: Deploy GitLab runner for gitlab.com projects
 
-- name: Deploy GitLab Runners
+- name: Deploy GitLab Runner
   hosts: proxmox_admin
   gather_facts: false
 
@@ -15,16 +15,16 @@
       ansible.builtin.debug:
         msg:
           - "=========================================="
-          - "GitLab Runners Configuration"
+          - "GitLab Runner Configuration"
           - "=========================================="
-          - "This playbook will configure runners with:"
-          - "  - Persistent DNS for gitlab.viljo.se"
-          - "  - Connection to traefik_public network"
-          - "  - Dual registration (gitlab.com + local)"
+          - "This playbook will configure runner with:"
+          - "  - 6 concurrent jobs"
+          - "  - Image caching (pull_policy: if-not-present)"
+          - "  - Target: gitlab.com"
           - "=========================================="
 
   tasks:
-    - name: Deploy GitLab Runners
+    - name: Deploy GitLab Runner
       ansible.builtin.include_role:
         name: gitlab_runners
 
@@ -33,13 +33,13 @@
       ansible.builtin.debug:
         msg:
           - "=========================================="
-          - "GitLab Runners Configuration Complete"
+          - "GitLab Runner Configuration Complete"
           - "=========================================="
           - ""
-          - "Runners are configured to serve:"
-          - "  - gitlab.com (existing projects)"
-          - "  - gitlab.viljo.se (local GitLab)"
+          - "Runner: ViktorToreRudolf"
+          - "Concurrent jobs: 6"
+          - "Image caching: enabled"
           - ""
           - "Verify with:"
-          - "  pct exec 200 -- docker exec gitlab-runner-1 gitlab-runner list"
+          - "  pct exec 200 -- docker exec gitlab-runner gitlab-runner list"
           - "=========================================="

@@ -1,24 +1,10 @@
 ---
 # GitLab Runners deployment tasks
 
-- name: Create runner directories
+- name: Create runner directory
   ansible.builtin.command: >
-    pct exec {{ lxc_id }} -- mkdir -p {{ item }}
-  loop:
-    - "{{ gitlab_runner_base_path }}"
-    - "{{ gitlab_runner_base_path }}/runner-1/config"
-    - "{{ gitlab_runner_base_path }}/runner-2/config"
+    pct exec {{ lxc_id }} -- mkdir -p {{ gitlab_runner_base_path }}/config
   changed_when: true
-
-- name: Get Traefik container IP
-  ansible.builtin.command: >
-    pct exec {{ lxc_id }} -- docker inspect traefik --format '{% raw %}{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}{% endraw %}'
-  register: traefik_ip_result
-  changed_when: false
-
-- name: Set Traefik IP fact
-  ansible.builtin.set_fact:
-    traefik_container_ip: "{{ traefik_ip_result.stdout }}"
 
 - name: Create docker-compose.yml on Proxmox host
   ansible.builtin.template:
@@ -36,12 +22,12 @@
     pct exec {{ lxc_id }} -- bash -c 'cd {{ gitlab_runner_base_path }} && docker compose down 2>/dev/null || true'
   changed_when: true
 
-- name: Start runner containers
+- name: Start runner container
   ansible.builtin.command: >
     pct exec {{ lxc_id }} -- bash -c 'cd {{ gitlab_runner_base_path }} && docker compose up -d'
   changed_when: true
 
-- name: Wait for runners to be running
+- name: Wait for runner to be running
   ansible.builtin.command: >
     pct exec {{ lxc_id }} -- docker ps --filter name=gitlab-runner --format '{% raw %}{{.Names}} {{.Status}}{% endraw %}'
   register: runner_status
@@ -49,9 +35,9 @@
   retries: 6
   delay: 5
 
-- name: Verify runners can reach local GitLab
+- name: Verify runner
   ansible.builtin.command: >
-    pct exec {{ lxc_id }} -- docker exec gitlab-runner-1 gitlab-runner verify 2>&1
+    pct exec {{ lxc_id }} -- docker exec gitlab-runner gitlab-runner verify 2>&1
   register: runner_verify
   changed_when: false
   ignore_errors: true
@@ -59,14 +45,13 @@
 - name: Display runner status
   ansible.builtin.debug:
     msg: |
-      GitLab Runners deployed with persistent configuration.
+      GitLab Runner deployed.
 
-      Runners are configured to serve:
-      - gitlab.com (existing projects)
-      - gitlab.viljo.se (local GitLab)
-
-      DNS Resolution:
-      - gitlab.viljo.se -> {{ traefik_container_ip }} (Traefik)
+      Configuration:
+      - Name: {{ gitlab_runner_name }}
+      - Concurrent jobs: {{ gitlab_runner_concurrent }}
+      - Image pull policy: {{ gitlab_runner_docker_pull_policy }}
+      - Target: gitlab.com
 
       Verify with:
-        pct exec 200 -- docker exec gitlab-runner-1 gitlab-runner list
+        pct exec 200 -- docker exec gitlab-runner gitlab-runner list

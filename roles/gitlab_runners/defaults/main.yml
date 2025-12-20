@@ -6,8 +6,8 @@ gitlab_runner_image: gitlab/gitlab-runner:latest
 gitlab_runner_timezone: Europe/Stockholm
 
 # Concurrency settings
-gitlab_runner_concurrent: 4
-gitlab_runner_request_concurrency: 4
+gitlab_runner_concurrent: 6
+gitlab_runner_request_concurrency: 6
 
 # Docker executor settings
 gitlab_runner_docker_image: docker:latest
@@ -22,20 +22,5 @@ gitlab_runner_networks:
   - backend
   - traefik_public
 
-# Extra hosts for internal DNS resolution
-# Maps hostnames to Docker container IPs for internal routing
-gitlab_runner_extra_hosts:
-  - "gitlab.viljo.se:traefik"  # Resolve via Traefik container
-
-# Local GitLab settings for runners
-# clone_url allows containers to clone via HTTP internally
-# network_mode=host allows containers to reach local services
-gitlab_runner_local_clone_url: "http://10.0.2.16"
-gitlab_runner_local_network_mode: "host"
-
-# Runner instances
-gitlab_runners:
-  - name: gitlab-runner-1
-    config_path: "{{ gitlab_runner_base_path }}/runner-1/config"
-  - name: gitlab-runner-2
-    config_path: "{{ gitlab_runner_base_path }}/runner-2/config"
+# Runner name (registered on gitlab.com)
+gitlab_runner_name: ViktorToreRudolf
