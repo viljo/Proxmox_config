@@ -37,29 +37,63 @@ zfs_datasets:
   - home_rack1/backups
 
 # Docker services to backup configs
+# All services in /opt/docker-stack/ on LXC 200
 docker_services:
+  # Critical infrastructure
   - name: traefik
+    critical: true
+  - name: gitlab
     critical: true
   - name: nextcloud
     critical: true
-  - name: jellyfin
-    critical: false
-  - name: qbittorrent
-    critical: false
+  - name: fileshare
+    critical: true
+  - name: ssh-bridge
+    critical: true
+
+  # User data services
   - name: zipline
     critical: true
   - name: open-webui
     critical: true
+  - name: claper
+    critical: true
+
+  # Media and utility
+  - name: jellyfin
+    critical: false
+  - name: qbittorrent
+    critical: false
   - name: webtop
     critical: false
   - name: jitsi
     critical: false
-  - name: claper
-    critical: true
+  - name: mailhog
+    critical: false
+
+  # OAuth2 proxies (config only, no data)
+  - name: oauth2-proxy-llm
+    critical: false
+  - name: oauth2-proxy-mailhog
+    critical: false
+  - name: oauth2-proxy-webtop
+    critical: false
+
+  # Runners and brokers
   - name: gitlab-runner
     critical: false
-  - name: gitlab
-    critical: true
+  - name: remotellm-broker
+    critical: false
+
+  # Static content (low priority)
+  - name: directory
+    critical: false
+  - name: landing
+    critical: false
+  - name: bitpoll
+    critical: false
+
+  # Note: watchtower excluded (no persistent config)
 
 # GitLab CE backup settings
 gitlab_backup_enabled: true

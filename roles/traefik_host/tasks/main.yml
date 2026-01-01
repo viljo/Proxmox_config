@@ -2,6 +2,12 @@
 # Traefik Host Role Tasks
 # Deploys dynamic configuration files to Proxmox host Traefik
 
+- name: Ensure Traefik service is enabled on boot
+  ansible.builtin.systemd:
+    name: traefik
+    enabled: true
+  when: traefik_host_enable_service | default(true)
+
 - name: Ensure Traefik dynamic config directory exists
   ansible.builtin.file:
     path: "{{ traefik_host_dynamic_path }}"

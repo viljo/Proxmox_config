@@ -32,3 +32,21 @@
   - Always use --alias flag with llama-server to set a clean model name (e.g., "qwen3-coder-30b")
   - Model names should not contain paths or file extensions
   - Standard format: {model-family}-{size} (e.g., "qwen3-coder-30b", "llama-3.1-8b")
+
+* Service Testing - ENFORCING:
+  - When testing services, ALWAYS test from external/public access (e.g., curl from the internet, not local)
+  - Use WebFetch tool or external DNS resolution to verify services are reachable from outside
+  - Local curl from the Proxmox host does NOT validate public accessibility
+  - End-to-end tests must emulate a real user accessing from the internet
+
+* Service Registry - ENFORCING:
+  - ALWAYS use inventory/group_vars/all/services.yml as the single source of truth for deployed services
+  - NEVER guess or assume which services exist - read the services.yml file first
+  - Only test/deploy services that are listed in the registry
+  - When adding new services, register them in services.yml BEFORE deployment
+
+* Links Portal - ENFORCING:
+  - ALL services in services.yml MUST be included in the links.viljo.se portal
+  - Exception: Services with `show_in_portal: false` are explicitly excluded
+  - When adding/removing services, the links portal MUST be updated to match services.yml
+  - The links portal is the user-facing service directory - keep it in sync

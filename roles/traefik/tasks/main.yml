@@ -1,6 +1,11 @@
 ---
 # Traefik deployment tasks
 
+- name: Ensure LXC container is set to autostart on boot
+  ansible.builtin.command: >
+    pct set {{ traefik_lxc_id }} --onboot 1
+  changed_when: true
+
 - name: Create Traefik directories
   ansible.builtin.command: >
     pct exec {{ traefik_lxc_id }} -- mkdir -p {{ item }}
