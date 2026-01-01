@@ -55,5 +55,17 @@ debian_template_file: "/var/lib/vz/template/cache/{{ debian_template_image }}"
 management_ip: 192.168.1.3
 management_netmask: 255.255.0.0
 management_gateway: 192.168.1.1
+
+# Storage paths
+# SSD storage for active downloads (fast I/O)
+ssd_storage_path: /mnt/home_ssd
+ssd_downloads_path: /mnt/home_ssd/downloads
+
+# ZFS HDD storage for backups and archive content
+zfs_storage_path: /mnt/home_rack1
+zfs_backups_path: /mnt/home_rack1/backups
+
+# LXC 200 container mount point (maps to SSD downloads)
+lxc200_downloads_mount: /mnt/home_ssd/downloads
 proxmox_root_authorized_keys:
   - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIWIfp3bKk+Re3aegfll17zNKahfav3TxEoUkNBBZo9l anders@Anderss-MacBook-Pro.local"

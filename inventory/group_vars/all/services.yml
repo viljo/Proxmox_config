@@ -38,7 +38,7 @@ infrastructure_services:
     description: Media streaming and management
     subdomain: media
     status: deployed_working
-    note: "Directly accessible, uses own authentication"
+    note: "Directly accessible, uses own authentication. Media served from SSD (/mnt/home_ssd/downloads)."
 
   - name: qBittorrent
     slug: torrent
@@ -46,7 +46,7 @@ infrastructure_services:
     description: BitTorrent client
     subdomain: torrent
     status: deployed_working
-    note: "Directly accessible, uses own authentication"
+    note: "Directly accessible, uses own authentication. Downloads stored on SSD (/mnt/home_ssd/downloads) for fast I/O."
 
   - name: Zipline
     slug: zipline
@@ -124,3 +124,22 @@ infrastructure_services_internal:
     ip: 172.31.31.201/24
     status: deployed_working
     note: "Running Ubuntu 24.04 with Ollama v0.13.0, accessible from Proxmox host, tested with qwen2.5:0.5b model"
+
+# Storage infrastructure
+storage_infrastructure:
+  - name: SSD Storage
+    type: disk
+    device: /dev/sdf
+    mount: /mnt/home_ssd
+    filesystem: ext4
+    size: 1.8TB
+    status: healthy
+    note: "WDC WDS200T2B0A 2TB SSD. Primary storage for downloads, Jellyfin media, qBittorrent. Mounted in LXC 200 at /mnt/downloads. SMB share: \\\\192.168.1.3\\home_ssd, NFS: 192.168.1.3:/mnt/home_ssd"
+
+  - name: ZFS Pool home_rack1
+    type: zfs_pool
+    mount: /mnt/home_rack1
+    config: raidz1 (5 drives)
+    size: 13.6TB
+    status: degraded
+    note: "5-disk RAIDZ1 (1x10TB WD Red, 1x3TB Seagate, 3x3TB WD Green). One disk (sde) has errors. Used for backups (/mnt/home_rack1/backups) and archive content. SMB share: \\\\192.168.1.3\\home_rack1, NFS: 192.168.1.3:/mnt/home_rack1"
