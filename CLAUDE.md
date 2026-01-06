@@ -50,3 +50,9 @@
   - Exception: Services with `show_in_portal: false` are explicitly excluded
   - When adding/removing services, the links portal MUST be updated to match services.yml
   - The links portal is the user-facing service directory - keep it in sync
+
+* Loopia DNS Records - ENFORCING:
+  - ALWAYS delete/replace old DNS records before adding new ones
+  - NEVER add duplicate A records - remove the old IP first, then add the new one
+  - The loopia-ddns script MUST remove existing records before creating new ones
+  - If DNS shows multiple A records for the same subdomain, clean up duplicates immediately
