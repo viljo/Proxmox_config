@@ -24,6 +24,11 @@
     pct exec {{ fileshare_lxc_id }} -- chmod -R 777 {{ fileshare_data_path }}/db {{ fileshare_data_path }}/private {{ fileshare_data_path }}/public {{ fileshare_sftp_path }}/authorized_keys
   changed_when: true
 
+- name: Set ownership on data directories (UID 999 = appuser in container)
+  ansible.builtin.command: >
+    pct exec {{ fileshare_lxc_id }} -- chown -R 999:999 {{ fileshare_data_path }}/db {{ fileshare_data_path }}/private {{ fileshare_data_path }}/public
+  changed_when: true
+
 - name: Create fileshare docker-compose.yml on Proxmox host
   ansible.builtin.template:
     src: docker-compose.yml.j2
