@@ -44,9 +44,12 @@ services:
       # No hardware - network only mode
       - READSB_DEVICE_TYPE=none
 
-      # Network settings - receive SBS data from api2sbs
+      # Network settings - receive data from multiple sources
       - READSB_NET_ENABLE=true
+      # SBS input from api2sbs (ADS-B.fi API data)
       - READSB_NET_SBS_INPUT_PORT={{ adsb_sbs_port }}
+      # Beast input from Raspberry Pi antenna (real-time local data)
+      - READSB_NET_CONNECTOR={{ adsb_pi_feeder_ip }},{{ adsb_pi_feeder_port }},beast_in
 
       # Beast output for external clients
       - READSB_NET_BEAST_OUTPUT_PORT={{ adsb_beast_output_port }}

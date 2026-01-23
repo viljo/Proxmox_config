@@ -11,6 +11,10 @@ adsb_api_locations: "65.8753,20.15,250"  # Vidsel Air Base, Sweden, 250NM radius
 # Note: api2sbs enforces minimum 15 second loop time to respect API rate limits
 # The ADS-B.fi OpenData API itself updates ~every 10 seconds per aircraft
 
+# Raspberry Pi antenna feeder (real-time 1Hz local data)
+adsb_pi_feeder_ip: "192.168.102.202"
+adsb_pi_feeder_port: 30005
+
 # Exposed ports
 adsb_beast_output_port: 30005
 adsb_web_port: 8078
