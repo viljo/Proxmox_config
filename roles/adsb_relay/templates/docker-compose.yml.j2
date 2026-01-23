@@ -1,0 +1,69 @@
+services:
+  {{ adsb_container_name }}:
+    image: {{ adsb_image }}
+    container_name: {{ adsb_container_name }}
+    hostname: adsb-relay
+    restart: unless-stopped
+
+    environment:
+      - TZ=Europe/Stockholm
+
+      # No hardware - network only mode
+      - READSB_DEVICE_TYPE=none
+
+      # Network settings - connect to Raspberry Pi feeder
+      - READSB_NET_ENABLE=true
+      - READSB_NET_CONNECTOR={{ adsb_feeder_ip }},{{ adsb_feeder_port }},beast_in
+
+      # Beast output for external clients
+      - READSB_NET_BEAST_OUTPUT_PORT={{ adsb_beast_output_port }}
+
+      # Location for range/statistics
+      - READSB_LAT={{ adsb_latitude }}
+      - READSB_LON={{ adsb_longitude }}
+
+      # Enable stats
+      - READSB_STATS_RANGE=true
+
+      # JSON output for web clients
+      - READSB_NET_RAW_OUTPUT_PORT=30002
+      - READSB_NET_SBS_OUTPUT_PORT=30003
+
+      # Enable tar1090 web interface
+      - TAR1090_ENABLE=true
+
+    ports:
+      # Beast TCP - exposed for external TCP clients via NAT
+      - "{{ adsb_beast_output_port }}:{{ adsb_beast_output_port }}"
+      # Web UI port - internal, routed via Traefik (container listens on 8080)
+      - "{{ adsb_web_port }}:8080"
+
+    tmpfs:
+      - /run/readsb:size=64M
+      - /var/log:size=32M
+
+    labels:
+      - "traefik.enable=true"
+
+      # Main web UI router
+      - "traefik.http.routers.adsb.rule=Host(`{{ adsb_subdomain }}.{{ public_domain }}`)"
+      - "traefik.http.routers.adsb.entrypoints=websecure"
+      - "traefik.http.routers.adsb.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.adsb.service=adsb"
+      - "traefik.http.services.adsb.loadbalancer.server.port=8080"
+
+      # Streaming support for data endpoints
+      - "traefik.http.services.adsb.loadbalancer.responseforwarding.flushinterval=-1"
+
+    networks:
+      - traefik_public
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+networks:
+  traefik_public:
+    external: true

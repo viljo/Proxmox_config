@@ -1,0 +1,50 @@
+---
+# ADS-B Relay deployment tasks
+
+- name: Create deployment directory
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- mkdir -p {{ adsb_relay_deploy_path }}
+  changed_when: true
+
+- name: Create docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /tmp/adsb-relay-compose.yml
+    mode: '0644'
+
+- name: Copy docker-compose.yml to LXC
+  ansible.builtin.command: >
+    pct push {{ adsb_relay_lxc_id }} /tmp/adsb-relay-compose.yml {{ adsb_relay_deploy_path }}/docker-compose.yml
+  changed_when: true
+
+- name: Pull readsb image
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- docker pull {{ adsb_image }}
+  changed_when: false
+
+- name: Stop existing container if running
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- bash -c 'cd {{ adsb_relay_deploy_path }} && docker compose down 2>/dev/null || true'
+  changed_when: true
+
+- name: Start ADS-B relay container
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- bash -c 'cd {{ adsb_relay_deploy_path }} && docker compose up -d'
+  changed_when: true
+
+- name: Wait for container to start
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Check container status
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- docker ps --filter name={{ adsb_container_name }} --format "{% raw %}{{.Status}}{% endraw %}"
+  register: container_status
+  changed_when: false
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg:
+      - "ADS-B Relay container status: {{ container_status.stdout }}"
+      - "Web UI: https://{{ adsb_subdomain }}.{{ public_domain }}"
+      - "Beast TCP: {{ adsb_subdomain }}.{{ public_domain }}:{{ adsb_beast_output_port }}"

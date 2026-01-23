@@ -1,0 +1,87 @@
+---
+# Playbook: Deploy ADS-B Data Relay Service
+# Description: Deploy ADS-B relay to expose Raspberry Pi feeder data
+#
+# Prerequisites:
+#   - Raspberry Pi ADS-B feeder at 192.168.102.202 running readsb/dump1090
+#   - LXC 200 with Docker and Traefik
+#
+# Usage:
+#   ansible-playbook playbooks/adsb-relay-deploy.yml
+
+- name: Deploy ADS-B Data Relay Service
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "ADS-B Data Relay Service Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook will deploy:"
+          - "  - readsb in network relay mode"
+          - "  - tar1090 web interface"
+          - "  - Beast TCP output on port 30005"
+          - ""
+          - "Data source: {{ adsb_feeder_ip | default('192.168.102.202') }}:30005"
+          - "Web UI: https://adsb.{{ public_domain }}"
+          - "Beast TCP: adsb.{{ public_domain }}:30005"
+          - ""
+          - "=========================================="
+
+  roles:
+    - adsb_relay
+
+  post_tasks:
+    - name: Configure NAT port forwarding for Beast TCP
+      ansible.builtin.shell: |
+        # Add NAT rule for Beast TCP port (30005)
+        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport 30005 -j DNAT --to-destination 172.31.31.10:30005 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport 30005 -j DNAT --to-destination 172.31.31.10:30005
+
+        # Save rules persistently
+        iptables-save > /etc/iptables.rules
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Test connectivity to Raspberry Pi feeder
+      ansible.builtin.shell: |
+        pct exec 200 -- timeout 3 bash -c 'nc -zv {{ adsb_feeder_ip | default("192.168.102.202") }} 30005 2>&1' && echo "SUCCESS" || echo "FAILED"
+      register: feeder_test
+      changed_when: false
+      failed_when: false
+
+    - name: Display feeder connectivity status
+      ansible.builtin.debug:
+        msg: "Raspberry Pi feeder connectivity: {{ 'OK' if 'SUCCESS' in feeder_test.stdout else 'Check connection' }}"
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "ADS-B Data Relay Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Web Interface:"
+          - "  URL: https://adsb.{{ public_domain }}"
+          - ""
+          - "Beast TCP Output:"
+          - "  Host: adsb.{{ public_domain }}"
+          - "  Port: 30005"
+          - "  Protocol: Beast binary format"
+          - ""
+          - "Data Source:"
+          - "  Raspberry Pi: {{ adsb_feeder_ip | default('192.168.102.202') }}:30005"
+          - ""
+          - "Client Usage Examples:"
+          - "  Web: Visit https://adsb.{{ public_domain }}"
+          - "  Beast TCP: nc adsb.{{ public_domain }} 30005"
+          - ""
+          - "=========================================="
