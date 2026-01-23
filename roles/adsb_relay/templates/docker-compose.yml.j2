@@ -14,6 +14,8 @@ services:
       # Send SBS data to readsb container
       - SBS_SERVER={{ adsb_readsb_container }}
       - SBS_PORT={{ adsb_sbs_port }}
+      # Poll interval (0.95Hz = ~1.05 seconds)
+      - POLL_INTERVAL={{ adsb_api_poll_interval }}
       # Stats every 60 seconds
       - STATS_INTERVAL=60
 
