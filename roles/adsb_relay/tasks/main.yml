@@ -1,5 +1,6 @@
 ---
 # ADS-B Relay deployment tasks
+# Architecture: api2sbs -> SBS data -> readsb -> Web UI + Beast TCP
 
 - name: Create deployment directory
   ansible.builtin.command: >
@@ -17,34 +18,54 @@
     pct push {{ adsb_relay_lxc_id }} /tmp/adsb-relay-compose.yml {{ adsb_relay_deploy_path }}/docker-compose.yml
   changed_when: true
 
-- name: Pull readsb image
+- name: Pull api2sbs image
   ansible.builtin.command: >
-    pct exec {{ adsb_relay_lxc_id }} -- docker pull {{ adsb_image }}
+    pct exec {{ adsb_relay_lxc_id }} -- docker pull {{ adsb_api2sbs_image }}
   changed_when: false
 
-- name: Stop existing container if running
+- name: Pull readsb image
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- docker pull {{ adsb_readsb_image }}
+  changed_when: false
+
+- name: Stop existing containers if running
   ansible.builtin.command: >
     pct exec {{ adsb_relay_lxc_id }} -- bash -c 'cd {{ adsb_relay_deploy_path }} && docker compose down 2>/dev/null || true'
   changed_when: true
 
-- name: Start ADS-B relay container
+- name: Remove old single-container setup if exists
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- bash -c 'docker rm -f adsb-relay 2>/dev/null || true'
+  changed_when: false
+
+- name: Start ADS-B relay containers
   ansible.builtin.command: >
     pct exec {{ adsb_relay_lxc_id }} -- bash -c 'cd {{ adsb_relay_deploy_path }} && docker compose up -d'
   changed_when: true
 
-- name: Wait for container to start
+- name: Wait for containers to start
   ansible.builtin.pause:
-    seconds: 10
+    seconds: 15
 
-- name: Check container status
+- name: Check api2sbs container status
   ansible.builtin.command: >
-    pct exec {{ adsb_relay_lxc_id }} -- docker ps --filter name={{ adsb_container_name }} --format "{% raw %}{{.Status}}{% endraw %}"
-  register: container_status
+    pct exec {{ adsb_relay_lxc_id }} -- docker ps --filter name={{ adsb_api2sbs_container }} --format "{% raw %}{{.Status}}{% endraw %}"
+  register: api2sbs_status
+  changed_when: false
+
+- name: Check readsb container status
+  ansible.builtin.command: >
+    pct exec {{ adsb_relay_lxc_id }} -- docker ps --filter name={{ adsb_readsb_container }} --format "{% raw %}{{.Status}}{% endraw %}"
+  register: readsb_status
   changed_when: false
 
 - name: Display deployment status
   ansible.builtin.debug:
     msg:
-      - "ADS-B Relay container status: {{ container_status.stdout }}"
+      - "ADS-B Relay (ADS-B.fi API) deployed"
+      - "API2SBS container: {{ api2sbs_status.stdout }}"
+      - "Readsb container: {{ readsb_status.stdout }}"
+      - "Data source: ADS-B.fi OpenData API"
+      - "Location: {{ adsb_latitude }}, {{ adsb_longitude }} (250NM radius)"
       - "Web UI: https://{{ adsb_subdomain }}.{{ public_domain }}"
       - "Beast TCP: {{ adsb_subdomain }}.{{ public_domain }}:{{ adsb_beast_output_port }}"

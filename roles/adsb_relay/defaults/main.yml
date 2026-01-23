@@ -5,24 +5,27 @@
 adsb_relay_lxc_id: 200
 adsb_relay_deploy_path: /opt/docker-stack/adsb-relay
 
-# Network - Raspberry Pi feeder
-adsb_feeder_ip: "192.168.102.202"
-adsb_feeder_port: 30005
+# Data source - ADS-B.fi OpenData API
+adsb_api_url: "https://opendata.adsb.fi/api/v2/lat/{LAT}/lon/{LON}/dist/{DIST}"
+adsb_api_locations: "65.317,21.479,250"  # Piteå, Sweden, 250NM radius
 
 # Exposed ports
 adsb_beast_output_port: 30005
 adsb_web_port: 8078
+adsb_sbs_port: 32006  # Internal SBS feed from api2sbs to readsb
 
-# Location for distance calculations (Stockholm area)
-adsb_latitude: 59.3293
-adsb_longitude: 18.0686
+# Location for map center (Piteå, Sweden)
+adsb_latitude: 65.317
+adsb_longitude: 21.479
 
 # Service subdomain
 adsb_subdomain: adsb
 
 # Container settings
-adsb_container_name: adsb-relay
-adsb_image: "ghcr.io/sdr-enthusiasts/docker-readsb-protobuf:latest"
+adsb_readsb_container: adsb-readsb
+adsb_api2sbs_container: adsb-api2sbs
+adsb_readsb_image: "ghcr.io/sdr-enthusiasts/docker-readsb-protobuf:latest"
+adsb_api2sbs_image: "ghcr.io/sdr-enthusiasts/docker-api2sbs:latest"
 
 # LXC internal IP (for NAT routing)
 lxc_internal_ip: "172.31.31.10"

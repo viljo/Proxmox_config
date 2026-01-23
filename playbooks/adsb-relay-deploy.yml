@@ -1,9 +1,11 @@
 ---
 # Playbook: Deploy ADS-B Data Relay Service
-# Description: Deploy ADS-B relay to expose Raspberry Pi feeder data
+# Description: Deploy ADS-B relay using ADS-B.fi OpenData API
+#
+# Architecture:
+#   api2sbs (polls ADS-B.fi API) -> SBS data -> readsb -> Web UI + Beast TCP
 #
 # Prerequisites:
-#   - Raspberry Pi ADS-B feeder at 192.168.102.202 running readsb/dump1090
 #   - LXC 200 with Docker and Traefik
 #
 # Usage:
@@ -25,11 +27,12 @@
           - "=========================================="
           - ""
           - "This playbook will deploy:"
-          - "  - readsb in network relay mode"
-          - "  - tar1090 web interface"
+          - "  - api2sbs (fetches from ADS-B.fi API)"
+          - "  - readsb with web interface"
           - "  - Beast TCP output on port 30005"
           - ""
-          - "Data source: {{ adsb_feeder_ip | default('192.168.102.202') }}:30005"
+          - "Data source: ADS-B.fi OpenData API"
+          - "Location: {{ adsb_latitude | default(65.317) }}, {{ adsb_longitude | default(21.479) }} (250NM radius)"
           - "Web UI: https://adsb.{{ public_domain }}"
           - "Beast TCP: adsb.{{ public_domain }}:30005"
           - ""
@@ -51,16 +54,16 @@
         executable: /bin/bash
       changed_when: false
 
-    - name: Test connectivity to Raspberry Pi feeder
+    - name: Test ADS-B.fi API connectivity
       ansible.builtin.shell: |
-        pct exec 200 -- timeout 3 bash -c 'nc -zv {{ adsb_feeder_ip | default("192.168.102.202") }} 30005 2>&1' && echo "SUCCESS" || echo "FAILED"
-      register: feeder_test
+        pct exec 200 -- timeout 5 curl -s "https://opendata.adsb.fi/api/v2/lat/65.317/lon/21.479/dist/50" | head -c 200
+      register: api_test
       changed_when: false
       failed_when: false
 
-    - name: Display feeder connectivity status
+    - name: Display API connectivity status
       ansible.builtin.debug:
-        msg: "Raspberry Pi feeder connectivity: {{ 'OK' if 'SUCCESS' in feeder_test.stdout else 'Check connection' }}"
+        msg: "ADS-B.fi API connectivity: {{ 'OK - receiving data' if api_test.stdout | length > 10 else 'Check connection' }}"
 
     - name: Display deployment summary
       ansible.builtin.debug:
@@ -78,7 +81,9 @@
           - "  Protocol: Beast binary format"
           - ""
           - "Data Source:"
-          - "  Raspberry Pi: {{ adsb_feeder_ip | default('192.168.102.202') }}:30005"
+          - "  ADS-B.fi OpenData API"
+          - "  Center: Pitea, Sweden (65.317, 21.479)"
+          - "  Radius: 250 NM"
           - ""
           - "Client Usage Examples:"
           - "  Web: Visit https://adsb.{{ public_domain }}"

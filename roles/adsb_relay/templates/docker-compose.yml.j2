@@ -1,9 +1,42 @@
 services:
-  {{ adsb_container_name }}:
-    image: {{ adsb_image }}
-    container_name: {{ adsb_container_name }}
+  # API to SBS converter - fetches from ADS-B.fi API
+  {{ adsb_api2sbs_container }}:
+    image: {{ adsb_api2sbs_image }}
+    container_name: {{ adsb_api2sbs_container }}
+    restart: unless-stopped
+
+    environment:
+      - TZ=Europe/Stockholm
+      # ADS-B.fi OpenData API
+      - API_URL={{ adsb_api_url }}
+      # Location: lat,lon,radius_nm (Piteå, 250NM)
+      - LOCATIONS={{ adsb_api_locations }}
+      # Send SBS data to readsb container
+      - SBS_SERVER={{ adsb_readsb_container }}
+      - SBS_PORT={{ adsb_sbs_port }}
+      # Stats every 60 seconds
+      - STATS_INTERVAL=60
+
+    tmpfs:
+      - /tmp:size=32M
+
+    networks:
+      - adsb_internal
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+  # Readsb - receives SBS data, provides web UI and Beast TCP output
+  {{ adsb_readsb_container }}:
+    image: {{ adsb_readsb_image }}
+    container_name: {{ adsb_readsb_container }}
     hostname: adsb-relay
     restart: unless-stopped
+    depends_on:
+      - {{ adsb_api2sbs_container }}
 
     environment:
       - TZ=Europe/Stockholm
@@ -11,14 +44,14 @@ services:
       # No hardware - network only mode
       - READSB_DEVICE_TYPE=none
 
-      # Network settings - connect to Raspberry Pi feeder
+      # Network settings - receive SBS data from api2sbs
       - READSB_NET_ENABLE=true
-      - READSB_NET_CONNECTOR={{ adsb_feeder_ip }},{{ adsb_feeder_port }},beast_in
+      - READSB_NET_SBS_INPUT_PORT={{ adsb_sbs_port }}
 
       # Beast output for external clients
       - READSB_NET_BEAST_OUTPUT_PORT={{ adsb_beast_output_port }}
 
-      # Location for range/statistics
+      # Location for range/statistics (Piteå, Sweden)
       - READSB_LAT={{ adsb_latitude }}
       - READSB_LON={{ adsb_longitude }}
 
@@ -57,6 +90,7 @@ services:
 
     networks:
       - traefik_public
+      - adsb_internal
 
     deploy:
       resources:
@@ -67,3 +101,5 @@ services:
 networks:
   traefik_public:
     external: true
+  adsb_internal:
+    driver: bridge

@@ -116,11 +116,11 @@ infrastructure_services:
   - name: ADS-B Relay
     slug: adsb
     icon: "✈️"
-    description: ADS-B aircraft data relay from Raspberry Pi feeder
+    description: ADS-B aircraft data relay from ADS-B.fi API
     subdomain: adsb
     status: deployed_working
     port: 30005/tcp
-    note: "Public access, no authentication. Relays ADS-B data from Pi (192.168.102.202). Web UI with Mictronics Readsb map at /radar/, Beast TCP on port 30005 for external clients."
+    note: "Public access, no authentication. Fetches from ADS-B.fi OpenData API (Pitea, 250NM radius). Web UI with Mictronics Readsb map at /radar/, Beast TCP on port 30005 for external clients."
 
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:
