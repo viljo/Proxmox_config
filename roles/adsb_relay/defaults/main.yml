@@ -8,7 +8,8 @@ adsb_relay_deploy_path: /opt/docker-stack/adsb-relay
 # Data source - ADS-B.fi OpenData API
 adsb_api_url: "https://opendata.adsb.fi/api/v2/lat/{LAT}/lon/{LON}/dist/{DIST}"
 adsb_api_locations: "65.8753,20.15,250"  # Vidsel Air Base, Sweden, 250NM radius
-adsb_api_poll_interval: 1.05  # Poll interval in seconds (0.95Hz = 1.05s)
+# Note: api2sbs enforces minimum 15 second loop time to respect API rate limits
+# The ADS-B.fi OpenData API itself updates ~every 10 seconds per aircraft
 
 # Exposed ports
 adsb_beast_output_port: 30005
