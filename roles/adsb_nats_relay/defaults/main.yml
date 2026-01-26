@@ -1,0 +1,36 @@
+---
+# ADS-B NATS Relay Configuration
+# Publishes ADS-B data to NATS JetStream for maps-client consumption
+
+# LXC Container
+adsb_nats_relay_lxc_id: 200
+adsb_nats_relay_deploy_path: /opt/docker-stack/adsb-nats-relay
+
+# Beast TCP source (connects to existing adsb-relay)
+beast_host: adsb-readsb
+beast_port: 30005
+
+# NATS Configuration
+nats_container: adsb-nats
+nats_image: "nats:latest"
+nats_port: 4222
+nats_monitoring_port: 8222
+
+# NATS Relay Configuration
+nats_relay_container: adsb-nats-relay
+nats_relay_image: "registry.gitlab.com/viktortorerudolf/experimentation/adsb-nats-relay:latest"
+nats_mission_id: "1234567"  # maps-client default stream name
+
+# Reference position for ADS-B decoding (Vidsel Air Base, Sweden)
+reference_latitude: 65.8753
+reference_longitude: 20.15
+
+# Sensor ID range
+sensor_id_start: 4250
+sensor_id_end: 5250
+
+# Service subdomain
+nats_subdomain: adsb-maps
+
+# LXC internal IP (for NAT routing)
+lxc_internal_ip: "172.31.31.10"

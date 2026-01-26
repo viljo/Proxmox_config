@@ -1,0 +1,45 @@
+---
+- name: Create deployment directory
+  ansible.builtin.shell: |
+    pct exec {{ adsb_nats_relay_lxc_id }} -- mkdir -p {{ adsb_nats_relay_deploy_path }}
+  changed_when: false
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.shell: |
+    cat << 'EOF' | pct exec {{ adsb_nats_relay_lxc_id }} -- tee {{ adsb_nats_relay_deploy_path }}/docker-compose.yml
+    {{ lookup('template', 'docker-compose.yml.j2') }}
+    EOF
+  changed_when: false
+
+- name: Pull latest images
+  ansible.builtin.shell: |
+    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml pull
+  changed_when: false
+  register: pull_result
+  retries: 3
+  delay: 10
+  until: pull_result.rc == 0
+
+- name: Start services
+  ansible.builtin.shell: |
+    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml up -d
+  changed_when: false
+
+- name: Wait for NATS to be healthy
+  ansible.builtin.shell: |
+    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml ps --format json | grep -q healthy
+  register: health_check
+  retries: 30
+  delay: 2
+  until: health_check.rc == 0
+  changed_when: false
+
+- name: Verify NATS relay is running
+  ansible.builtin.shell: |
+    pct exec {{ adsb_nats_relay_lxc_id }} -- docker logs {{ nats_relay_container }} 2>&1 | tail -10
+  register: relay_logs
+  changed_when: false
+
+- name: Display relay status
+  ansible.builtin.debug:
+    msg: "{{ relay_logs.stdout_lines }}"

@@ -1,0 +1,68 @@
+services:
+  # NATS Server with JetStream
+  {{ nats_container }}:
+    image: {{ nats_image }}
+    container_name: {{ nats_container }}
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data/jetstream", "-m", "{{ nats_monitoring_port }}"]
+
+    ports:
+      - "{{ nats_port }}:{{ nats_port }}"
+      - "{{ nats_monitoring_port }}:{{ nats_monitoring_port }}"
+
+    volumes:
+      - nats-data:/data/jetstream
+
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q --spider http://localhost:{{ nats_monitoring_port }}/healthz 2>/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    networks:
+      - adsb_nats
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+
+  # ADS-B to NATS Relay
+  {{ nats_relay_container }}:
+    image: {{ nats_relay_image }}
+    container_name: {{ nats_relay_container }}
+    restart: unless-stopped
+    depends_on:
+      {{ nats_container }}:
+        condition: service_healthy
+
+    environment:
+      - TZ=Europe/Stockholm
+      - BEAST_HOST={{ beast_host }}
+      - BEAST_PORT={{ beast_port }}
+      - NATS_SERVERS=nats://{{ nats_container }}:{{ nats_port }}
+      - MISSION_ID={{ nats_mission_id }}
+      - REFERENCE_LAT={{ reference_latitude }}
+      - REFERENCE_LON={{ reference_longitude }}
+
+    networks:
+      - adsb_nats
+      - adsb_internal
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+
+networks:
+  adsb_nats:
+    driver: bridge
+  adsb_internal:
+    external: true
+    name: adsb-relay_adsb_internal
+
+volumes:
+  nats-data:

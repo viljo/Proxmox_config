@@ -1,0 +1,91 @@
+---
+# Playbook: Deploy ADS-B NATS Relay Service
+# Description: Publishes ADS-B data to NATS JetStream for maps-client
+#
+# Architecture:
+#   adsb-readsb (Beast TCP) -> adsb-nats-relay -> NATS JetStream -> maps-client
+#
+# Prerequisites:
+#   - LXC 200 with Docker (same as adsb-relay)
+#   - adsb-relay already deployed and running
+#
+# Usage:
+#   ansible-playbook playbooks/adsb-nats-relay-deploy.yml
+
+- name: Deploy ADS-B NATS Relay Service
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "ADS-B NATS Relay Service Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook will deploy:"
+          - "  - NATS server with JetStream"
+          - "  - ADS-B to NATS relay service"
+          - ""
+          - "Data flow:"
+          - "  adsb-readsb (Beast TCP:30005)"
+          - "    -> adsb-nats-relay"
+          - "    -> NATS JetStream (mission.{{ nats_mission_id }}.>)"
+          - "    -> maps-client"
+          - ""
+          - "NATS endpoint: {{ nats_subdomain }}.{{ public_domain }}:{{ nats_port }}"
+          - "Mission ID: {{ nats_mission_id }}"
+          - ""
+          - "=========================================="
+
+  roles:
+    - adsb_nats_relay
+
+  post_tasks:
+    - name: Configure NAT port forwarding for NATS
+      ansible.builtin.shell: |
+        # Add NAT rule for NATS port
+        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport {{ nats_port }} -j DNAT --to-destination {{ lxc_internal_ip }}:{{ nats_port }} 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport {{ nats_port }} -j DNAT --to-destination {{ lxc_internal_ip }}:{{ nats_port }}
+
+        # Save rules persistently
+        iptables-save > /etc/iptables.rules
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Test NATS connectivity
+      ansible.builtin.shell: |
+        pct exec {{ adsb_nats_relay_lxc_id }} -- curl -s http://localhost:{{ nats_monitoring_port }}/healthz
+      register: nats_health
+      changed_when: false
+      failed_when: false
+
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "ADS-B NATS Relay Deployment Complete"
+          - "=========================================="
+          - ""
+          - "NATS Server:"
+          - "  Host: {{ nats_subdomain }}.{{ public_domain }}"
+          - "  Port: {{ nats_port }}"
+          - "  Health: {{ 'OK' if nats_health.rc == 0 else 'Check connection' }}"
+          - ""
+          - "JetStream Configuration:"
+          - "  Stream: {{ nats_mission_id }}"
+          - "  Subjects: mission.{{ nats_mission_id }}.>"
+          - ""
+          - "maps-client Configuration:"
+          - "  NATS server: nats://{{ nats_subdomain }}.{{ public_domain }}:{{ nats_port }}"
+          - "  Mission ID: {{ nats_mission_id }}"
+          - ""
+          - "Test with nats CLI:"
+          - "  nats sub -s nats://{{ nats_subdomain }}.{{ public_domain }}:{{ nats_port }} 'mission.{{ nats_mission_id }}.>'"
+          - ""
+          - "=========================================="
