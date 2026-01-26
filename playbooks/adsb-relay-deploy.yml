@@ -42,11 +42,15 @@
     - adsb_relay
 
   post_tasks:
-    - name: Configure NAT port forwarding for Beast TCP
+    - name: Configure NAT port forwarding for ADS-B ports
       ansible.builtin.shell: |
-        # Add NAT rule for Beast TCP port (30005)
+        # Add NAT rule for Beast TCP output port (30005)
         iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport 30005 -j DNAT --to-destination 172.31.31.10:30005 2>/dev/null || \
           iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport 30005 -j DNAT --to-destination 172.31.31.10:30005
+
+        # Add NAT rule for external SBS input port (30006) - for PingStation/remote feeders
+        iptables -t nat -C PREROUTING -i vmbr2 -p tcp --dport 30006 -j DNAT --to-destination 172.31.31.10:30006 2>/dev/null || \
+          iptables -t nat -A PREROUTING -i vmbr2 -p tcp --dport 30006 -j DNAT --to-destination 172.31.31.10:30006
 
         # Save rules persistently
         iptables-save > /etc/iptables.rules
@@ -80,13 +84,21 @@
           - "  Port: 30005"
           - "  Protocol: Beast binary format"
           - ""
-          - "Data Source:"
-          - "  ADS-B.fi OpenData API"
-          - "  Center: Vidsel Air Base, Sweden (65.8753, 20.15)"
-          - "  Radius: 250 NM"
+          - "SBS Input (for remote feeders):"
+          - "  Host: adsb.{{ public_domain }}"
+          - "  Port: 30006"
+          - "  Protocol: SBS/BaseStation text format"
+          - "  Use: PingStation, remote feeders can push data here"
+          - ""
+          - "Data Sources:"
+          - "  1. ADS-B.fi OpenData API (worldwide aggregated)"
+          - "  2. Raspberry Pi antenna (local real-time)"
+          - "  3. ADSBHub feed (worldwide aggregated)"
+          - "  4. External SBS input on port 30006"
           - ""
           - "Client Usage Examples:"
           - "  Web: Visit https://adsb.{{ public_domain }}"
           - "  Beast TCP: nc adsb.{{ public_domain }} 30005"
+          - "  SBS feed: Connect to adsb.{{ public_domain }}:30006"
           - ""
           - "=========================================="

@@ -6,15 +6,14 @@
 - NEVER touch /etc/ssh/sshd_config Port 22 setting
 - This is the user's last resort access method - DO NOT TOUCH IT UNDER ANY CIRCUMSTANCES
 
-### External SSH Access (Port 2222 via ssh.viljo.se)
-- External SSH access is on port 2222: `ssh -p 2222 root@ssh.viljo.se`
-- This is the PRIMARY access method for Claude to use
-- NAT rule: vmbr2:2222 → 192.168.1.3:2222
-- Always use this for normal operations
+### SSH Access for Operations
+- Use port 22: `ssh root@192.168.1.3`
+- This is the PRIMARY access method for Claude to use for all operations
+- Port 2222 external access is currently not working/configured
 
 ### Access Priority
-1. PRIMARY: `ssh -p 2222 root@ssh.viljo.se` (external via port 2222)
-2. BACKUP (user only): `ssh root@192.168.1.3` (internal port 22) - CLAUDE MUST NEVER MODIFY THIS
+1. PRIMARY: `ssh root@192.168.1.3` (port 22)
+2. ALTERNATIVE: `ssh -p 2222 root@ssh.viljo.se` (external - currently not working)
 
 * Dual ISP Architecture:
   - vmbr0: Starlink ISP (CGNAT) on 192.168.1.0/24 - Management ONLY - MUST NOT TOUCH
