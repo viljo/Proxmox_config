@@ -15,10 +15,16 @@ adsb_api_locations: "65.8753,20.15,250"  # Vidsel Air Base, Sweden, 250NM radius
 adsb_pi_feeder_ip: "192.168.102.202"
 adsb_pi_feeder_port: 30005
 
+# ADSBHub worldwide aggregated feed (SBS format)
+# Requires account at adsbhub.org and IP whitelist for data access
+adsbhub_host: "data.adsbhub.org"
+adsbhub_port: 5002
+
 # Exposed ports
 adsb_beast_output_port: 30005
 adsb_web_port: 8078
 adsb_sbs_port: 32006  # Internal SBS feed from api2sbs to readsb
+adsb_sbs_external_input_port: 30006  # External SBS input port for PingStation/remote feeders
 
 # Location for map center (Vidsel Air Base, Sweden)
 adsb_latitude: 65.8753

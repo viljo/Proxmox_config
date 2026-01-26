@@ -46,10 +46,14 @@ services:
 
       # Network settings - receive data from multiple sources
       - READSB_NET_ENABLE=true
-      # SBS input from api2sbs (ADS-B.fi API data)
-      - READSB_NET_SBS_INPUT_PORT={{ adsb_sbs_port }}
-      # Beast input from Raspberry Pi antenna (real-time local data)
-      - READSB_NET_CONNECTOR={{ adsb_pi_feeder_ip }},{{ adsb_pi_feeder_port }},beast_in
+      # SBS input ports (comma-separated):
+      # - {{ adsb_sbs_port }}: Internal from api2sbs (ADS-B.fi API data)
+      # - {{ adsb_sbs_external_input_port }}: External for PingStation/remote feeders
+      - READSB_NET_SBS_INPUT_PORT={{ adsb_sbs_port }},{{ adsb_sbs_external_input_port }}
+      # Multiple network connectors:
+      # 1. Beast input from Raspberry Pi antenna (real-time local data)
+      # 2. ADSBHub worldwide SBS feed (requires IP whitelist at adsbhub.org)
+      - READSB_NET_CONNECTOR={{ adsb_pi_feeder_ip }},{{ adsb_pi_feeder_port }},beast_in;{{ adsbhub_host }},{{ adsbhub_port }},sbs_in
 
       # Beast output for external clients
       - READSB_NET_BEAST_OUTPUT_PORT={{ adsb_beast_output_port }}
@@ -71,8 +75,14 @@ services:
     ports:
       # Beast TCP - exposed for external TCP clients via NAT
       - "{{ adsb_beast_output_port }}:{{ adsb_beast_output_port }}"
+      # External SBS input - for PingStation/remote feeders to push data
+      - "{{ adsb_sbs_external_input_port }}:{{ adsb_sbs_external_input_port }}"
       # Web UI port - internal, routed via Traefik (container listens on 8080)
       - "{{ adsb_web_port }}:8080"
+
+    volumes:
+      # Custom favicon for radar-style icon
+      - ./favicon.ico:/usr/share/readsb/html/favicon.ico:ro
 
     tmpfs:
       - /run/readsb:size=64M

@@ -18,6 +18,17 @@
     pct push {{ adsb_relay_lxc_id }} /tmp/adsb-relay-compose.yml {{ adsb_relay_deploy_path }}/docker-compose.yml
   changed_when: true
 
+- name: Copy favicon file to Proxmox host
+  ansible.builtin.copy:
+    src: favicon.ico
+    dest: /tmp/adsb-favicon.ico
+    mode: '0644'
+
+- name: Push favicon to LXC
+  ansible.builtin.command: >
+    pct push {{ adsb_relay_lxc_id }} /tmp/adsb-favicon.ico {{ adsb_relay_deploy_path }}/favicon.ico
+  changed_when: true
+
 - name: Pull api2sbs image
   ansible.builtin.command: >
     pct exec {{ adsb_relay_lxc_id }} -- docker pull {{ adsb_api2sbs_image }}
