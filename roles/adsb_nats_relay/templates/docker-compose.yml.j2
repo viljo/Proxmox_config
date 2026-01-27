@@ -50,6 +50,12 @@ services:
       # NATS configuration
       - NATS_SERVERS=nats://{{ nats_container }}:{{ nats_port }}
       - MISSION_ID={{ nats_mission_id }}
+      # Sensor ID range
+      - SENSOR_ID_START={{ sensor_id_start | default(4250) }}
+      - SENSOR_ID_END={{ sensor_id_end | default(4750) }}
+      # Cross-source deduplication (uses NATS KV)
+      - DEDUP_ENABLED=true
+      - DEDUP_SOURCE_NAME=adsbhub
 
     networks:
       - adsb_nats
@@ -83,6 +89,9 @@ services:
       # Different sensor ID range to avoid conflicts
       - SENSOR_ID_START={{ local_sensor_id_start }}
       - SENSOR_ID_END={{ local_sensor_id_end }}
+      # Cross-source deduplication (uses NATS KV)
+      - DEDUP_ENABLED=true
+      - DEDUP_SOURCE_NAME=local
 
     networks:
       - adsb_nats
@@ -119,6 +128,9 @@ services:
       # Different sensor ID range to avoid conflicts
       - SENSOR_ID_START={{ api_sensor_id_start }}
       - SENSOR_ID_END={{ api_sensor_id_end }}
+      # Cross-source deduplication (uses NATS KV)
+      - DEDUP_ENABLED=true
+      - DEDUP_SOURCE_NAME=api
 
     networks:
       - adsb_nats
