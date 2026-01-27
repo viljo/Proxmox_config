@@ -11,9 +11,9 @@ services:
       - API_URL={{ adsb_api_url }}
       # Location: lat,lon,radius_nm (Piteå, 250NM)
       - LOCATIONS={{ adsb_api_locations }}
-      # Send SBS data to readsb container
-      - SBS_SERVER={{ adsb_readsb_container }}
-      - SBS_PORT={{ adsb_sbs_port }}
+      # Send SBS data via NATS relay proxy (for Y-split to NATS + readsb)
+      - SBS_SERVER={{ api2sbs_server }}
+      - SBS_PORT={{ api2sbs_port }}
       # Stats every 60 seconds
       - STATS_INTERVAL=60
 
@@ -50,10 +50,14 @@ services:
       # - {{ adsb_sbs_port }}: Internal from api2sbs (ADS-B.fi API data)
       # - {{ adsb_sbs_external_input_port }}: External for PingStation/remote feeders
       - READSB_NET_SBS_INPUT_PORT={{ adsb_sbs_port }},{{ adsb_sbs_external_input_port }}
-      # Multiple network connectors:
-      # 1. Beast input from Raspberry Pi antenna (real-time local data)
-      # 2. ADSBHub worldwide SBS feed (requires IP whitelist at adsbhub.org)
+      # Network connectors - Beast input from Raspberry Pi antenna (real-time local data)
+{% if use_adsbhub_splitter | default(false) %}
+      # ADSBHub routed through nats-relay Y-splitter (forwards to SBS input port {{ adsb_sbs_port }})
+      - READSB_NET_CONNECTOR={{ adsb_pi_feeder_ip }},{{ adsb_pi_feeder_port }},beast_in
+{% else %}
+      # ADSBHub connected directly (requires IP whitelist at adsbhub.org)
       - READSB_NET_CONNECTOR={{ adsb_pi_feeder_ip }},{{ adsb_pi_feeder_port }},beast_in;{{ adsbhub_host }},{{ adsbhub_port }},sbs_in
+{% endif %}
 
       # Beast output for external clients
       - READSB_NET_BEAST_OUTPUT_PORT={{ adsb_beast_output_port }}
@@ -68,6 +72,8 @@ services:
       # JSON output for web clients
       - READSB_NET_RAW_OUTPUT_PORT=30002
       - READSB_NET_SBS_OUTPUT_PORT=30003
+      # VRS JSON output for all aircraft (includes SBS input data)
+      - READSB_NET_VRS_PORT=30007
 
       # Enable tar1090 web interface
       - TAR1090_ENABLE=true

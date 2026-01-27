@@ -6,9 +6,25 @@
 adsb_nats_relay_lxc_id: 200
 adsb_nats_relay_deploy_path: /opt/docker-stack/adsb-nats-relay
 
-# Beast TCP source (connects to existing adsb-relay)
-beast_host: adsb-readsb
-beast_port: 30005
+# Y-splitter mode (taps into adsbhub stream, forwards to readsb)
+# Enabled - Y-splitter takes over adsbhub connection, forwards to readsb SBS input
+splitter_enabled: true
+splitter_source_host: "data.adsbhub.org"
+splitter_source_port: 5002
+splitter_dest_host: "adsb-readsb"
+splitter_dest_port: 32006  # readsb SBS input
+
+# Proxy mode (accepts SBS from api2sbs, forwards to readsb, publishes to NATS)
+# Disabled when Y-splitter is enabled (we get adsbhub data directly)
+proxy_enabled: false
+proxy_listen_host: "0.0.0.0"
+proxy_listen_port: 32007  # api2sbs connects here
+proxy_dest_host: "adsb-readsb"
+proxy_dest_port: 32006  # forward to readsb SBS input
+
+# SBS TCP source (fallback when splitter/proxy disabled)
+sbs_host: adsb-readsb
+sbs_port: 30003
 
 # NATS Configuration
 nats_container: adsb-nats
@@ -25,9 +41,17 @@ nats_mission_id: "1234567"  # maps-client default stream name
 reference_latitude: 65.8753
 reference_longitude: 20.15
 
-# Sensor ID range
+# Sensor ID range (primary relay - adsbhub data)
 sensor_id_start: 4250
-sensor_id_end: 5250
+sensor_id_end: 4750
+
+# Second relay for local sources (Raspberry Pi Beast data via readsb SBS output)
+local_relay_enabled: true
+local_relay_container: adsb-nats-relay-local
+local_sbs_host: adsb-readsb
+local_sbs_port: 30003  # readsb SBS output (Beast sources only)
+local_sensor_id_start: 4750
+local_sensor_id_end: 5250
 
 # Service subdomain
 nats_subdomain: adsb-maps

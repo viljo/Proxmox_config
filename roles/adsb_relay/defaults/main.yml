@@ -19,12 +19,19 @@ adsb_pi_feeder_port: 30005
 # Requires account at adsbhub.org and IP whitelist for data access
 adsbhub_host: "data.adsbhub.org"
 adsbhub_port: 5002
+# Set to true when using nats-relay Y-splitter for adsbhub connection
+# This removes direct adsbhub connection from readsb so Y-splitter can take over
+use_adsbhub_splitter: true
 
 # Exposed ports
 adsb_beast_output_port: 30005
 adsb_web_port: 8078
-adsb_sbs_port: 32006  # Internal SBS feed from api2sbs to readsb
+adsb_sbs_port: 32006  # Internal SBS input port for readsb
 adsb_sbs_external_input_port: 30006  # External SBS input port for PingStation/remote feeders
+
+# api2sbs target - direct to readsb SBS input (Y-splitter handles adsbhub separately)
+api2sbs_server: "adsb-readsb"
+api2sbs_port: 32006
 
 # Location for map center (Vidsel Air Base, Sweden)
 adsb_latitude: 65.8753

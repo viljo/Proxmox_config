@@ -13,13 +13,6 @@ services:
     volumes:
       - nats-data:/data/jetstream
 
-    healthcheck:
-      test: ["CMD", "sh", "-c", "wget -q --spider http://localhost:{{ nats_monitoring_port }}/healthz 2>/dev/null || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
     networks:
       - adsb_nats
 
@@ -31,21 +24,32 @@ services:
 
   # ADS-B to NATS Relay
   {{ nats_relay_container }}:
-    image: {{ nats_relay_image }}
+    build: ./adsb-nats-relay
     container_name: {{ nats_relay_container }}
     restart: unless-stopped
     depends_on:
-      {{ nats_container }}:
-        condition: service_healthy
+      - {{ nats_container }}
 
     environment:
       - TZ=Europe/Stockholm
-      - BEAST_HOST={{ beast_host }}
-      - BEAST_PORT={{ beast_port }}
+      # Y-splitter mode: tap into adsbhub, forward to readsb
+      - SPLITTER_ENABLED={{ splitter_enabled | lower }}
+      - SPLITTER_SOURCE_HOST={{ splitter_source_host }}
+      - SPLITTER_SOURCE_PORT={{ splitter_source_port }}
+      - SPLITTER_DEST_HOST={{ splitter_dest_host }}
+      - SPLITTER_DEST_PORT={{ splitter_dest_port }}
+      # Proxy mode: accept SBS from api2sbs, forward to readsb
+      - PROXY_ENABLED={{ proxy_enabled | lower }}
+      - PROXY_LISTEN_HOST={{ proxy_listen_host }}
+      - PROXY_LISTEN_PORT={{ proxy_listen_port }}
+      - PROXY_DEST_HOST={{ proxy_dest_host }}
+      - PROXY_DEST_PORT={{ proxy_dest_port }}
+      # Fallback SBS direct mode (when splitter/proxy disabled)
+      - SBS_HOST={{ sbs_host }}
+      - SBS_PORT={{ sbs_port }}
+      # NATS configuration
       - NATS_SERVERS=nats://{{ nats_container }}:{{ nats_port }}
       - MISSION_ID={{ nats_mission_id }}
-      - REFERENCE_LAT={{ reference_latitude }}
-      - REFERENCE_LON={{ reference_longitude }}
 
     networks:
       - adsb_nats
@@ -56,6 +60,40 @@ services:
         limits:
           cpus: '0.25'
           memory: 128M
+
+{% if local_relay_enabled | default(false) %}
+  # Second relay for local sources (reads from readsb SBS output)
+  {{ local_relay_container }}:
+    build: ./adsb-nats-relay
+    container_name: {{ local_relay_container }}
+    restart: unless-stopped
+    depends_on:
+      - {{ nats_container }}
+
+    environment:
+      - TZ=Europe/Stockholm
+      # Direct SBS mode - read from readsb SBS output
+      - SPLITTER_ENABLED=false
+      - PROXY_ENABLED=false
+      - SBS_HOST={{ local_sbs_host }}
+      - SBS_PORT={{ local_sbs_port }}
+      # NATS configuration
+      - NATS_SERVERS=nats://{{ nats_container }}:{{ nats_port }}
+      - MISSION_ID={{ nats_mission_id }}
+      # Different sensor ID range to avoid conflicts
+      - SENSOR_ID_START={{ local_sensor_id_start }}
+      - SENSOR_ID_END={{ local_sensor_id_end }}
+
+    networks:
+      - adsb_nats
+      - adsb_internal
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+{% endif %}
 
 networks:
   adsb_nats:
