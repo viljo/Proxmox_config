@@ -95,6 +95,42 @@ services:
           memory: 128M
 {% endif %}
 
+{% if api_relay_enabled | default(false) %}
+  # Third relay for api2sbs (ADS-B.fi API data via proxy)
+  {{ api_relay_container }}:
+    build: ./adsb-nats-relay
+    container_name: {{ api_relay_container }}
+    restart: unless-stopped
+    depends_on:
+      - {{ nats_container }}
+
+    environment:
+      - TZ=Europe/Stockholm
+      # Proxy mode - accept SBS from api2sbs, forward to readsb
+      - SPLITTER_ENABLED=false
+      - PROXY_ENABLED=true
+      - PROXY_LISTEN_HOST=0.0.0.0
+      - PROXY_LISTEN_PORT={{ api_proxy_listen_port }}
+      - PROXY_DEST_HOST={{ api_proxy_dest_host }}
+      - PROXY_DEST_PORT={{ api_proxy_dest_port }}
+      # NATS configuration
+      - NATS_SERVERS=nats://{{ nats_container }}:{{ nats_port }}
+      - MISSION_ID={{ nats_mission_id }}
+      # Different sensor ID range to avoid conflicts
+      - SENSOR_ID_START={{ api_sensor_id_start }}
+      - SENSOR_ID_END={{ api_sensor_id_end }}
+
+    networks:
+      - adsb_nats
+      - adsb_internal
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+{% endif %}
+
 networks:
   adsb_nats:
     driver: bridge

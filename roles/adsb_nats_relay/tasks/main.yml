@@ -1,8 +1,15 @@
 ---
 - name: Create deployment directory
   ansible.builtin.shell: |
-    pct exec {{ adsb_nats_relay_lxc_id }} -- mkdir -p {{ adsb_nats_relay_deploy_path }}
+    pct exec {{ adsb_nats_relay_lxc_id }} -- mkdir -p {{ adsb_nats_relay_deploy_path }}/adsb-nats-relay/src
   changed_when: false
+
+- name: Copy source code to server
+  ansible.builtin.shell: |
+    tar -C /Users/anders/git/adsb-nats-relay -czf - src pyproject.toml Dockerfile | \
+      ssh -p 22 root@ssh.viljo.se "pct exec {{ adsb_nats_relay_lxc_id }} -- tar -C {{ adsb_nats_relay_deploy_path }}/adsb-nats-relay -xzf -"
+  changed_when: false
+  delegate_to: localhost
 
 - name: Deploy docker-compose.yml
   ansible.builtin.shell: |
@@ -11,27 +18,18 @@
     EOF
   changed_when: false
 
-- name: Pull latest images
+- name: Build and start services
   ansible.builtin.shell: |
-    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml pull
-  changed_when: false
-  register: pull_result
-  retries: 3
-  delay: 10
-  until: pull_result.rc == 0
-
-- name: Start services
-  ansible.builtin.shell: |
-    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml up -d
+    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml up -d --build
   changed_when: false
 
-- name: Wait for NATS to be healthy
+- name: Wait for NATS to be running
   ansible.builtin.shell: |
-    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml ps --format json | grep -q healthy
-  register: health_check
+    pct exec {{ adsb_nats_relay_lxc_id }} -- docker compose -f {{ adsb_nats_relay_deploy_path }}/docker-compose.yml ps --format json | grep -q '"State":"running"'
+  register: running_check
   retries: 30
   delay: 2
-  until: health_check.rc == 0
+  until: running_check.rc == 0
   changed_when: false
 
 - name: Verify NATS relay is running

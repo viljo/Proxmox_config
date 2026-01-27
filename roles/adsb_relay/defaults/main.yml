@@ -29,9 +29,10 @@ adsb_web_port: 8078
 adsb_sbs_port: 32006  # Internal SBS input port for readsb
 adsb_sbs_external_input_port: 30006  # External SBS input port for PingStation/remote feeders
 
-# api2sbs target - direct to readsb SBS input (Y-splitter handles adsbhub separately)
-api2sbs_server: "adsb-readsb"
-api2sbs_port: 32006
+# api2sbs target - connect to NATS relay proxy for NATS publishing + readsb forwarding
+# Set to adsb-nats-relay-api:32007 to route through proxy, or adsb-readsb:32006 for direct
+api2sbs_server: "adsb-nats-relay-api"
+api2sbs_port: 32007
 
 # Location for map center (Vidsel Air Base, Sweden)
 adsb_latitude: 65.8753

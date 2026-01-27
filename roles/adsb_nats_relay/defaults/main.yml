@@ -51,7 +51,16 @@ local_relay_container: adsb-nats-relay-local
 local_sbs_host: adsb-readsb
 local_sbs_port: 30003  # readsb SBS output (Beast sources only)
 local_sensor_id_start: 4750
-local_sensor_id_end: 5250
+local_sensor_id_end: 5000
+
+# Third relay for api2sbs (ADS-B.fi API data via proxy)
+api_relay_enabled: true
+api_relay_container: adsb-nats-relay-api
+api_proxy_listen_port: 32007  # api2sbs connects here
+api_proxy_dest_host: adsb-readsb
+api_proxy_dest_port: 32006  # forward to readsb SBS input
+api_sensor_id_start: 5000
+api_sensor_id_end: 5250
 
 # Service subdomain
 nats_subdomain: adsb-maps
