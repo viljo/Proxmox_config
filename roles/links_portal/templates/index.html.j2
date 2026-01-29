@@ -41,6 +41,20 @@
             font-size: 1rem;
         }
 
+        .status-summary {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+        }
+
+        .status-summary span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
         .services-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -56,6 +70,7 @@
             color: inherit;
             transition: all 0.3s ease;
             display: block;
+            position: relative;
         }
 
         .service-card:hover {
@@ -65,9 +80,50 @@
             box-shadow: 0 10px 40px rgba(233, 69, 96, 0.2);
         }
 
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
         .service-icon {
             font-size: 2.5rem;
-            margin-bottom: 16px;
+        }
+
+        .status-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #666;
+            box-shadow: 0 0 6px rgba(102, 102, 102, 0.5);
+            transition: all 0.3s ease;
+        }
+
+        .status-light.checking {
+            background: #f39c12;
+            box-shadow: 0 0 8px rgba(243, 156, 18, 0.6);
+            animation: pulse 1s infinite;
+        }
+
+        .status-light.online {
+            background: #27ae60;
+            box-shadow: 0 0 8px rgba(39, 174, 96, 0.6);
+        }
+
+        .status-light.offline {
+            background: #e74c3c;
+            box-shadow: 0 0 8px rgba(231, 76, 60, 0.6);
+        }
+
+        .status-light.unknown {
+            background: #f39c12;
+            box-shadow: 0 0 8px rgba(243, 156, 18, 0.6);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
 
         .service-name {
@@ -81,13 +137,28 @@
             font-size: 0.9rem;
             color: #a0a0a0;
             line-height: 1.5;
+            margin-bottom: 8px;
         }
+
+        .service-latency {
+            font-size: 0.75rem;
+            color: #666;
+        }
+
+        .service-latency.fast { color: #27ae60; }
+        .service-latency.medium { color: #f39c12; }
+        .service-latency.slow { color: #e74c3c; }
 
         footer {
             text-align: center;
             margin-top: 60px;
             color: #666;
             font-size: 0.85rem;
+        }
+
+        .last-check {
+            margin-top: 8px;
+            font-size: 0.8rem;
         }
 
         footer a {
@@ -105,15 +176,27 @@
         <header>
             <h1>{{ links_portal_title }}</h1>
             <p class="subtitle">Self-hosted infrastructure services</p>
+            <div class="status-summary">
+                <span><span class="status-light online"></span> <span id="online-count">0</span> online</span>
+                <span><span class="status-light offline"></span> <span id="offline-count">0</span> offline</span>
+                <span><span class="status-light unknown"></span> <span id="unknown-count">0</span> unknown</span>
+            </div>
         </header>
 
         <div class="services-grid">
 {% for service in infrastructure_services %}
 {% if service.status == 'deployed_working' and service.show_in_portal | default(true) and service.slug != 'links' %}
-            <a href="https://{{ service.subdomain }}.{{ public_domain }}" class="service-card">
-                <div class="service-icon">{{ service.icon }}</div>
+            <a href="https://{{ service.subdomain }}.{{ public_domain }}"
+               class="service-card"
+               data-url="https://{{ service.subdomain }}.{{ public_domain }}"
+               data-name="{{ service.name }}">
+                <div class="service-header">
+                    <div class="service-icon">{{ service.icon }}</div>
+                    <div class="status-light checking" title="Checking..."></div>
+                </div>
                 <div class="service-name">{{ service.name }}</div>
                 <div class="service-description">{{ service.description }}</div>
+                <div class="service-latency"></div>
             </a>
 {% endif %}
 {% endfor %}
@@ -121,7 +204,101 @@
 
         <footer>
             <p>Auto-generated from services.yml</p>
+            <p class="last-check">Last check: <span id="last-check-time">never</span></p>
         </footer>
     </div>
+
+    <script>
+        const CHECK_INTERVAL = 60000; // Check every 60 seconds
+        const TIMEOUT = 10000; // 10 second timeout
+
+        async function checkService(card) {
+            const url = card.dataset.url;
+            const light = card.querySelector('.status-light');
+            const latencyEl = card.querySelector('.service-latency');
+
+            light.className = 'status-light checking';
+            light.title = 'Checking...';
+
+            const startTime = performance.now();
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+
+                const response = await fetch(url, {
+                    method: 'HEAD',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+                const latency = Math.round(performance.now() - startTime);
+
+                // With no-cors, we get an opaque response but the request succeeded
+                light.className = 'status-light online';
+                light.title = 'Online';
+
+                latencyEl.textContent = `${latency}ms`;
+                latencyEl.className = 'service-latency ' + (latency < 200 ? 'fast' : latency < 500 ? 'medium' : 'slow');
+
+                return 'online';
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    light.className = 'status-light offline';
+                    light.title = 'Timeout';
+                    latencyEl.textContent = 'timeout';
+                    latencyEl.className = 'service-latency slow';
+                    return 'offline';
+                } else if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+                    // Network error - service might be down or CORS blocking even no-cors
+                    light.className = 'status-light offline';
+                    light.title = 'Unreachable';
+                    latencyEl.textContent = 'unreachable';
+                    latencyEl.className = 'service-latency slow';
+                    return 'offline';
+                } else {
+                    light.className = 'status-light unknown';
+                    light.title = 'Unknown: ' + error.message;
+                    latencyEl.textContent = 'error';
+                    latencyEl.className = 'service-latency';
+                    return 'unknown';
+                }
+            }
+        }
+
+        async function checkAllServices() {
+            const cards = document.querySelectorAll('.service-card');
+            const results = { online: 0, offline: 0, unknown: 0 };
+
+            // Check services in parallel with a small stagger
+            const promises = Array.from(cards).map((card, index) => {
+                return new Promise(resolve => {
+                    setTimeout(async () => {
+                        const status = await checkService(card);
+                        results[status]++;
+                        resolve();
+                    }, index * 100); // Stagger by 100ms
+                });
+            });
+
+            await Promise.all(promises);
+
+            // Update summary counts
+            document.getElementById('online-count').textContent = results.online;
+            document.getElementById('offline-count').textContent = results.offline;
+            document.getElementById('unknown-count').textContent = results.unknown;
+
+            // Update last check time
+            document.getElementById('last-check-time').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Initial check
+        checkAllServices();
+
+        // Periodic checks
+        setInterval(checkAllServices, CHECK_INTERVAL);
+    </script>
 </body>
 </html>
