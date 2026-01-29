@@ -1,0 +1,48 @@
+---
+# Playbook: Deploy Links Portal
+# Description: Deploy auto-generated links portal from services.yml
+
+- name: Deploy Links Portal
+  hosts: proxmox_admin
+  gather_facts: false
+
+  vars:
+    public_domain: viljo.se
+    links_portal_lxc_id: 200
+
+  pre_tasks:
+    - name: Display deployment plan
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Links Portal Deployment"
+          - "=========================================="
+          - ""
+          - "This playbook will deploy:"
+          - "  - Links portal auto-generated from services.yml"
+          - "  - nginx container with Traefik integration"
+          - ""
+          - "Portal URL: https://links.{{ public_domain }}"
+          - ""
+          - "Deployment target: LXC {{ links_portal_lxc_id }}"
+          - "=========================================="
+
+  roles:
+    - links_portal
+
+  post_tasks:
+    - name: Display deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Links Portal Deployment Complete"
+          - "=========================================="
+          - ""
+          - "Portal is now running at:"
+          - "  https://links.{{ public_domain }}"
+          - ""
+          - "Services displayed: {{ infrastructure_services | selectattr('status', 'equalto', 'deployed_working') | selectattr('show_in_portal', 'undefined') | list | length + infrastructure_services | selectattr('status', 'equalto', 'deployed_working') | selectattr('show_in_portal', 'defined') | selectattr('show_in_portal') | list | length - 1 }}"
+          - ""
+          - "To update the portal, modify services.yml"
+          - "and re-run this playbook."
+          - "=========================================="

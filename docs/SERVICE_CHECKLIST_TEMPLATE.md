@@ -96,7 +96,8 @@
 - [ ] Initial deployment successful
 - [ ] **Traefik deployed and certificate issued** (Requirement 2 completed)
 - [ ] **HTTPS access verified**: Service accessible via https://servicename.viljo.se
-- [ ] **Service added to `services.yml`** and links page updated (if public-facing)
+- [ ] **Service added to `services.yml`** (if public-facing)
+- [ ] **Links portal regenerated**: `ansible-playbook playbooks/links-portal-deploy.yml`
 
 **Deployment Time**: _____ minutes
 

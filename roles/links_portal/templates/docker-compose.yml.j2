@@ -1,0 +1,25 @@
+version: "3.8"
+
+services:
+  {{ links_portal_container_name }}:
+    image: {{ links_portal_image }}
+    container_name: {{ links_portal_container_name }}
+    restart: unless-stopped
+
+    volumes:
+      - {{ links_portal_base_path }}/html:/usr/share/nginx/html:ro
+      - {{ links_portal_base_path }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+    networks:
+      - {{ links_portal_network }}
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.links-portal.rule=Host(`{{ links_portal_subdomain }}.{{ public_domain }}`)"
+      - "traefik.http.routers.links-portal.entrypoints=websecure"
+      - "traefik.http.routers.links-portal.tls.certresolver=letsencrypt"
+      - "traefik.http.services.links-portal.loadbalancer.server.port=80"
+
+networks:
+  {{ links_portal_network }}:
+    external: true

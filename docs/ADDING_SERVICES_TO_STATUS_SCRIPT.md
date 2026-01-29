@@ -197,17 +197,21 @@ When you add a service to the SERVICES array, these checks run automatically:
 
 **MANDATORY**: When deploying a new service, you MUST:
 
-1. Add service to SERVICES or INFRA_CONTAINERS array
-2. Test that all automatic checks work (run the script)
-3. Add service-specific API health check if service has APIs
-4. Add database connectivity check if service is a database
-5. Document any custom checks in this file
-6. Commit changes to the script with the service deployment
+1. Add service to `inventory/group_vars/all/services.yml` (single source of truth)
+2. Regenerate links portal: `ansible-playbook playbooks/links-portal-deploy.yml`
+3. Add service to SERVICES or INFRA_CONTAINERS array in status script
+4. Test that all automatic checks work (run the script)
+5. Add service-specific API health check if service has APIs
+6. Add database connectivity check if service is a database
+7. Document any custom checks in this file
+8. Commit changes to the script with the service deployment
 
 **Example commit message**:
 ```
-Add MyService to infrastructure status checks
+Add MyService to infrastructure
 
+- Added MyService to services.yml
+- Regenerated links portal
 - Added MyService:165:8080:myservice.viljo.se to SERVICES array
 - Added /api/health endpoint check in Section 8
 - Verified all automatic checks pass

@@ -1,6 +1,9 @@
 ---
 # Single Source of Truth for Infrastructure Services
 # This file defines currently deployed and accessible services
+#
+# IMPORTANT: After modifying this file, regenerate the links portal:
+#   ansible-playbook playbooks/links-portal-deploy.yml
 
 infrastructure_services:
 
@@ -121,6 +124,14 @@ infrastructure_services:
     status: deployed_working
     port: 30005/tcp
     note: "Public access, no authentication. Three data sources: 1) Local Pi antenna (1Hz real-time), 2) ADS-B.fi API (250NM regional), 3) ADSBHub worldwide feed. Web UI at /radar/, Beast TCP on port 30005."
+
+  - name: KSF Rules Guide
+    slug: ksf
+    icon: "🛡️"
+    description: Kernel Security Filtering implementation guide for Debian
+    subdomain: ksf
+    status: deployed_working
+    note: "Documentation page, no authentication"
 
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:

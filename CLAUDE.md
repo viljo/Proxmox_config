@@ -47,7 +47,8 @@
 * Links Portal - ENFORCING:
   - ALL services in services.yml MUST be included in the links.viljo.se portal
   - Exception: Services with `show_in_portal: false` are explicitly excluded
-  - When adding/removing services, the links portal MUST be updated to match services.yml
+  - The portal is AUTO-GENERATED from services.yml - do NOT edit HTML manually
+  - ALWAYS run `ansible-playbook playbooks/links-portal-deploy.yml` after modifying services.yml
   - The links portal is the user-facing service directory - keep it in sync
 
 * Loopia DNS Records - ENFORCING:

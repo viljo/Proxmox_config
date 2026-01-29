@@ -1,0 +1,19 @@
+---
+# Links Portal Configuration
+
+# Container settings
+links_portal_image: nginx:alpine
+links_portal_container_name: links-portal
+
+# LXC container where the portal runs
+links_portal_lxc_id: 200
+
+# Paths
+links_portal_base_path: /opt/docker-stack/links-portal
+
+# Network
+links_portal_network: traefik_public
+
+# Portal settings
+links_portal_subdomain: links
+links_portal_title: "viljo.se Services"
