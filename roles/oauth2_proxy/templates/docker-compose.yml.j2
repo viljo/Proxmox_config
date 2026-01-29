@@ -11,7 +11,7 @@ services:
       - OAUTH2_PROXY_PROVIDER={{ oauth2_proxy_provider }}
       - OAUTH2_PROXY_CLIENT_ID={{ oauth2_proxy_client_id }}
       - OAUTH2_PROXY_CLIENT_SECRET={{ oauth2_proxy_client_secret }}
-      - OAUTH2_PROXY_REDIRECT_URL={{ oauth2_proxy_redirect_url }}
+      - OAUTH2_PROXY_REDIRECT_URL=https://{{ item.subdomain }}.{{ public_domain }}/oauth2/callback
 
       # OIDC Configuration
       - OAUTH2_PROXY_OIDC_ISSUER_URL={{ oauth2_proxy_oidc_issuer_url }}
