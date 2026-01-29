@@ -212,60 +212,74 @@
         const CHECK_INTERVAL = 60000; // Check every 60 seconds
         const TIMEOUT = 10000; // 10 second timeout
 
-        async function checkService(card) {
-            const url = card.dataset.url;
-            const light = card.querySelector('.status-light');
-            const latencyEl = card.querySelector('.service-latency');
+        function checkService(card) {
+            return new Promise((resolve) => {
+                const url = card.dataset.url;
+                const light = card.querySelector('.status-light');
+                const latencyEl = card.querySelector('.service-latency');
 
-            light.className = 'status-light checking';
-            light.title = 'Checking...';
+                light.className = 'status-light checking';
+                light.title = 'Checking...';
 
-            const startTime = performance.now();
+                const startTime = performance.now();
+                let resolved = false;
 
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
+                const done = (status, title, latencyText, latencyClass) => {
+                    if (resolved) return;
+                    resolved = true;
+                    light.className = 'status-light ' + status;
+                    light.title = title;
+                    latencyEl.textContent = latencyText;
+                    latencyEl.className = 'service-latency ' + (latencyClass || '');
+                    resolve(status === 'online' ? 'online' : status === 'offline' ? 'offline' : 'unknown');
+                };
 
-                const response = await fetch(url, {
-                    method: 'GET',
-                    mode: 'no-cors',
-                    cache: 'no-cache',
-                    signal: controller.signal
-                });
+                // Timeout handler
+                const timeoutId = setTimeout(() => {
+                    done('offline', 'Timeout', 'timeout', 'slow');
+                }, TIMEOUT);
 
-                clearTimeout(timeoutId);
-                const latency = Math.round(performance.now() - startTime);
+                // Use image loading - bypasses CORS completely
+                // Try favicon first, then fall back to the page itself
+                const img = new Image();
 
-                // With no-cors, we get an opaque response but the request succeeded
-                light.className = 'status-light online';
-                light.title = 'Online';
+                img.onload = () => {
+                    clearTimeout(timeoutId);
+                    const latency = Math.round(performance.now() - startTime);
+                    const latencyClass = latency < 200 ? 'fast' : latency < 500 ? 'medium' : 'slow';
+                    done('online', 'Online', latency + 'ms', latencyClass);
+                };
 
-                latencyEl.textContent = `${latency}ms`;
-                latencyEl.className = 'service-latency ' + (latency < 200 ? 'fast' : latency < 500 ? 'medium' : 'slow');
+                img.onerror = () => {
+                    // Error loading favicon - try a fetch as backup
+                    // onerror fires for both "server responded with non-image" and "server unreachable"
+                    // We need to distinguish - try fetch with no-cors
+                    fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-cache' })
+                        .then(() => {
+                            clearTimeout(timeoutId);
+                            const latency = Math.round(performance.now() - startTime);
+                            const latencyClass = latency < 200 ? 'fast' : latency < 500 ? 'medium' : 'slow';
+                            done('online', 'Online', latency + 'ms', latencyClass);
+                        })
+                        .catch((err) => {
+                            clearTimeout(timeoutId);
+                            // Check if it's a network error vs CORS error
+                            // Unfortunately both show as TypeError, but we can check timing
+                            const latency = Math.round(performance.now() - startTime);
+                            if (latency < 100) {
+                                // Very fast failure = likely DNS or connection refused
+                                done('offline', 'Unreachable', 'down', 'slow');
+                            } else {
+                                // Slower failure = server responded but CORS blocked
+                                const latencyClass = latency < 200 ? 'fast' : latency < 500 ? 'medium' : 'slow';
+                                done('online', 'Online (CORS)', latency + 'ms', latencyClass);
+                            }
+                        });
+                };
 
-                return 'online';
-            } catch (error) {
-                if (error.name === 'AbortError') {
-                    light.className = 'status-light offline';
-                    light.title = 'Timeout';
-                    latencyEl.textContent = 'timeout';
-                    latencyEl.className = 'service-latency slow';
-                    return 'offline';
-                } else if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-                    // Network error - service might be down or CORS blocking even no-cors
-                    light.className = 'status-light offline';
-                    light.title = 'Unreachable';
-                    latencyEl.textContent = 'unreachable';
-                    latencyEl.className = 'service-latency slow';
-                    return 'offline';
-                } else {
-                    light.className = 'status-light unknown';
-                    light.title = 'Unknown: ' + error.message;
-                    latencyEl.textContent = 'error';
-                    latencyEl.className = 'service-latency';
-                    return 'unknown';
-                }
-            }
+                // Try to load favicon
+                img.src = url + '/favicon.ico?' + Date.now();
+            });
         }
 
         async function checkAllServices() {
