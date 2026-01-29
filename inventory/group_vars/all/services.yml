@@ -130,8 +130,8 @@ infrastructure_services:
     icon: "🛡️"
     description: Kernel Security Filtering implementation guide for Debian
     subdomain: ksf
-    status: deployed_working
-    note: "Documentation page, no authentication"
+    status: pending
+    note: "Documentation page, no authentication. DNS configured but content not deployed yet."
 
 # Infrastructure services (not exposed externally)
 infrastructure_services_internal:
