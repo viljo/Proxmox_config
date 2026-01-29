@@ -21,7 +21,6 @@ loopia_ddns_records:
   - host: cloud
   - host: media
   - host: torrent
-  - host: zipline
   - host: llm
   - host: webtop
   - host: mail

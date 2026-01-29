@@ -73,7 +73,6 @@ ssh root@192.168.1.3 pct exec 200 -- docker logs traefik --tail 50
 - **Nextcloud**: https://cloud.viljo.se (file storage)
 - **Jellyfin**: https://media.viljo.se (media streaming)
 - **qBittorrent**: https://torrent.viljo.se (torrent client)
-- **Zipline**: https://zipline.viljo.se (file sharing)
 - **Webtop**: https://webtop.viljo.se (browser desktop - SSO)
 - **Mailhog**: https://mail.viljo.se (email testing - SSO)
 

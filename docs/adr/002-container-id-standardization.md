@@ -59,7 +59,7 @@ IP last octet >= 100
 | Wazuh | **162** | 172.16.10.**162** | .162 = Security |
 | Mattermost | **163** | 172.16.10.**163** | .163 = Team Chat |
 | OpenMediaVault | **164** | 172.16.10.**164** | .164 = NAS |
-| Zipline | **165** | 172.16.10.**165** | .165 = Screenshots |
+| ~~Zipline~~ | ~~**165**~~ | ~~172.16.10.**165**~~ | ~~.165 = Screenshots (removed)~~ |
 | Webtop | **170** | 172.16.10.**170** | .170 = Browser |
 | WireGuard | **190** | 172.16.10.**190** | .190 = VPN |
 
@@ -138,7 +138,7 @@ Key changes:
 - `wazuh.yml`: 2080 → 62 → 162
 - `mattermost.yml`: N/A → 63 → 163
 - `openmediavault.yml`: 2020 → 64 → 164
-- `zipline.yml`: 2060 → 65 → 165
+- ~~`zipline.yml`: 2060 → 65 → 165~~ (removed)
 - `webtop.yml`: N/A → 170
 - `wireguard.yml`: 2090 → 90 → 190
 
@@ -171,7 +171,7 @@ To maintain organization, services are grouped by IP range:
 | .100-.109 | Core infrastructure | Firewall (101) |
 | .110-.149 | Management/admin services | Bastion (110) |
 | .150-.159 | Backend services | PostgreSQL (150), GitLab (153-154), Nextcloud (155), Jellyfin (156), Home Assistant (157), Redis (158), qBittorrent (159) |
-| .160-.179 | User/collaboration applications | Mattermost (163), OpenMediaVault (164), Zipline (165), Webtop (170) |
+| .160-.179 | User/collaboration applications | Mattermost (163), OpenMediaVault (164), Webtop (170) |
 | .180-.189 | Security/monitoring services | Wazuh (162) |
 | .190-.199 | Network services | WireGuard VPN (190) |
 

@@ -25,9 +25,6 @@ postgres_databases:
   - name: nextcloud
     container: nextcloud-postgres
     user: nextcloud
-  - name: zipline
-    container: zipline-db
-    user: zipline
   - name: claper
     container: claper-postgres
     user: postgres
@@ -52,8 +49,6 @@ docker_services:
     critical: true
 
   # User data services
-  - name: zipline
-    critical: true
   - name: open-webui
     critical: true
   - name: claper

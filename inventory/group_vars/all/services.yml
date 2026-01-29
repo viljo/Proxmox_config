@@ -51,14 +51,6 @@ infrastructure_services:
     status: deployed_working
     note: "Directly accessible, uses own authentication. Downloads stored on SSD (/mnt/home_ssd/downloads) for fast I/O."
 
-  - name: Zipline
-    slug: zipline
-    icon: "📎"
-    description: File sharing service
-    subdomain: zipline
-    status: deployed_working
-    note: "Directly accessible, uses own authentication"
-
   - name: Webtop
     slug: webtop
     icon: "💻"

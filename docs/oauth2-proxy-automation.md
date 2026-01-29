@@ -8,7 +8,7 @@ This automation deploys GitLab.com SSO authentication for selected internal serv
 - **webtop.viljo.se** - Webtop development environment
 - **mail.viljo.se** - Mailhog email testing
 
-Most public services (Jellyfin, Jitsi, qBittorrent, Nextcloud, Zipline) are directly accessible and use their own authentication.
+Most public services (Jellyfin, Jitsi, qBittorrent, Nextcloud) are directly accessible and use their own authentication.
 
 ## Architecture
 

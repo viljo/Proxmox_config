@@ -194,7 +194,6 @@ ssh root@192.168.1.3 pct exec 200 -- docker ps  # List services
 | Nextcloud | Docker | https://cloud.viljo.se |
 | Jellyfin | Docker | https://media.viljo.se |
 | qBittorrent | Docker | https://torrent.viljo.se |
-| Zipline | Docker | https://zipline.viljo.se |
 | Webtop (SSO) | Docker | https://webtop.viljo.se |
 | Mailhog (SSO) | Docker | https://mail.viljo.se |
 | Ollama LLM | VM | Internal only (172.31.31.201) |
@@ -251,7 +250,7 @@ ansible-playbook playbooks/oauth2-proxy-deploy.yml
 
 Users log in with their GitLab account (@viljo.se email required) to access protected services.
 
-Most public services (Jellyfin, Jitsi, qBittorrent, Nextcloud, Zipline) are directly accessible and use their own authentication.
+Most public services (Jellyfin, Jitsi, qBittorrent, Nextcloud) are directly accessible and use their own authentication.
 
 **Learn more**: [OAuth2-Proxy Automation](oauth2-proxy-automation.md)
 

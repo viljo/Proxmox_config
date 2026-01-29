@@ -54,7 +54,7 @@ services:
       - SENSOR_ID_START={{ sensor_id_start | default(4250) }}
       - SENSOR_ID_END={{ sensor_id_end | default(4750) }}
       # Cross-source deduplication (uses NATS KV)
-      - DEDUP_ENABLED=true
+      - DEDUP_ENABLED=false
       - DEDUP_SOURCE_NAME=adsbhub
 
     networks:

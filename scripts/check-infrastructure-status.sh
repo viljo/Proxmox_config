@@ -25,8 +25,7 @@ SERVICES=(
     "Nextcloud:cloud.viljo.se"
     "Jellyfin:media.viljo.se"
     "qBittorrent:torrent.viljo.se"
-    "Zipline:zipline.viljo.se"
-    "Webtop (SSO):webtop.viljo.se"
+Webtop (SSO):webtop.viljo.se
     "Mailhog (SSO):mail.viljo.se"
     "Open WebUI:llm.viljo.se"
 )
