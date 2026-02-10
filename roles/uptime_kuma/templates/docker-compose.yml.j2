@@ -1,0 +1,37 @@
+services:
+  {{ uptime_kuma_container_name }}:
+    image: {{ uptime_kuma_image }}
+    container_name: {{ uptime_kuma_container_name }}
+    restart: unless-stopped
+
+    volumes:
+      - {{ uptime_kuma_data_path }}:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    ports:
+      - "{{ uptime_kuma_port }}:3001"
+
+    networks:
+      - {{ uptime_kuma_network }}
+      - backend
+
+    environment:
+      - TZ=Europe/Stockholm
+
+    # DNS override to reach services via internal Traefik (hairpin NAT fix)
+    extra_hosts:
+{% for service in infrastructure_services %}
+{% if service.subdomain is defined and service.subdomain != '' %}
+      - "{{ service.subdomain }}.{{ public_domain }}:{{ uptime_kuma_traefik_ip }}"
+{% endif %}
+{% endfor %}
+      - "{{ public_domain }}:{{ uptime_kuma_traefik_ip }}"
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  {{ uptime_kuma_network }}:
+    external: true
+  backend:
+    external: true

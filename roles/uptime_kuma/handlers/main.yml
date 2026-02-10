@@ -1,0 +1,7 @@
+---
+# Uptime Kuma handlers
+
+- name: restart uptime-kuma
+  ansible.builtin.command: >
+    pct exec {{ uptime_kuma_lxc_id }} -- bash -c 'cd {{ uptime_kuma_base_path }} && docker compose restart'
+  listen: "restart uptime-kuma"

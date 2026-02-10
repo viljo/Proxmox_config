@@ -67,13 +67,39 @@ infrastructure_services:
     status: deployed_working
     note: "Protected by OAuth2-Proxy (GitLab SSO)"
 
-  - name: Open WebUI
+  - name: RemoteLLM Broker
     slug: llm
-    icon: "🤖"
-    description: LLM web interface (connected to Ollama VM)
+    icon: "🔌"
+    description: WebSocket broker for remote LLM inference
     subdomain: llm
     status: deployed_working
-    note: "Protected by OAuth2-Proxy (GitLab SSO). API endpoints accessible with API key authentication. Connected to Ollama LLM VM (172.31.31.201:11434)"
+    note: "GitLab OAuth. Allows remote machines to connect as LLM providers. WebSocket connections at llm.viljo.se/ws"
+
+  - name: LLM Chat
+    slug: llmchat
+    icon: "🤖"
+    description: LLM chat interface (connects to RemoteLLM Broker)
+    subdomain: llmchat
+    status: deployed_working
+    note: "Protected by OAuth2-Proxy (GitLab SSO). Chat interface for LLM models via RemoteLLM Broker."
+
+  - name: Claper
+    slug: claper
+    icon: "📊"
+    description: Interactive presentation tool
+    subdomain: claper
+    status: deployed_working
+    note: "Public access, no authentication. Create interactive presentations with live polls and Q&A."
+
+  - name: Landing Page
+    slug: landing
+    icon: "🏠"
+    description: Main domain landing page
+    subdomain: ""
+    domain: viljo.se
+    status: deployed_working
+    show_in_portal: false
+    note: "Main viljo.se landing page. Not shown in links portal (it IS the portal redirect target)."
 
   - name: GitLab CE
     slug: gitlab
@@ -116,6 +142,14 @@ infrastructure_services:
     status: deployed_working
     port: 30005/tcp
     note: "Public access, no authentication. Three data sources: 1) Local Pi antenna (1Hz real-time), 2) ADS-B.fi API (250NM regional), 3) ADSBHub worldwide feed. Web UI at /radar/, Beast TCP on port 30005."
+
+  - name: Uptime Kuma
+    slug: health
+    icon: "📊"
+    description: Infrastructure monitoring dashboard
+    subdomain: health
+    status: deployed_working
+    note: "Protected by OAuth2-Proxy (GitLab SSO). Monitors all services from internal network with Discord alerts."
 
   - name: KSF Rules Guide
     slug: ksf

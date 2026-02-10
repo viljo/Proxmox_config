@@ -1,0 +1,50 @@
+---
+# Deploy Uptime Kuma service monitoring
+# Requires OAuth2-Proxy to be deployed first for external access
+
+- name: Deploy Uptime Kuma Monitoring
+  hosts: proxmox_admin
+  gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all/main.yml
+    - ../inventory/group_vars/all/services.yml
+
+  tasks:
+    - name: Apply uptime_kuma role
+      ansible.builtin.include_role:
+        name: uptime_kuma
+        public: yes
+
+    # ================================================================================
+    # SERVICE VERIFICATION
+    # ================================================================================
+
+    - name: "VERIFY: Test Uptime Kuma internal health"
+      ansible.builtin.command:
+        cmd: "pct exec {{ uptime_kuma_lxc_id }} -- curl -sf http://localhost:{{ uptime_kuma_port }}"
+      register: kuma_internal
+      failed_when: false
+      changed_when: false
+
+    - name: "VERIFY: Test Uptime Kuma HTTPS external access"
+      ansible.builtin.command:
+        cmd: "curl -sfI https://{{ uptime_kuma_subdomain }}.{{ public_domain }}/"
+      register: kuma_https
+      failed_when: false
+      changed_when: false
+
+    - name: "VERIFY: Display verification results"
+      ansible.builtin.debug:
+        msg:
+          - "=== Uptime Kuma Verification Results ==="
+          - "Internal health: {{ 'OK' if kuma_internal.rc == 0 else 'FAILED' }}"
+          - "HTTPS access: {{ 'OK' if kuma_https.rc == 0 else 'FAILED (OAuth redirect expected)' }}"
+          - ""
+          - "Internal URL: http://192.168.1.200:{{ uptime_kuma_port }}"
+          - "External URL: https://{{ uptime_kuma_subdomain }}.{{ public_domain }}"
+          - ""
+          - "Next steps:"
+          - "1. Access the external URL (authenticate via GitLab SSO)"
+          - "2. Create admin account on first access"
+          - "3. Go to Settings -> Notifications -> Add Discord webhook"
+          - "4. Add monitors for all services"

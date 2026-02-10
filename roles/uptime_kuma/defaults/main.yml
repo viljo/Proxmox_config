@@ -1,0 +1,24 @@
+---
+# Uptime Kuma Configuration
+
+# LXC container where Uptime Kuma runs
+uptime_kuma_lxc_id: 200
+
+# Container settings
+uptime_kuma_container_name: uptime-kuma
+uptime_kuma_image: louislam/uptime-kuma:1
+
+# Paths
+uptime_kuma_base_path: /opt/docker-stack/uptime-kuma
+uptime_kuma_data_path: "{{ uptime_kuma_base_path }}/data"
+
+# Network
+uptime_kuma_network: traefik_public
+uptime_kuma_port: 3001
+
+# Subdomain for external access
+uptime_kuma_subdomain: health
+
+# Traefik internal IP for hairpin NAT fix
+# Services monitored via external URLs need to resolve to internal Traefik
+uptime_kuma_traefik_ip: "10.0.2.3"

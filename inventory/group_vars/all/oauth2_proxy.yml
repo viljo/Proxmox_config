@@ -1,0 +1,77 @@
+---
+# OAuth2-Proxy SSO Configuration
+# Deploys multiple oauth2-proxy instances (one per protected service)
+# Uses GitLab.com as OIDC provider
+
+# Global OAuth2-Proxy Settings
+oauth2_proxy_container_id: 200  # Coolify LXC container
+oauth2_proxy_docker_image: "quay.io/oauth2-proxy/oauth2-proxy:latest"
+oauth2_proxy_base_path: "/opt/docker-stack"
+
+# GitLab OAuth Application Credentials
+oauth2_proxy_provider: gitlab
+oauth2_proxy_oidc_issuer_url: "https://gitlab.com"
+oauth2_proxy_client_id: "{{ vault_gitlab_oauth_client_id }}"
+oauth2_proxy_client_secret: "{{ vault_gitlab_oauth_client_secret }}"
+oauth2_proxy_redirect_url: "https://auth.{{ public_domain }}/oauth2/callback"
+oauth2_proxy_scope: "openid email profile"
+
+# Cookie Configuration
+oauth2_proxy_cookie_secret: "{{ vault_oauth2_proxy_cookie_secret }}"
+oauth2_proxy_cookie_secure: true
+oauth2_proxy_cookie_httponly: true
+oauth2_proxy_cookie_samesite: lax
+oauth2_proxy_cookie_domains: ".{{ public_domain }}"
+
+# Email Domain Restriction
+oauth2_proxy_email_domains: "{{ public_domain }}"
+
+# Logging
+oauth2_proxy_logging_enabled: true
+oauth2_proxy_auth_logging: true
+oauth2_proxy_request_logging: true
+
+# Auto-redirect (skip provider selection button)
+oauth2_proxy_skip_provider_button: true
+oauth2_proxy_pass_host_header: true
+
+# Pass authentication headers to upstream
+oauth2_proxy_set_xauthrequest: true
+oauth2_proxy_pass_access_token: true
+oauth2_proxy_pass_authorization_header: true
+oauth2_proxy_pass_user_headers: true
+
+# Resource Limits
+oauth2_proxy_cpu_limit: "0.5"
+oauth2_proxy_memory_limit: "256M"
+
+# Service Definitions
+# Each service gets its own oauth2-proxy instance
+# Only services that need SSO protection are listed here
+oauth2_proxy_services:
+  - name: webtop
+    subdomain: webtop
+    upstream: "http://webtop:3000"
+    description: "Webtop desktop environment"
+
+  - name: mailhog
+    subdomain: mail
+    upstream: "http://mailhog:8025"
+    description: "Mailhog email testing"
+
+  - name: health
+    subdomain: health
+    upstream: "http://uptime-kuma:3001"
+    description: "Uptime Kuma monitoring"
+    # Separate GitLab OAuth app for Uptime Kuma
+    client_id: "{{ vault_uptime_kuma_gitlab_client_id }}"
+    client_secret: "{{ vault_uptime_kuma_gitlab_client_secret }}"
+
+# Traefik Configuration
+oauth2_proxy_traefik_network: traefik_public
+oauth2_proxy_backend_network: backend
+oauth2_proxy_service_port: 4180
+oauth2_proxy_external_url: "https://auth.{{ public_domain }}"
+
+# Watchtower (disable auto-updates)
+oauth2_proxy_watchtower_enabled: false

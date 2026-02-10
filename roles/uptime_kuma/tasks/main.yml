@@ -1,0 +1,66 @@
+---
+# Uptime Kuma deployment tasks
+
+- name: Create Uptime Kuma directories
+  ansible.builtin.command: >
+    pct exec {{ uptime_kuma_lxc_id }} -- mkdir -p {{ item }}
+  loop:
+    - "{{ uptime_kuma_base_path }}"
+    - "{{ uptime_kuma_data_path }}"
+  changed_when: true
+
+- name: Generate docker-compose.yml from template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /tmp/uptime-kuma-docker-compose.yml
+    mode: '0644'
+
+- name: Copy docker-compose.yml to LXC
+  ansible.builtin.command: >
+    pct push {{ uptime_kuma_lxc_id }} /tmp/uptime-kuma-docker-compose.yml {{ uptime_kuma_base_path }}/docker-compose.yml
+  changed_when: true
+
+- name: Stop existing uptime-kuma container if running
+  ansible.builtin.command: >
+    pct exec {{ uptime_kuma_lxc_id }} -- docker stop {{ uptime_kuma_container_name }}
+  register: stop_result
+  changed_when: stop_result.rc == 0
+  failed_when: false
+
+- name: Remove existing uptime-kuma container if exists
+  ansible.builtin.command: >
+    pct exec {{ uptime_kuma_lxc_id }} -- docker rm {{ uptime_kuma_container_name }}
+  register: rm_result
+  changed_when: rm_result.rc == 0
+  failed_when: false
+
+- name: Deploy Uptime Kuma container
+  ansible.builtin.command: >
+    pct exec {{ uptime_kuma_lxc_id }} -- bash -c 'cd {{ uptime_kuma_base_path }} && docker compose up -d'
+  register: kuma_deploy
+  changed_when: true
+
+- name: Wait for Uptime Kuma to be ready
+  ansible.builtin.command: >
+    pct exec {{ uptime_kuma_lxc_id }} -- curl -sf http://localhost:{{ uptime_kuma_port }}
+  register: kuma_health
+  until: kuma_health.rc == 0
+  retries: 12
+  delay: 10
+
+- name: Display Uptime Kuma status
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - "Uptime Kuma deployed successfully!"
+      - "=========================================="
+      - ""
+      - "Internal access: http://192.168.1.200:{{ uptime_kuma_port }}"
+      - "External access: https://{{ uptime_kuma_subdomain }}.{{ public_domain }}"
+      - ""
+      - "Next steps:"
+      - "1. Access the URL above (via GitLab SSO)"
+      - "2. Create admin account on first access"
+      - "3. Add Discord webhook in Settings -> Notifications"
+      - "4. Add monitors for each service"
+      - "=========================================="

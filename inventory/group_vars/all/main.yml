@@ -7,31 +7,59 @@ traefik_acme_email: "admin@{{ public_domain }}"
 traefik_dns_challenge_provider: loopia
 loopia_dns_interface: "{{ wan_bridge }}"
 loopia_dns_records:
+  # Core domain
   - host: "@"
     ttl: 600
   - host: links
     ttl: 600
+  # Communication
   - host: meet
-    ttl: 600
-  - host: cloud
-    ttl: 600
-  - host: media
-    ttl: 600
-  - host: auth
-    ttl: 600
-  - host: torrent
-    ttl: 600
-  - host: webtop
-    ttl: 600
-  - host: zipline
     ttl: 600
   - host: mail
     ttl: 600
+  # Storage & Files
+  - host: cloud
+    ttl: 600
+  - host: store
+    ttl: 600
+  # Media
+  - host: media
+    ttl: 600
+  - host: torrent
+    ttl: 600
+  # Development & DevOps
+  - host: gitlab
+    ttl: 600
+  - host: webtop
+    ttl: 600
+  # LLM & AI
   - host: llm
     ttl: 600
-  - host: proxmox
+  - host: llmchat
+    ttl: 600
+  # Presentations
+  - host: claper
+    ttl: 600
+  # Network access
+  - host: vpn
+    ttl: 600
+  - host: sshbridge
     ttl: 600
   - host: ssh
+    ttl: 600
+  # Data feeds
+  - host: adsb
+    ttl: 600
+  # Documentation
+  - host: ksf
+    ttl: 600
+  # Monitoring
+  - host: health
+    ttl: 600
+  # Infrastructure
+  - host: proxmox
+    ttl: 600
+  - host: auth
     ttl: 600
 management_bridge: vmbr0
 wan_bridge: vmbr2
