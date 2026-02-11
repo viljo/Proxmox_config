@@ -19,8 +19,20 @@
   - Public services use Dynamic DNS (DDNS) - the public IP can change
   - ALWAYS use domain names (*.viljo.se) for public access, NEVER hardcode public IPs
   - Ansible inventory MUST use ssh.viljo.se for external access
-  - Service configurations that need public IP should fetch it dynamically (e.g., `curl ifconfig.me`)
+  - Service configurations that need public IP should fetch it dynamically (e.g., STUN servers, `curl ifconfig.me`)
   - 192.168.1.x management network is separate and static - not affected by DDNS
+
+* IP Change Resilience - GOAL:
+  - Public IP changes MUST NOT cause service failures
+  - Services MUST handle IP changes automatically with minimal unavailability
+  - Maximum acceptable downtime during IP change: DNS TTL (600s = 10 minutes)
+  - Implementation requirements:
+    1. loopia-ddns service MUST run every 15 minutes to update DNS
+    2. All services MUST use domain names, never hardcoded public IPs
+    3. Services needing real-time public IP (e.g., WebRTC/JVB) MUST use STUN discovery
+    4. No service should require manual redeployment after IP change
+  - Protected services: Jitsi (STUN), all web services (DNS-based)
+  - Critical dependency: loopia-ddns systemd timer must be running on Proxmox host
 
 * Dual ISP Architecture:
   - vmbr0: Starlink ISP (CGNAT) on 192.168.1.0/24 - Management ONLY - MUST NOT TOUCH
