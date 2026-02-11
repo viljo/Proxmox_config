@@ -8,6 +8,6 @@ PublicKey = {{ server_public_key.stdout }}
 {% if client_preshared_key is defined %}
 PresharedKey = {{ client_preshared_key }}
 {% endif %}
-Endpoint = vpn.viljo.se:{{ wireguard_port }}
+Endpoint = vpn.{{ public_domain }}:{{ wireguard_port }}
 AllowedIPs = {{ wireguard_allowed_networks | join(', ') }}, {{ wireguard_network }}
 PersistentKeepalive = 25

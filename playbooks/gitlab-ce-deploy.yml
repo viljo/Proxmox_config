@@ -15,7 +15,7 @@
     gitlab_oauth_app_secret: "{{ vault_gitlab_ce_oauth_app_secret }}"
     # GitLab Pages - enable wildcard pages at *.gitlab.viljo.se
     gitlab_pages_enabled: true
-    gitlab_pages_domain: "gitlab.viljo.se"
+    gitlab_pages_domain: "gitlab.{{ public_domain }}"
     gitlab_pages_port: 8090
 
   pre_tasks:

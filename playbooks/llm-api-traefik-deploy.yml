@@ -150,7 +150,7 @@
                     - "traefik.enable=true"
 
                     # Dashboard router
-                    - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.viljo.se`)"
+                    - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.{{ public_domain }}`)"
                     - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
                     - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
                     - "traefik.http.routers.traefik-dashboard.service=api@internal"
