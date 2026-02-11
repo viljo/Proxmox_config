@@ -73,6 +73,9 @@ services:
       - JVB_AUTH_PASSWORD={{ jitsi_jvb_auth_password }}
     networks:
       jitsi:
+        aliases:
+          - xmpp.meet.jitsi
+          - meet.jitsi
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
