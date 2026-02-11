@@ -15,10 +15,10 @@ jitsi_public_url: "https://meet.{{ public_domain }}"
 # Timezone
 jitsi_timezone: Europe/Stockholm
 
-# Authentication
-jitsi_enable_auth: true
+# Authentication (disabled - anyone can join without login)
+jitsi_enable_auth: false
 jitsi_enable_guests: true
-jitsi_auth_type: token
+jitsi_auth_type: internal
 
 # Recording (disabled by default - requires Jibri)
 jitsi_enable_recording: false
