@@ -1,0 +1,114 @@
+---
+# Test Loopia DDNS Timer Health
+#
+# Quick test to verify DDNS is running correctly.
+# Use this to check IP change resilience is working.
+#
+# Usage:
+#   ansible-playbook playbooks/loopia-ddns-test.yml
+
+- name: "Test Loopia DDNS Health"
+  hosts: proxmox_admin
+  gather_facts: false
+
+  tasks:
+    - name: "Check DDNS timer is active"
+      ansible.builtin.command:
+        cmd: systemctl is-active loopia-ddns.timer
+      register: timer_active
+      changed_when: false
+      failed_when: false
+
+    - name: "Check DDNS timer is enabled"
+      ansible.builtin.command:
+        cmd: systemctl is-enabled loopia-ddns.timer
+      register: timer_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: "Get timer schedule"
+      ansible.builtin.shell:
+        cmd: systemctl list-timers loopia-ddns.timer --no-pager 2>/dev/null | grep -E "NEXT|loopia" || echo "Timer not scheduled"
+      register: timer_schedule
+      changed_when: false
+
+    - name: "Check last run timestamp"
+      ansible.builtin.shell:
+        cmd: |
+          last_run=$(systemctl show loopia-ddns.service --property=ExecMainExitTimestamp --value)
+          if [ -z "$last_run" ] || [ "$last_run" = "n/a" ]; then
+            echo "NEVER_RUN"
+            exit 0
+          fi
+          last_ts=$(date -d "$last_run" +%s 2>/dev/null || echo 0)
+          now_ts=$(date +%s)
+          diff=$((now_ts - last_ts))
+          mins=$((diff / 60))
+          echo "${mins} minutes ago"
+      register: last_run
+      changed_when: false
+
+    - name: "Check if last run was recent (within 20 min)"
+      ansible.builtin.shell:
+        cmd: |
+          last_run=$(systemctl show loopia-ddns.service --property=ExecMainExitTimestamp --value)
+          if [ -z "$last_run" ] || [ "$last_run" = "n/a" ]; then
+            exit 1
+          fi
+          last_ts=$(date -d "$last_run" +%s 2>/dev/null || echo 0)
+          now_ts=$(date +%s)
+          diff=$((now_ts - last_ts))
+          [ $diff -le 1200 ]
+      register: run_recent
+      changed_when: false
+      failed_when: false
+
+    - name: "Get current public IP"
+      ansible.builtin.shell:
+        cmd: pct exec 200 -- curl -sf ifconfig.me 2>/dev/null || curl -sf ifconfig.me
+      register: current_ip
+      changed_when: false
+      failed_when: false
+
+    - name: "Check DNS resolution matches current IP"
+      ansible.builtin.shell:
+        cmd: dig +short viljo.se @1.1.1.1 | head -1
+      register: dns_ip
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+
+    - name: "Display DDNS Health Report"
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "LOOPIA DDNS HEALTH CHECK"
+          - "=========================================="
+          - ""
+          - "Timer active:   {{ 'OK' if timer_active.rc == 0 else 'FAILED' }}"
+          - "Timer enabled:  {{ 'OK' if timer_enabled.rc == 0 else 'FAILED' }}"
+          - "Last run:       {{ last_run.stdout }}"
+          - "Run recent:     {{ 'OK (within 20 min)' if run_recent.rc == 0 else 'STALE (>20 min)' }}"
+          - ""
+          - "Current IP:     {{ current_ip.stdout | default('unknown') }}"
+          - "DNS resolves:   {{ dns_ip.stdout | default('unknown') }}"
+          - "IP match:       {{ 'OK' if current_ip.stdout == dns_ip.stdout else 'MISMATCH' }}"
+          - ""
+          - "Schedule:"
+          - "{{ timer_schedule.stdout }}"
+          - "=========================================="
+
+    - name: "FAIL if timer not active"
+      ansible.builtin.fail:
+        msg: "DDNS timer is not active! Run: ansible-playbook playbooks/loopia-ddns-setup.yml"
+      when: timer_active.rc != 0
+
+    - name: "WARN if last run is stale"
+      ansible.builtin.debug:
+        msg: "WARNING: DDNS hasn't run in over 20 minutes. Check timer with: systemctl status loopia-ddns.timer"
+      when: run_recent.rc != 0
+
+    - name: "WARN if IP mismatch"
+      ansible.builtin.debug:
+        msg: "WARNING: Current IP ({{ current_ip.stdout }}) doesn't match DNS ({{ dns_ip.stdout }}). DDNS may need to run."
+      when: current_ip.stdout != dns_ip.stdout and current_ip.stdout != '' and dns_ip.stdout != ''

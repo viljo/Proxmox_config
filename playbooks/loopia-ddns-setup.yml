@@ -43,6 +43,42 @@
     - loopia_ddns
 
   post_tasks:
+    # ================================================================================
+    # DDNS TIMER VERIFICATION
+    # ================================================================================
+    - name: "VERIFY: Check DDNS timer is active"
+      ansible.builtin.command:
+        cmd: systemctl is-active loopia-ddns.timer
+      register: timer_active
+      changed_when: false
+      failed_when: timer_active.rc != 0
+
+    - name: "VERIFY: Check DDNS timer schedule"
+      ansible.builtin.shell:
+        cmd: systemctl list-timers loopia-ddns.timer --no-pager | grep loopia-ddns
+      register: timer_schedule
+      changed_when: false
+
+    - name: "VERIFY: Check last DDNS run was within 20 minutes"
+      ansible.builtin.shell:
+        cmd: |
+          last_run=$(systemctl show loopia-ddns.service --property=ExecMainExitTimestamp --value)
+          if [ -z "$last_run" ] || [ "$last_run" = "n/a" ]; then
+            echo "NEVER_RUN"
+            exit 1
+          fi
+          last_ts=$(date -d "$last_run" +%s 2>/dev/null || echo 0)
+          now_ts=$(date +%s)
+          diff=$((now_ts - last_ts))
+          if [ $diff -gt 1200 ]; then
+            echo "STALE: Last run ${diff}s ago (>20min)"
+            exit 1
+          fi
+          echo "OK: Last run ${diff}s ago"
+      register: timer_last_run
+      changed_when: false
+      failed_when: timer_last_run.rc != 0
+
     - name: "Display DDNS setup status"
       ansible.builtin.debug:
         msg:
@@ -53,6 +89,10 @@
           - "Interface: {{ loopia_ddns_interface }}"
           - "Domain: {{ public_domain }}"
           - "Update interval: Every 15 minutes"
+          - ""
+          - "Timer status: {{ 'ACTIVE' if timer_active.rc == 0 else 'FAILED' }}"
+          - "Last run: {{ timer_last_run.stdout }}"
+          - "Schedule: {{ timer_schedule.stdout | trim }}"
           - ""
           - "Records managed: {{ loopia_ddns_records | map(attribute='host') | join(', ') }}"
           - ""
