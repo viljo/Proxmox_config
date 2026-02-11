@@ -7,13 +7,20 @@
 - This is the user's last resort access method - DO NOT TOUCH IT UNDER ANY CIRCUMSTANCES
 
 ### SSH Access for Operations
-- Use port 22: `ssh root@192.168.1.3`
+- Use port 22: `ssh root@ssh.viljo.se`
 - This is the PRIMARY access method for Claude to use for all operations
-- Port 2222 external access is currently not working/configured
+- ALWAYS use domain names, never hardcoded IPs
 
 ### Access Priority
-1. PRIMARY: `ssh root@192.168.1.3` (port 22)
-2. ALTERNATIVE: `ssh -p 2222 root@ssh.viljo.se` (external - currently not working)
+1. PRIMARY: `ssh root@ssh.viljo.se` (port 22, external via DDNS)
+2. BACKUP: `ssh root@192.168.1.3` (port 22, only if on management network)
+
+* DDNS Architecture - ENFORCING:
+  - Public services use Dynamic DNS (DDNS) - the public IP can change
+  - ALWAYS use domain names (*.viljo.se) for public access, NEVER hardcode public IPs
+  - Ansible inventory MUST use ssh.viljo.se for external access
+  - Service configurations that need public IP should fetch it dynamically (e.g., `curl ifconfig.me`)
+  - 192.168.1.x management network is separate and static - not affected by DDNS
 
 * Dual ISP Architecture:
   - vmbr0: Starlink ISP (CGNAT) on 192.168.1.0/24 - Management ONLY - MUST NOT TOUCH
