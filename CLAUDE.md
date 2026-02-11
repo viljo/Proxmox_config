@@ -37,6 +37,93 @@
 * Dual ISP Architecture:
   - vmbr0: Starlink ISP (CGNAT) on 192.168.1.0/24 - Management ONLY - MUST NOT TOUCH
   - vmbr2: Bahnhof ISP (public IP via DHCP) - WAN for public services
+
+## Network Infrastructure
+
+### Network Topology
+```
+Internet
+    │
+    ▼
+vmbr2 (Bahnhof WAN) ─── Public IP via DHCP (46.x.x.x)
+    │
+    │ NAT/Port Forward (iptables on Proxmox host)
+    ▼
+vmbr3 (DMZ Bridge) ─── 172.31.31.1/24
+    │
+    ▼
+LXC 200 (containers) ─── 172.31.31.10
+    │
+    ▼
+Docker containers (traefik_public network)
+```
+
+### Key Network Details
+- **Proxmox host**: Routes traffic between vmbr2 (WAN) and vmbr3 (DMZ)
+- **LXC 200**: Main container host at 172.31.31.10, also has 192.168.1.200 on management network
+- **traefik_public**: Docker network for web services, Traefik handles HTTP/HTTPS routing
+- **Port forwards**: Configured in `/etc/network/interfaces.d/vmbr3-dmz.cfg` and `/etc/iptables.rules`
+
+### Standard Port Forwards (vmbr2 → LXC 200)
+| Port | Protocol | Service |
+|------|----------|---------|
+| 80 | TCP | HTTP (Traefik) |
+| 443 | TCP | HTTPS (Traefik) |
+| 8000 | TCP | Coolify API |
+| 6881 | TCP+UDP | qBittorrent |
+| 10000 | UDP | Jitsi JVB (WebRTC) |
+
+### Adding Port Forwards for New Services
+When a service needs direct port access (not just HTTP via Traefik):
+
+1. **Add to running iptables**:
+   ```bash
+   ssh root@ssh.viljo.se "iptables -t nat -A PREROUTING -i vmbr2 -p <tcp/udp> --dport <PORT> -j DNAT --to-destination 172.31.31.10:<PORT>"
+   ```
+
+2. **Persist to /etc/iptables.rules**:
+   ```bash
+   ssh root@ssh.viljo.se "iptables-save > /etc/iptables.rules"
+   ```
+
+3. **Add to /etc/network/interfaces.d/vmbr3-dmz.cfg** for interface-up persistence:
+   ```
+   post-up iptables -t nat -A PREROUTING -i vmbr2 -p <tcp/udp> --dport <PORT> -j DNAT --to-destination 172.31.31.10:<PORT>
+   pre-down iptables -t nat -D PREROUTING -i vmbr2 -p <tcp/udp> --dport <PORT> -j DNAT --to-destination 172.31.31.10:<PORT> 2>/dev/null || true
+   ```
+
+4. **Expose in Docker container** (docker-compose):
+   ```yaml
+   ports:
+     - "<PORT>:<PORT>/udp"  # or tcp
+   ```
+
+### Web Services (HTTP/HTTPS via Traefik)
+Most services only need Traefik labels - no port forward required:
+```yaml
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.<service>.rule=Host(`<subdomain>.{{ public_domain }}`)"
+  - "traefik.http.routers.<service>.entrypoints=websecure"
+  - "traefik.http.routers.<service>.tls.certresolver=letsencrypt"
+  - "traefik.http.services.<service>.loadbalancer.server.port=<internal-port>"
+networks:
+  - traefik_public
+```
+
+### Verification Commands
+```bash
+# Check port forward exists
+iptables -t nat -L PREROUTING -v -n | grep <PORT>
+
+# Check Docker port binding
+pct exec 200 -- docker port <container-name>
+
+# Check if port is listening
+pct exec 200 -- ss -ulpn | grep <PORT>  # UDP
+pct exec 200 -- ss -tlpn | grep <PORT>  # TCP
+```
+
 * Always first access the services and proxmox host via their external dns alias .viljo.se (ssh, web, api etc), as a reserve backup if on the 192.168. net use direct local connection.
 * inventory/services.yml:  Service Registry - Single Source of Truth, All services MUST be registered here before deployment
 * Always update ansible playbooks so they have the same configuration as the system. The system shall be able to be recreated using the playbooks
