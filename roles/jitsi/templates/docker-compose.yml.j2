@@ -1,0 +1,159 @@
+services:
+  # Frontend web server
+  web:
+    image: jitsi/web:{{ jitsi_image_tag }}
+    container_name: jitsi-web
+    restart: unless-stopped
+    volumes:
+      - web_config:/config:Z
+      - web_crontabs:/var/spool/cron/crontabs:Z
+      - web_transcripts:/usr/share/jitsi-meet/transcripts:Z
+    environment:
+      - ENABLE_AUTH={{ '1' if jitsi_enable_auth else '0' }}
+      - ENABLE_GUESTS={{ '1' if jitsi_enable_guests else '0' }}
+      - AUTH_TYPE={{ jitsi_auth_type }}
+      - ENABLE_RECORDING={{ '1' if jitsi_enable_recording else '0' }}
+      - ENABLE_TRANSCRIPTIONS={{ '1' if jitsi_enable_transcription else '0' }}
+      - TZ={{ jitsi_timezone }}
+      - PUBLIC_URL={{ jitsi_public_url }}
+      - XMPP_DOMAIN=meet.jitsi
+      - XMPP_SERVER=xmpp.meet.jitsi
+      - XMPP_BOSH_URL_BASE=http://xmpp.meet.jitsi:5280
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_MUC_DOMAIN=muc.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - XMPP_GUEST_DOMAIN=guest.meet.jitsi
+      - XMPP_RECORDER_DOMAIN=recorder.meet.jitsi
+      - JICOFO_AUTH_USER=focus
+{% if jitsi_enable_keycloak_sso %}
+      - TOKEN_AUTH_URL={{ jitsi_keycloak_url }}/realms/{{ jitsi_keycloak_realm }}/protocol/openid-connect/auth
+{% endif %}
+    networks:
+      - jitsi
+      - traefik_public
+    labels:
+      # Traefik routing
+      - "traefik.enable=true"
+      - "traefik.http.routers.jitsi.rule=Host(`meet.{{ public_domain }}`)"
+      - "traefik.http.routers.jitsi.entrypoints=websecure"
+      - "traefik.http.routers.jitsi.tls.certresolver=letsencrypt"
+      - "traefik.http.services.jitsi.loadbalancer.server.port=80"
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # XMPP server (Prosody)
+  prosody:
+    image: jitsi/prosody:{{ jitsi_image_tag }}
+    container_name: jitsi-prosody
+    restart: unless-stopped
+    expose:
+      - '5222'
+      - '5347'
+      - '5280'
+    volumes:
+      - prosody_config:/config:Z
+      - prosody_plugins_custom:/prosody-plugins-custom:Z
+    environment:
+      - AUTH_TYPE={{ jitsi_auth_type }}
+      - ENABLE_AUTH={{ '1' if jitsi_enable_auth else '0' }}
+      - ENABLE_GUESTS={{ '1' if jitsi_enable_guests else '0' }}
+      - ENABLE_RECORDING={{ '1' if jitsi_enable_recording else '0' }}
+      - TZ={{ jitsi_timezone }}
+      - PUBLIC_URL={{ jitsi_public_url }}
+      - XMPP_DOMAIN=meet.jitsi
+      - XMPP_SERVER=xmpp.meet.jitsi
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_MUC_DOMAIN=muc.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - XMPP_GUEST_DOMAIN=guest.meet.jitsi
+      - XMPP_RECORDER_DOMAIN=recorder.meet.jitsi
+      - JICOFO_COMPONENT_SECRET={{ jitsi_jicofo_component_secret }}
+      - JICOFO_AUTH_USER=focus
+      - JICOFO_AUTH_PASSWORD={{ jitsi_jicofo_auth_password }}
+      - JVB_AUTH_USER=jvb
+      - JVB_AUTH_PASSWORD={{ jitsi_jvb_auth_password }}
+    networks:
+      jitsi:
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Conference focus component (Jicofo)
+  jicofo:
+    image: jitsi/jicofo:{{ jitsi_image_tag }}
+    container_name: jitsi-jicofo
+    restart: unless-stopped
+    volumes:
+      - jicofo_config:/config:Z
+    environment:
+      - AUTH_TYPE={{ jitsi_auth_type }}
+      - ENABLE_AUTH={{ '1' if jitsi_enable_auth else '0' }}
+      - TZ={{ jitsi_timezone }}
+      - XMPP_DOMAIN=meet.jitsi
+      - XMPP_SERVER=xmpp.meet.jitsi
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - XMPP_MUC_DOMAIN=muc.meet.jitsi
+      - JICOFO_COMPONENT_SECRET={{ jitsi_jicofo_component_secret }}
+      - JICOFO_AUTH_USER=focus
+      - JICOFO_AUTH_PASSWORD={{ jitsi_jicofo_auth_password }}
+    depends_on:
+      - prosody
+    networks:
+      jitsi:
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Video bridge (JVB) - handles media streams
+  jvb:
+    image: jitsi/jvb:{{ jitsi_image_tag }}
+    container_name: jitsi-jvb
+    restart: unless-stopped
+    ports:
+      # UDP port for WebRTC media - MUST be accessible from internet
+      - '{{ jitsi_jvb_port }}:{{ jitsi_jvb_port }}/udp'
+    volumes:
+      - jvb_config:/config:Z
+    environment:
+      - TZ={{ jitsi_timezone }}
+      - PUBLIC_URL={{ jitsi_public_url }}
+      - XMPP_DOMAIN=meet.jitsi
+      - XMPP_SERVER=xmpp.meet.jitsi
+      - XMPP_AUTH_DOMAIN=auth.meet.jitsi
+      - XMPP_INTERNAL_MUC_DOMAIN=internal-muc.meet.jitsi
+      - JVB_AUTH_USER=jvb
+      - JVB_AUTH_PASSWORD={{ jitsi_jvb_auth_password }}
+      - JVB_PORT={{ jitsi_jvb_port }}
+      - JVB_STUN_SERVERS={{ jitsi_jvb_stun_servers }}
+      - JVB_TCP_HARVESTER_DISABLED={{ jitsi_jvb_tcp_harvester_disabled }}
+      # =======================================================================
+      # CRITICAL: JVB must advertise public IP for WebRTC ICE candidates
+      # Without this, clients cannot establish media connections!
+      # =======================================================================
+{% if jitsi_jvb_advertise_ips %}
+      - JVB_ADVERTISE_IPS={{ jitsi_jvb_advertise_ips }}
+{% endif %}
+      # NAT harvester settings (alternative to ADVERTISE_IPS)
+      - NAT_HARVESTER_LOCAL_ADDRESS={{ jitsi_jvb_local_address }}
+{% if jitsi_jvb_advertise_ips %}
+      - NAT_HARVESTER_PUBLIC_ADDRESS={{ jitsi_jvb_advertise_ips }}
+{% endif %}
+    depends_on:
+      - prosody
+    networks:
+      jitsi:
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+networks:
+  jitsi:
+    driver: bridge
+  traefik_public:
+    external: true
+
+volumes:
+  web_config:
+  web_crontabs:
+  web_transcripts:
+  prosody_config:
+  prosody_plugins_custom:
+  jicofo_config:
+  jvb_config:

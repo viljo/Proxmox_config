@@ -1,0 +1,69 @@
+---
+# Deploy Jitsi Meet video conferencing
+#
+# This playbook deploys Jitsi Meet with proper NAT configuration.
+# The key fix is JVB_ADVERTISE_IPS which tells the Video Bridge
+# to advertise the public IP for WebRTC ICE candidates.
+#
+# Prerequisites:
+# - LXC container 200 (Coolify) exists with Docker installed
+# - UDP port 10000 accessible from internet (exposed on container)
+# - traefik_public Docker network exists
+#
+# Usage:
+#   ansible-playbook playbooks/jitsi-deploy.yml
+
+- name: Deploy Jitsi Meet Video Conferencing
+  hosts: proxmox_admin
+  gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all/main.yml
+
+  tasks:
+    - name: Apply jitsi role
+      ansible.builtin.include_role:
+        name: jitsi
+        public: yes
+
+    # ================================================================================
+    # SERVICE VERIFICATION
+    # ================================================================================
+
+    - name: "VERIFY: Test Jitsi internal health"
+      ansible.builtin.shell:
+        cmd: "pct exec {{ jitsi_container_id }} -- docker exec jitsi-web curl -sf http://localhost:80"
+      register: jitsi_internal
+      failed_when: false
+      changed_when: false
+
+    - name: "VERIFY: Test Jitsi HTTPS external access"
+      ansible.builtin.command:
+        cmd: "curl -sfI https://meet.{{ public_domain }}/"
+      register: jitsi_https
+      failed_when: false
+      changed_when: false
+
+    - name: "VERIFY: Test JVB health"
+      ansible.builtin.command:
+        cmd: "pct exec {{ jitsi_container_id }} -- docker exec jitsi-jvb curl -sf http://localhost:8080/about/health"
+      register: jvb_health
+      failed_when: false
+      changed_when: false
+
+    - name: "VERIFY: Display verification results"
+      ansible.builtin.debug:
+        msg:
+          - "=== Jitsi Meet Verification Results ==="
+          - "Internal health: {{ 'OK' if jitsi_internal.rc == 0 else 'FAILED' }}"
+          - "HTTPS access: {{ 'OK' if jitsi_https.rc == 0 else 'FAILED' }}"
+          - "JVB health: {{ 'OK' if jvb_health.rc == 0 else 'CHECK LOGS' }}"
+          - ""
+          - "Public URL: https://meet.{{ public_domain }}"
+          - "JVB Public IP: {{ jitsi_public_ip }}"
+          - "JVB UDP Port: {{ jitsi_jvb_port }}"
+          - ""
+          - "If conferences still fail, verify:"
+          - "1. UDP port {{ jitsi_jvb_port }} is exposed and accessible from internet"
+          - "2. No firewall blocking UDP traffic"
+          - "3. JVB logs: pct exec {{ jitsi_container_id }} -- docker logs jitsi-jvb"
+          - "4. Check ICE candidates in browser console (F12 -> Console)"

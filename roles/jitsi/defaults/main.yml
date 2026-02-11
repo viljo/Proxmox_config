@@ -1,0 +1,67 @@
+---
+# Jitsi Meet Configuration
+
+# LXC Container Settings (runs in Coolify LXC 200 with all other services)
+jitsi_container_id: 200
+jitsi_hostname: jitsi
+
+# Paths
+jitsi_compose_path: /opt/jitsi
+
+# Public Access
+jitsi_external_domain: "meet.{{ public_domain }}"
+jitsi_public_url: "https://meet.{{ public_domain }}"
+
+# Timezone
+jitsi_timezone: Europe/Stockholm
+
+# Authentication
+jitsi_enable_auth: true
+jitsi_enable_guests: true
+jitsi_auth_type: token
+
+# Recording (disabled by default - requires Jibri)
+jitsi_enable_recording: false
+jitsi_enable_transcription: false
+
+# =============================================================================
+# JVB (Video Bridge) Networking - CRITICAL FOR CONFERENCE TO WORK
+# =============================================================================
+# JVB needs to advertise its public IP for WebRTC ICE candidates.
+# Without this, clients can't establish media connections.
+
+# UDP port for media streams (must be forwarded from public IP)
+jitsi_jvb_port: 10000
+
+# Public IP that JVB advertises to clients for WebRTC
+# This is fetched dynamically from vmbr2 (WAN interface) during deployment
+# Format: single IP or comma-separated list
+jitsi_jvb_advertise_ips: "{{ jitsi_public_ip | default('') }}"
+
+# Local IP for NAT harvester (Docker bridge default)
+jitsi_jvb_local_address: "172.17.0.1"
+
+# STUN servers for NAT traversal (fallback)
+jitsi_jvb_stun_servers: "stun.l.google.com:19302,stun1.l.google.com:19302"
+
+# Disable TCP harvester (UDP is preferred for media)
+jitsi_jvb_tcp_harvester_disabled: "true"
+
+# =============================================================================
+# Keycloak SSO Integration (optional)
+# =============================================================================
+jitsi_enable_keycloak_sso: false
+jitsi_keycloak_url: "https://keycloak.{{ public_domain }}"
+jitsi_keycloak_realm: master
+jitsi_oidc_client_id: jitsi
+jitsi_oidc_client_secret: "{{ vault_jitsi_oidc_client_secret | default('') }}"
+
+# =============================================================================
+# Secrets (from Ansible Vault)
+# =============================================================================
+jitsi_jicofo_component_secret: "{{ vault_jitsi_jicofo_component_secret | default(lookup('password', '/dev/null length=32 chars=ascii_lowercase,digits')) }}"
+jitsi_jicofo_auth_password: "{{ vault_jitsi_jicofo_auth_password | default(lookup('password', '/dev/null length=32 chars=ascii_lowercase,digits')) }}"
+jitsi_jvb_auth_password: "{{ vault_jitsi_jvb_auth_password | default(lookup('password', '/dev/null length=32 chars=ascii_lowercase,digits')) }}"
+
+# Docker image version
+jitsi_image_tag: "stable-9823"

@@ -1,0 +1,81 @@
+---
+# Jitsi Meet deployment tasks
+
+- name: Get public IP from LXC container (eth0 on vmbr2)
+  ansible.builtin.shell: |
+    pct exec {{ jitsi_container_id }} -- ip -4 addr show eth0 | grep -oP '(?<=inet\s)\d+(\.\d+){3}'
+  register: wan_ip_result
+  changed_when: false
+
+- name: Set public IP fact
+  ansible.builtin.set_fact:
+    jitsi_public_ip: "{{ wan_ip_result.stdout | trim }}"
+
+- name: Display detected public IP
+  ansible.builtin.debug:
+    msg: "Detected public IP for JVB: {{ jitsi_public_ip }}"
+
+- name: Ensure Jitsi directories exist
+  ansible.builtin.command: >
+    pct exec {{ jitsi_container_id }} -- mkdir -p {{ jitsi_compose_path }}
+  changed_when: true
+
+- name: Generate docker-compose.yml from template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /tmp/jitsi-docker-compose.yml
+    mode: '0644'
+
+- name: Copy docker-compose.yml to LXC container
+  ansible.builtin.command: >
+    pct push {{ jitsi_container_id }} /tmp/jitsi-docker-compose.yml {{ jitsi_compose_path }}/docker-compose.yml
+  changed_when: true
+
+- name: Stop existing Jitsi containers
+  ansible.builtin.command: >
+    pct exec {{ jitsi_container_id }} -- bash -c 'cd {{ jitsi_compose_path }} && docker compose down'
+  register: stop_result
+  changed_when: stop_result.rc == 0
+  failed_when: false
+
+- name: Pull latest Jitsi images
+  ansible.builtin.command: >
+    pct exec {{ jitsi_container_id }} -- bash -c 'cd {{ jitsi_compose_path }} && docker compose pull'
+  changed_when: true
+
+- name: Start Jitsi containers
+  ansible.builtin.command: >
+    pct exec {{ jitsi_container_id }} -- bash -c 'cd {{ jitsi_compose_path }} && docker compose up -d'
+  register: jitsi_start
+  changed_when: true
+
+- name: Wait for Jitsi web to be ready
+  ansible.builtin.shell: >
+    pct exec {{ jitsi_container_id }} -- docker exec jitsi-web curl -sf http://localhost:80
+  register: jitsi_health
+  until: jitsi_health.rc == 0
+  retries: 12
+  delay: 10
+
+- name: Verify JVB is running and configured correctly
+  ansible.builtin.shell: >
+    pct exec {{ jitsi_container_id }} -- docker logs jitsi-jvb 2>&1 | grep -i "advertise" || true
+  register: jvb_logs
+  changed_when: false
+
+- name: Display JVB configuration status
+  ansible.builtin.debug:
+    msg:
+      - "=========================================="
+      - "Jitsi Meet deployed successfully!"
+      - "=========================================="
+      - ""
+      - "Public URL: {{ jitsi_public_url }}"
+      - "JVB Public IP: {{ jitsi_public_ip }}"
+      - "JVB UDP Port: {{ jitsi_jvb_port }}"
+      - ""
+      - "Container: LXC {{ jitsi_container_id }}"
+      - ""
+      - "JVB Advertise Config:"
+      - "{{ jvb_logs.stdout | default('(check docker logs jitsi-jvb)') }}"
+      - "=========================================="

@@ -1,0 +1,4 @@
+---
+- name: Restart Jitsi containers
+  ansible.builtin.command: >
+    pct exec {{ jitsi_container_id }} -- bash -c 'cd {{ jitsi_compose_path }} && docker compose restart'
