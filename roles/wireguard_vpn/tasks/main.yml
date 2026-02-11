@@ -25,7 +25,7 @@
 
 - name: Start WireGuard LXC if not running
   ansible.builtin.command: pct start {{ wireguard_lxc_id }}
-  when: wireguard_lxc_status.rc == 0 and "'running' not in wireguard_lxc_status.stdout"
+  when: wireguard_lxc_status.rc == 0 and 'running' not in wireguard_lxc_status.stdout
   failed_when: false
 
 - name: Wait for LXC to be ready
@@ -121,6 +121,13 @@
     mode: '0644'
 
 # Web UI Deployment
+- name: Check if Docker is installed
+  ansible.builtin.command: pct exec {{ wireguard_lxc_id }} -- docker --version
+  register: docker_check
+  failed_when: false
+  changed_when: false
+  when: wireguard_web_enabled | default(true)
+
 - name: Install Docker for web UI
   ansible.builtin.command: >
     pct exec {{ wireguard_lxc_id }} -- bash -c '
@@ -132,7 +139,7 @@
       apt-get update
       apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
     '
-  when: wireguard_web_enabled | default(true)
+  when: wireguard_web_enabled | default(true) and docker_check.rc != 0
   changed_when: true
 
 - name: Create web app directory
