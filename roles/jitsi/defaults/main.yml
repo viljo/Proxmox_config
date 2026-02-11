@@ -25,23 +25,15 @@ jitsi_enable_recording: false
 jitsi_enable_transcription: false
 
 # =============================================================================
-# JVB (Video Bridge) Networking - CRITICAL FOR CONFERENCE TO WORK
+# JVB (Video Bridge) Networking
 # =============================================================================
-# JVB needs to advertise its public IP for WebRTC ICE candidates.
-# Without this, clients can't establish media connections.
+# JVB discovers its public IP via STUN servers at runtime.
+# This handles dynamic IP changes (DDNS) without needing to redeploy.
 
-# UDP port for media streams (must be forwarded from public IP)
+# UDP port for media streams (must be accessible from internet)
 jitsi_jvb_port: 10000
 
-# Public IP that JVB advertises to clients for WebRTC
-# This is fetched dynamically from vmbr2 (WAN interface) during deployment
-# Format: single IP or comma-separated list
-jitsi_jvb_advertise_ips: "{{ jitsi_public_ip | default('') }}"
-
-# Local IP for NAT harvester (Docker bridge default)
-jitsi_jvb_local_address: "172.17.0.1"
-
-# STUN servers for NAT traversal (fallback)
+# STUN servers for public IP discovery and NAT traversal
 jitsi_jvb_stun_servers: "stun.l.google.com:19302,stun1.l.google.com:19302"
 
 # Disable TCP harvester (UDP is preferred for media)

@@ -122,20 +122,9 @@ services:
       - JVB_AUTH_USER=jvb
       - JVB_AUTH_PASSWORD={{ jitsi_jvb_auth_password }}
       - JVB_PORT={{ jitsi_jvb_port }}
-      - JVB_STUN_SERVERS={{ jitsi_jvb_stun_servers }}
       - JVB_TCP_HARVESTER_DISABLED={{ jitsi_jvb_tcp_harvester_disabled }}
-      # =======================================================================
-      # CRITICAL: JVB must advertise public IP for WebRTC ICE candidates
-      # Without this, clients cannot establish media connections!
-      # =======================================================================
-{% if jitsi_jvb_advertise_ips %}
-      - JVB_ADVERTISE_IPS={{ jitsi_jvb_advertise_ips }}
-{% endif %}
-      # NAT harvester settings (alternative to ADVERTISE_IPS)
-      - NAT_HARVESTER_LOCAL_ADDRESS={{ jitsi_jvb_local_address }}
-{% if jitsi_jvb_advertise_ips %}
-      - NAT_HARVESTER_PUBLIC_ADDRESS={{ jitsi_jvb_advertise_ips }}
-{% endif %}
+      # JVB discovers public IP via STUN servers at runtime (handles dynamic IP)
+      - JVB_STUN_SERVERS={{ jitsi_jvb_stun_servers }}
     depends_on:
       - prosody
     networks:

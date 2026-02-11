@@ -1,9 +1,8 @@
 ---
 # Deploy Jitsi Meet video conferencing
 #
-# This playbook deploys Jitsi Meet with proper NAT configuration.
-# The key fix is JVB_ADVERTISE_IPS which tells the Video Bridge
-# to advertise the public IP for WebRTC ICE candidates.
+# JVB discovers its public IP via STUN servers at runtime.
+# This handles dynamic IP changes (DDNS) without needing to redeploy.
 #
 # Prerequisites:
 # - LXC container 200 (Coolify) exists with Docker installed
@@ -59,8 +58,8 @@
           - "JVB health: {{ 'OK' if jvb_health.rc == 0 else 'CHECK LOGS' }}"
           - ""
           - "Public URL: https://meet.{{ public_domain }}"
-          - "JVB Public IP: {{ jitsi_public_ip }}"
           - "JVB UDP Port: {{ jitsi_jvb_port }}"
+          - "IP Discovery: STUN (dynamic, handles DDNS IP changes)"
           - ""
           - "If conferences still fail, verify:"
           - "1. UDP port {{ jitsi_jvb_port }} is exposed and accessible from internet"

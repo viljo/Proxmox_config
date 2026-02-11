@@ -1,20 +1,6 @@
 ---
 # Jitsi Meet deployment tasks
 
-- name: Get public IP from external service
-  ansible.builtin.shell: |
-    pct exec {{ jitsi_container_id }} -- curl -sf ifconfig.me
-  register: wan_ip_result
-  changed_when: false
-
-- name: Set public IP fact
-  ansible.builtin.set_fact:
-    jitsi_public_ip: "{{ wan_ip_result.stdout | trim }}"
-
-- name: Display detected public IP
-  ansible.builtin.debug:
-    msg: "Detected public IP for JVB: {{ jitsi_public_ip }}"
-
 - name: Ensure Jitsi directories exist
   ansible.builtin.command: >
     pct exec {{ jitsi_container_id }} -- mkdir -p {{ jitsi_compose_path }}
@@ -57,13 +43,13 @@
   retries: 12
   delay: 10
 
-- name: Verify JVB is running and configured correctly
+- name: Verify JVB STUN discovery
   ansible.builtin.shell: >
-    pct exec {{ jitsi_container_id }} -- docker logs jitsi-jvb 2>&1 | grep -i "advertise" || true
-  register: jvb_logs
+    pct exec {{ jitsi_container_id }} -- docker logs jitsi-jvb 2>&1 | grep -i "Discovered public address" | tail -1 || true
+  register: jvb_stun
   changed_when: false
 
-- name: Display JVB configuration status
+- name: Display deployment status
   ansible.builtin.debug:
     msg:
       - "=========================================="
@@ -71,11 +57,11 @@
       - "=========================================="
       - ""
       - "Public URL: {{ jitsi_public_url }}"
-      - "JVB Public IP: {{ jitsi_public_ip }}"
       - "JVB UDP Port: {{ jitsi_jvb_port }}"
+      - "IP Discovery: STUN (dynamic, handles IP changes)"
+      - ""
+      - "STUN Discovery:"
+      - "{{ jvb_stun.stdout | default('(waiting for first conference)') }}"
       - ""
       - "Container: LXC {{ jitsi_container_id }}"
-      - ""
-      - "JVB Advertise Config:"
-      - "{{ jvb_logs.stdout | default('(check docker logs jitsi-jvb)') }}"
       - "=========================================="
