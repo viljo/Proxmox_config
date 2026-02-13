@@ -25,6 +25,10 @@ services:
       - XMPP_GUEST_DOMAIN=guest.meet.jitsi
       - XMPP_RECORDER_DOMAIN=recorder.meet.jitsi
       - JICOFO_AUTH_USER=focus
+      # Enable Colibri WebSocket for better NAT traversal
+      - ENABLE_COLIBRI_WEBSOCKET=1
+      - COLIBRI_WEBSOCKET_PORT=443
+      - JVB_WS_DOMAIN=meet.{{ public_domain }}
 {% if jitsi_enable_keycloak_sso %}
       - TOKEN_AUTH_URL={{ jitsi_keycloak_url }}/realms/{{ jitsi_keycloak_realm }}/protocol/openid-connect/auth
 {% endif %}
@@ -128,6 +132,11 @@ services:
       - JVB_TCP_HARVESTER_DISABLED={{ jitsi_jvb_tcp_harvester_disabled }}
       # JVB discovers public IP via STUN servers at runtime (handles dynamic IP)
       - JVB_STUN_SERVERS={{ jitsi_jvb_stun_servers }}
+      # Enable Colibri WebSocket for better NAT traversal
+      - COLIBRI_WEBSOCKET_REGEX=wss://meet\.{{ public_domain | replace('.', '\\.') }}/colibri-ws/([a-zA-Z0-9-]+)/([a-zA-Z0-9-]+)/([a-zA-Z0-9-]+)
+      - ENABLE_COLIBRI_WEBSOCKET=1
+      - JVB_WS_DOMAIN=meet.{{ public_domain }}
+      - JVB_WS_SERVER_ID=default-id
     depends_on:
       - prosody
     networks:
