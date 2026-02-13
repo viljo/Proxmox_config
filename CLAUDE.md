@@ -162,3 +162,23 @@ pct exec 200 -- ss -tlpn | grep <PORT>  # TCP
   - NEVER add duplicate A records - remove the old IP first, then add the new one
   - The loopia-ddns script MUST remove existing records before creating new ones
   - If DNS shows multiple A records for the same subdomain, clean up duplicates immediately
+
+* Container Hygiene - ENFORCING:
+  - When troubleshooting errors or deploying/changing services, ALWAYS check for:
+    1. Old/stale containers with same Traefik labels (causes load-balancing conflicts)
+    2. Duplicate containers from previous deployments
+    3. Containers not defined in Ansible playbooks (orphaned containers)
+  - Verification commands:
+    ```bash
+    # List all containers (including stopped)
+    pct exec 200 -- docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+
+    # Check for containers with conflicting Traefik labels
+    pct exec 200 -- docker ps --format '{{.Names}}' | xargs -I{} docker inspect {} --format '{{.Name}} {{index .Config.Labels "traefik.http.routers.*"}}'
+
+    # Find containers not in current docker-compose files
+    pct exec 200 -- docker ps --format '{{.Names}}' | sort > /tmp/running
+    # Compare against expected containers from Ansible
+    ```
+  - If duplicate/orphaned containers found: `pct exec 200 -- docker rm -f <container>`
+  - Root cause of many "random 502 errors" or "intermittent failures" is old containers with same routing rules
