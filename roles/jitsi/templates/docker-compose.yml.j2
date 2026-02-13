@@ -27,7 +27,7 @@ services:
       - JICOFO_AUTH_USER=focus
       # Enable Colibri WebSocket for better NAT traversal
       - ENABLE_COLIBRI_WEBSOCKET=1
-      - COLIBRI_WEBSOCKET_PORT=443
+      - COLIBRI_WEBSOCKET_JVB_PORT=9090
       - JVB_WS_DOMAIN=meet.{{ public_domain }}
 {% if jitsi_enable_keycloak_sso %}
       - TOKEN_AUTH_URL={{ jitsi_keycloak_url }}/realms/{{ jitsi_keycloak_realm }}/protocol/openid-connect/auth
