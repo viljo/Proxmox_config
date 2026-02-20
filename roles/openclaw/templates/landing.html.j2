@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OpenClaw</title>
+  <style>
+    body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
+    .loading { text-align: center; }
+    .spinner { border: 3px solid #333; border-top: 3px solid #00d4ff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="loading">
+    <div class="spinner"></div>
+    <p>Connecting to OpenClaw...</p>
+  </div>
+  <script>
+    // Clear any old device tokens that might cause mismatch
+    localStorage.removeItem('openclaw_device_token');
+    localStorage.removeItem('deviceToken');
+    localStorage.removeItem('device_token');
+
+    // Set gateway token in localStorage for OpenClaw Control UI
+    localStorage.setItem('openclaw_gateway_token', '{{ openclaw_gateway_token }}');
+    localStorage.setItem('openclaw_token', '{{ openclaw_gateway_token }}');
+    localStorage.setItem('gatewayToken', '{{ openclaw_gateway_token }}');
+
+    // Redirect to the actual app
+    window.location.href = '/app/';
+  </script>
+</body>
+</html>

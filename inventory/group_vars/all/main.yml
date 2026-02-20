@@ -56,6 +56,9 @@ loopia_dns_records:
   # Monitoring
   - host: health
     ttl: 600
+  # AI Assistant
+  - host: openclaw
+    ttl: 600
   # Infrastructure
   - host: proxmox
     ttl: 600

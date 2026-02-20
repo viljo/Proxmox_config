@@ -1,0 +1,77 @@
+services:
+  openclaw:
+    image: {{ openclaw_image }}
+    container_name: {{ openclaw_container_name }}
+    restart: unless-stopped
+    init: true
+
+    volumes:
+      - {{ openclaw_data_path }}:/home/node/.openclaw
+
+    environment:
+      # Gateway configuration
+      - HOME=/home/node
+      - TERM=xterm-256color
+      - OPENCLAW_GATEWAY_TOKEN={{ openclaw_gateway_token }}
+      - OPENCLAW_STATE_DIR=/home/node/.openclaw
+      - OPENCLAW_CONFIG_PATH=/home/node/.openclaw/openclaw.json
+
+      # LLM Provider (Anthropic Claude)
+      - ANTHROPIC_API_KEY={{ openclaw_anthropic_api_key }}
+
+      # Discord integration
+      - DISCORD_BOT_TOKEN={{ openclaw_discord_token }}
+
+      # Brave Search (optional)
+{% if openclaw_brave_api_key %}
+      - BRAVE_API_KEY={{ openclaw_brave_api_key }}
+{% endif %}
+
+      # Timezone
+      - TZ=Europe/Stockholm
+
+    # Override command to bind to LAN interface for container networking
+    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "{{ openclaw_port }}", "--allow-unconfigured"]
+
+    networks:
+      - backend
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:{{ openclaw_port }}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Nginx proxy that injects gateway token via landing page
+  openclaw-proxy:
+    image: nginx:alpine
+    container_name: openclaw-proxy
+    restart: unless-stopped
+
+    volumes:
+      - {{ openclaw_base_path }}/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - {{ openclaw_base_path }}/landing.html:/usr/share/nginx/html/landing.html:ro
+
+    networks:
+      - backend
+
+    depends_on:
+      - openclaw
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  backend:
+    external: true

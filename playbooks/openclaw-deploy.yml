@@ -1,0 +1,11 @@
+---
+- name: Deploy OpenClaw AI Assistant
+  hosts: proxmox_admin
+  gather_facts: false
+  vars_files:
+    - ../inventory/group_vars/all/main.yml
+    - ../inventory/group_vars/all/services.yml
+    - ../inventory/group_vars/all/vault.yml
+
+  roles:
+    - role: openclaw

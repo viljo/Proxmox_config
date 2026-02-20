@@ -1,0 +1,20 @@
+---
+openclaw_lxc_id: 200
+openclaw_container_name: openclaw
+openclaw_image: ghcr.io/openclaw/openclaw:latest
+openclaw_base_path: /opt/docker-stack/openclaw
+openclaw_data_path: "{{ openclaw_base_path }}/data"
+openclaw_subdomain: openclaw
+openclaw_port: 18789
+
+# Gateway authentication token (generate with: openssl rand -hex 32)
+openclaw_gateway_token: "{{ vault_openclaw_gateway_token }}"
+
+# LLM Configuration (uses Anthropic Claude API)
+openclaw_anthropic_api_key: "{{ vault_openclaw_anthropic_api_key }}"
+
+# Discord Integration
+openclaw_discord_token: "{{ vault_openclaw_discord_token }}"
+
+# Brave Search (free tier: 2000 requests/month)
+openclaw_brave_api_key: "{{ vault_openclaw_brave_api_key | default('') }}"

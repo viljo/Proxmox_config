@@ -48,6 +48,9 @@ services:
       - OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER={{ oauth2_proxy_pass_authorization_header | lower }}
       - OAUTH2_PROXY_PASS_USER_HEADERS={{ oauth2_proxy_pass_user_headers | lower }}
 
+      # WebSocket support
+      - OAUTH2_PROXY_PROXY_WEBSOCKETS=true
+
     labels:
       # Enable Traefik for this service
       - "traefik.enable=true"

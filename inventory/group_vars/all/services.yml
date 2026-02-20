@@ -151,6 +151,14 @@ infrastructure_services:
     status: deployed_working
     note: "Protected by OAuth2-Proxy (GitLab SSO). Monitors all services from internal network with Discord alerts."
 
+  - name: OpenClaw
+    slug: openclaw
+    icon: "🦞"
+    description: AI assistant with Discord integration
+    subdomain: openclaw
+    status: deployed_working
+    note: "Uses Claude AI (Anthropic). Protected by GitLab OAuth. Discord bot integration available."
+
   - name: KSF Rules Guide
     slug: ksf
     icon: "🛡️"
