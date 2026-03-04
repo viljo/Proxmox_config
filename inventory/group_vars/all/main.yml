@@ -35,8 +35,6 @@ loopia_dns_records:
   # LLM & AI
   - host: llm
     ttl: 600
-  - host: llmchat
-    ttl: 600
   # Presentations
   - host: claper
     ttl: 600
@@ -55,9 +53,6 @@ loopia_dns_records:
     ttl: 600
   # Monitoring
   - host: health
-    ttl: 600
-  # AI Assistant
-  - host: openclaw
     ttl: 600
   # Infrastructure
   - host: proxmox

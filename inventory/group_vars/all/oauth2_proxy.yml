@@ -67,14 +67,6 @@ oauth2_proxy_services:
     client_id: "{{ vault_uptime_kuma_gitlab_client_id }}"
     client_secret: "{{ vault_uptime_kuma_gitlab_client_secret }}"
 
-  - name: openclaw
-    subdomain: openclaw
-    upstream: "http://openclaw-proxy:80"
-    description: "OpenClaw AI Assistant"
-    # Separate GitLab OAuth app for OpenClaw
-    client_id: "{{ vault_openclaw_gitlab_client_id }}"
-    client_secret: "{{ vault_openclaw_gitlab_client_secret }}"
-
 # Traefik Configuration
 oauth2_proxy_traefik_network: traefik_public
 oauth2_proxy_backend_network: backend

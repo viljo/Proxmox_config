@@ -75,14 +75,6 @@ infrastructure_services:
     status: deployed_working
     note: "GitLab OAuth. Allows remote machines to connect as LLM providers. WebSocket connections at llm.viljo.se/ws"
 
-  - name: LLM Chat
-    slug: llmchat
-    icon: "🤖"
-    description: LLM chat interface (connects to RemoteLLM Broker)
-    subdomain: llmchat
-    status: deployed_working
-    note: "Protected by OAuth2-Proxy (GitLab SSO). Chat interface for LLM models via RemoteLLM Broker."
-
   - name: Claper
     slug: claper
     icon: "📊"
@@ -150,14 +142,6 @@ infrastructure_services:
     subdomain: health
     status: deployed_working
     note: "Protected by OAuth2-Proxy (GitLab SSO). Monitors all services from internal network with Discord alerts."
-
-  - name: OpenClaw
-    slug: openclaw
-    icon: "🦞"
-    description: AI assistant with Discord integration
-    subdomain: openclaw
-    status: deployed_working
-    note: "Uses Claude AI (Anthropic). Protected by GitLab OAuth. Discord bot integration available."
 
   - name: KSF Rules Guide
     slug: ksf
