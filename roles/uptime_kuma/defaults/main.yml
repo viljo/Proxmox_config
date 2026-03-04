@@ -21,4 +21,17 @@ uptime_kuma_subdomain: health
 
 # Traefik internal IP for hairpin NAT fix
 # Services monitored via external URLs need to resolve to internal Traefik
+# This is the Traefik container IP on the traefik_public Docker network
 uptime_kuma_traefik_ip: "10.0.2.3"
+
+# Monitor sync configuration
+# Credentials for Uptime Kuma API (used by sync script)
+uptime_kuma_username: "{{ vault_uptime_kuma_username }}"
+uptime_kuma_password: "{{ vault_uptime_kuma_password }}"
+
+# Default monitor settings
+uptime_kuma_monitor_interval: 300  # 5 minutes
+uptime_kuma_monitor_retries: 3
+uptime_kuma_monitor_accepted_codes:  # Allow redirects (OAuth)
+  - "200-299"
+  - "300-399"

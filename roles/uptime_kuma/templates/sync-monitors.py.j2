@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Sync Uptime Kuma monitors from services.yml (Ansible-rendered).
+
+This script is templated by Ansible with the expected monitor list baked in.
+It connects to the local Uptime Kuma API, diffs current monitors against
+the expected list, and adds/removes as needed.
+
+Only monitors whose names match entries from services.yml are managed.
+Manually added monitors are left untouched.
+"""
+
+import sys
+
+try:
+    from uptime_kuma_api import UptimeKumaApi, MonitorType
+except ImportError:
+    print("ERROR: uptime-kuma-api not installed. Run: pip install uptime-kuma-api")
+    sys.exit(1)
+
+# -- Configuration (baked in by Ansible/Jinja2) --
+
+KUMA_URL = "http://localhost:{{ uptime_kuma_port }}"
+KUMA_USERNAME = "{{ uptime_kuma_username }}"
+KUMA_PASSWORD = "{{ uptime_kuma_password }}"
+
+MONITOR_INTERVAL = {{ uptime_kuma_monitor_interval }}
+MONITOR_RETRIES = {{ uptime_kuma_monitor_retries }}
+DOMAIN = "{{ public_domain }}"
+
+# Expected monitors derived from infrastructure_services in services.yml
+# Only services with status=deployed_working and a non-empty subdomain are monitored
+EXPECTED_MONITORS = {
+{% for service in infrastructure_services %}
+{% if service.status == 'deployed_working' and service.subdomain is defined and service.subdomain != '' %}
+{% if service.show_in_portal is not defined or service.show_in_portal != false %}
+    "{{ service.name }}": {
+        "url": "https://{{ service.subdomain }}.{{ public_domain }}",
+    },
+{% endif %}
+{% endif %}
+{% endfor %}
+}
+
+# Set of managed monitor names - only these will be added/removed
+MANAGED_NAMES = set(EXPECTED_MONITORS.keys())
+
+
+def main():
+    print(f"Connecting to Uptime Kuma at {KUMA_URL}...")
+    api = UptimeKumaApi(KUMA_URL)
+
+    try:
+        api.login(KUMA_USERNAME, KUMA_PASSWORD)
+        print("Logged in successfully.")
+    except Exception as e:
+        print(f"ERROR: Failed to login: {e}")
+        sys.exit(1)
+
+    try:
+        existing = api.get_monitors()
+    except Exception as e:
+        print(f"ERROR: Failed to get monitors: {e}")
+        api.disconnect()
+        sys.exit(1)
+
+    # Build lookup of existing monitors by name
+    existing_by_name = {}
+    for mon in existing:
+        existing_by_name[mon["name"]] = mon
+
+    # Determine what to add and remove
+    existing_names = set(existing_by_name.keys())
+    to_add = MANAGED_NAMES - existing_names
+
+    # Remove monitors not in the expected list whose URL matches https://*.viljo.se
+    # This catches monitors for services that were removed from services.yml
+    # Manually added monitors with non-matching URLs are left untouched
+    to_remove_monitors = []
+    for name, mon in existing_by_name.items():
+        if name not in MANAGED_NAMES:
+            url = mon.get("url") or ""
+            if url.startswith("https://") and (url.endswith(f".{DOMAIN}") or url.endswith(f".{DOMAIN}/")):
+                to_remove_monitors.append(mon)
+
+    added = 0
+    removed = 0
+    errors = 0
+
+    # Add missing monitors
+    for name in sorted(to_add):
+        config = EXPECTED_MONITORS[name]
+        print(f"  ADD: {name} -> {config['url']}")
+        try:
+            api.add_monitor(
+                type=MonitorType.HTTP,
+                name=name,
+                url=config["url"],
+                interval=MONITOR_INTERVAL,
+                maxretries=MONITOR_RETRIES,
+                accepted_statuscodes={{ uptime_kuma_monitor_accepted_codes | to_json }},
+            )
+            added += 1
+        except Exception as e:
+            print(f"  ERROR adding {name}: {e}")
+            errors += 1
+
+    # Remove monitors for services no longer in services.yml
+    for mon in to_remove_monitors:
+        print(f"  REMOVE: {mon['name']} (url: {mon.get('url', 'N/A')})")
+        try:
+            api.delete_monitor(mon["id"])
+            removed += 1
+        except Exception as e:
+            print(f"  ERROR removing {mon['name']}: {e}")
+            errors += 1
+
+    # Report unchanged
+    unchanged = MANAGED_NAMES & existing_names
+    if unchanged:
+        print(f"  UNCHANGED: {', '.join(sorted(unchanged))}")
+
+    print(f"\nSummary: {added} added, {removed} removed, {len(unchanged)} unchanged, {errors} errors")
+
+    api.disconnect()
+
+    if errors > 0:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

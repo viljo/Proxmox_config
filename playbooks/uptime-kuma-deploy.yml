@@ -8,6 +8,7 @@
   vars_files:
     - ../inventory/group_vars/all/main.yml
     - ../inventory/group_vars/all/services.yml
+    - ../inventory/group_vars/all/vault.yml
 
   tasks:
     - name: Apply uptime_kuma role
